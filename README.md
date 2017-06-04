@@ -1,4 +1,4 @@
-# python-mandatools #
+# python-manatools #
 
 ![logo](https://avatars3.githubusercontent.com/u/19332721?v=3&s=200 "Python ManaTools")
 
