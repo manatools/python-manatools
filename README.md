@@ -32,7 +32,7 @@ interface.
 * libyui-qt      - https://github.com/libyui/libyui-qt
 * Consider here also to check some not yet approved changes at
   https://github.com/anaselli/libyui-XXX forks (where XXX is
-  gtk, qt or ncurs
+  gtk, qt or ncurses
 
 ## INSTALLATION
 TODO
