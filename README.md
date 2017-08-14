@@ -22,17 +22,14 @@ interface.
 * https://github.com/manatools/libyui-mga
 
 ### SUSE libyui-bindings - anaselli fork
-* https://github.com/anaselli/libyui-bindings/tree/mageia
-  This fork is necessary to include also libyui-mga extension.
 * For references, master is https://github.com/libyui/libyui-bindings
+* To use libyui-mga extension we added some patches to original sources get them from mageia package at http://svnweb.mageia.org/packages/cauldron/libyui-bindings/current/SOURCES/
 
 ### at least one of the SUSE libyui plugins
 * libyui-gtk     - https://github.com/libyui/libyui-gtk
 * libyui-ncurses - https://github.com/libyui/libyui-ncurses
 * libyui-qt      - https://github.com/libyui/libyui-qt
-* Consider here also to check some not yet approved changes at
-  https://github.com/anaselli/libyui-XXX forks (where XXX is
-  gtk, qt or ncurses
+* Consider here also to check some patches we could add to original sources looking at mageia packages http://svnweb.mageia.org/packages/cauldron/libyuiXXXX/current/SOURCES/ (where XXXX is nothing for libyui and -gtk, -qt, -ncurses for plugins)
 
 ## INSTALLATION
 TODO
