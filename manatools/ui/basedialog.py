@@ -40,7 +40,7 @@ class BaseDialog :
 
   class MyDialog(basedialog.BaseDialog):
     def __init__(self):
-      basedialog.BaseDialog.__init__(self, "My bbeautiful dialog")
+      basedialog.BaseDialog.__init__(self, "My beautiful dialog")
     
     def UIlayout(self, layout):
       self.quitButton = self.factory.createPushButton(layout, "&Quit")

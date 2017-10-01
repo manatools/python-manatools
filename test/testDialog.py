@@ -98,6 +98,8 @@ class TestDialog(basedialog.BaseDialog):
     
   def onPressButton(self) :
     print ('Button "Press" pressed')
+    td = TestDialog()
+    td.run()
 
   def onCancelEvent(self) :
     print ("Got a cancel event")

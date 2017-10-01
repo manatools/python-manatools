@@ -32,4 +32,4 @@ interface.
 * Consider here also to check some patches we could add to original sources looking at mageia packages http://svnweb.mageia.org/packages/cauldron/libyuiXXXX/current/SOURCES/ (where XXXX is nothing for libyui and -gtk, -qt, -ncurses for plugins)
 
 ## INSTALLATION
-TODO
+python setup.py install
