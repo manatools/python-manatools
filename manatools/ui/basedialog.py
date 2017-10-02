@@ -19,7 +19,7 @@ License: GPLv3
 
 Author:  Angelo Naselli <anaselli@linux.it>
 
-@package python-manatools
+@package manatools.ui.basedialog
 '''
 
 import yui
