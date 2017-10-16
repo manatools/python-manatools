@@ -17,5 +17,6 @@ setup(
   install_requires=[
     #"argparse",
     "distribute",
+    "pyaml",
   ],
 )
