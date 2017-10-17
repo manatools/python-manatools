@@ -1,5 +1,5 @@
 '''
-Python manatools.config contains is an application configuration file management
+Python manatools.config contains an application configuration file management
 
 License: GPLv3
 
