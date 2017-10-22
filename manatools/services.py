@@ -6,7 +6,7 @@ Python manatools.services contains systemd services backend
 This module aims to share all the API to manage system services,
 to be used from GUI applications or console.
 
-License: GPLv3
+License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 

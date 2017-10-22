@@ -15,7 +15,7 @@ and its aim is to give an easy and common interface to develop and add
 new modules based on libYui. Every modules can be run using QT, Gtk or
 ncurses interface.
 
-License: GPLv3
+License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 

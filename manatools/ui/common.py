@@ -4,7 +4,7 @@
 Python manatools.ui.common contains all the UI classes and tools that 
 could be useful int a manatools application
 
-License: GPLv3
+License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 

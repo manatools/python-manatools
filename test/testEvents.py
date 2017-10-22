@@ -4,7 +4,7 @@
 '''
 EventManger class
 
-License: GPLv3
+License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 

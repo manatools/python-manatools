@@ -1,7 +1,7 @@
 '''
 Python manatools.config contains an application configuration file management
 
-License: GPLv3
+License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 
