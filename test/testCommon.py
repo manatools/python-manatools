@@ -13,6 +13,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 import manatools.ui.basedialog as basedialog
 import manatools.ui.common as common
+import manatools.version as manatools
 import yui
 import time
 import gettext
@@ -60,9 +61,37 @@ class TestDialog(basedialog.BaseDialog):
     self.eventManager.addCancelEvent(self.onCancelEvent)
     
   def onAbout(self):
-      print ("About menu pressed")
+      '''
+      About menu call back
+      '''
+      yes = common.askYesOrNo({"title": "Choose About dialog mode", "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic", "richtext" : True, 'default_button': 1 })
+      if yes:
+        common.AboutDialog({ 'name' : "Test Tabbed About Dialog",
+                    'dialog_mode' : common.AboutDialogMode.TABBED,
+                    'version' : manatools.__project_version__,
+                    'credits' :"Copyright (C) 2014-2017 Angelo Naselli",
+                    'license' : 'GPLv2',
+                    'authors' : 'Angelo Naselli &lt;anaselli@linux.it&gt;',
+                    'information' : "Tabbed About dialog additional information",
+                    'description' : "Project description here",
+                    'size': {'column': 50, 'lines': 6},
+                    })
+      else :
+         common.AboutDialog({ 'name' : "Test Classic About Dialog",
+                    'dialog_mode' : common.AboutDialogMode.CLASSIC,
+                    'version' : manatools.__project_version__,
+                    'credits' :"Copyright (C) 2014-2017 Angelo Naselli",
+                    'license' : 'GPLv2',
+                    'authors' : 'Angelo Naselli &lt;anaselli@linux.it&gt;',
+                    'information' : "Classic About dialog additional information",
+                    'description' : "Project description here",
+                    'size': {'column': 50, 'lines': 5},
+                    })
    
   def onPressWarning(self) :
+    '''
+    Warning button call back
+    '''
     print ('Button "Press" pressed')
     wd = common.warningMsgBox({"title" : "Warning Dialog", "text": "Warning button has been pressed!", "richtext" : True})
 
@@ -70,6 +99,9 @@ class TestDialog(basedialog.BaseDialog):
     print ("Got a cancel event")
 
   def onQuitEvent(self) :
+    '''
+    Quit button call back
+    '''
     ok = common.askYesOrNo({"title": "Quit confirmation", "text": "Do you really want to quit?", "richtext" : True })
     print ("Quit button pressed")
     # BaseDialog needs to force to exit the handle event loop 

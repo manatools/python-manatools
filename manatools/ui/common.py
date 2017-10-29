@@ -13,6 +13,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 import yui
 import gettext
+from enum import Enum
 
 
 def destroyUI () :
@@ -237,3 +238,61 @@ def askYesOrNo (info) :
 
     return retVal
 
+class AboutDialogMode(Enum):
+    '''
+    Enum
+        CLASSIC for classic about dialog
+        TABBED  for tabbed about dialog
+    '''
+    CLASSIC = 1
+    TABBED  = 2
+
+def AboutDialog (info) :
+    '''
+    About dialog implementation. AboutDialog can be used by
+    modules, to show authors, license, credits, etc.
+
+    @param info: dictionary, optional information to be passed to the dialog.
+        name        => the application name
+        version     =>  the application version
+        license     =>  the application license, the short length one (e.g. GPLv2, GPLv3, LGPLv2+, etc)
+        authors     =>  the string providing the list of authors; it could be html-formatted
+        description =>  the string providing a brief description of the application
+        logo        => the string providing the file path for the application logo (high-res image)
+        icon        => the string providing the file path for the application icon (low-res image)
+        credits     => the application credits, they can be html-formatted
+        information => other extra informations, they can be html-formatted
+        size        => libyui dialog minimum size, dictionary containing {column, lines}
+        dialog_mode => AboutDialogMode.CLASSIC: classic style dialog, any other as tabbed style dialog
+    '''
+    if (not info) :
+        raise ValueError("Missing AboutDialog parameters")
+
+    yui.YUI.widgetFactory
+    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
+    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
+
+    name        = info['name'] if 'name' in info.keys() else ""
+    version     = info['version'] if 'version' in info.keys() else ""
+    license     = info['license'] if 'license' in info.keys() else ""
+    authors     = info['authors'] if 'authors' in info.keys() else ""
+    description = info['description'] if 'description' in info.keys() else ""
+    logo        = info['logo'] if 'logo' in info.keys() else ""
+    icon        = info['icon'] if 'icon' in info.keys() else ""
+    credits     = info['credits'] if 'credits' in info.keys() else ""
+    information = info['information'] if 'information' in info.keys() else ""
+    dialog_mode = yui.YMGAAboutDialog.TABBED
+    if 'dialog_mode' in info.keys() :
+        dialog_mode = yui.YMGAAboutDialog.CLASSIC if info['dialog_mode'] == AboutDialogMode.CLASSIC else yui.YMGAAboutDialog.TABBED
+
+    dlg = factory.createAboutDialog(name, version, license,
+                                    authors, description, logo,
+                                    icon, credits, information
+    )
+    if 'size' in info.keys():
+        if not 'column' in info['size'] or  not 'lines' in info['size'] :
+            raise ValueError("size must contains <<column>> and <<lines>> keys")
+        dlg.setMinSize(info['size']['column'], info['size']['lines'])
+
+    dlg.show(dialog_mode)
+    dlg = None
