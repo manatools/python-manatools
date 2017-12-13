@@ -73,7 +73,7 @@ class BaseDialog :
     self._timeout = 0
     self._minSize = None
     if minWidth > 0 and minHeight > 0 :
-      self._minSize = { 'minHeight' : minHeight, 'minWidth' : minHeight}
+      self._minSize = { 'minHeight' : minHeight, 'minWidth' : minWidth}
 
   @property 
   def running(self):
