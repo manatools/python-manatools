@@ -11,10 +11,11 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 
 class EventHandlerInfo:
-  def __init__(self, obj, handler):
+  def __init__(self, obj, handler, sendObj=False):
     self.object = obj
     self.handler = handler
-  
+    self.sendObjectOnEventCallBack = sendObj
+
   def __eq__(self, other):
     """Override the default Equals behavior"""
     if isinstance(other, self.__class__):
@@ -35,27 +36,30 @@ class EventHandlerInfo:
   
 class Event:
     def __init__(self):
-        self.handlers = set()
-    
+      self.handlers = set()
+
     def handle(self, handler):
-        if isinstance(handler, EventHandlerInfo):
-          self.handlers.add(handler)
-        else :
-          raise TypeError("Wrong handler type")
-        return self
+      if isinstance(handler, EventHandlerInfo):
+        self.handlers.add(handler)
+      else :
+        raise TypeError("Wrong handler type")
+      return self
 
     def unhandle(self, handler):
-        if not isinstance(handler, EventHandlerInfo):
-          raise TypeError("Wrong handler type")
-        try:
-          self.handlers.remove(handler)
-        except:
-          raise ValueError("Handler is not handling this event, so cannot unhandle it.")
-        return self
+      if not isinstance(handler, EventHandlerInfo):
+        raise TypeError("Wrong handler type")
+      try:
+        self.handlers.remove(handler)
+      except:
+        raise ValueError("Handler is not handling this event, so cannot unhandle it.")
+      return self
 
     def fire(self, obj, *args, **kargs):
-        for handler in self.handlers:
-          if handler.object == obj :
+      for handler in self.handlers:
+        if handler.object == obj :
+          if handler.sendObjectOnEventCallBack :
+            handler.handler(handler.object, *args, **kargs)
+          else:
             handler.handler(*args, **kargs)
 
     def getHandlerCount(self):

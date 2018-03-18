@@ -55,12 +55,14 @@ class EventManager:
       ev = event.EventHandlerInfo("__cancel__", func)
       self._cancelEvent -= ev
     
-    def addWidgetEvent(self, widget, func):
+    def addWidgetEvent(self, widget, func, sendWidget=False):
       '''
       Add new Widget event handler function.
       Event handler function must be defined like func(owner, earg).
+      If sendWidget is True func must be defined as func(owner, widget, earg)
+      and involved widget is passed to handler
       '''
-      ev = event.EventHandlerInfo(widget, func)
+      ev = event.EventHandlerInfo(widget, func, sendWidget)
       self._widgetEvent += ev
     
     def removeWidgetEvent(self, widget, func=None):
@@ -71,12 +73,14 @@ class EventManager:
       ev = event.EventHandlerInfo(widget, func)
       self._widgetEvent -= ev
 
-    def addMenuEvent(self, menuItem, func):
+    def addMenuEvent(self, menuItem, func, sendMenuItem=False):
       '''
       Add new Menu item event handler function.
       Event handler function must be defined like func(owner, earg).
+      If sendMenuItem is True func must be defined as func(owner, item, earg)
+      and involved menu item is passed to handler
       '''
-      ev = event.EventHandlerInfo(menuItem, func)
+      ev = event.EventHandlerInfo(menuItem, func, sendMenuItem)
       self._menuEvent += ev
     
     def removeMenuEvent(self, menuItem, func=None):

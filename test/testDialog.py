@@ -57,9 +57,10 @@ class TestDialog(basedialog.BaseDialog):
     menu.addItem(tm2)
     menu.addItem(qm)
     menu.rebuildMenuTree()
-    self.eventManager.addMenuEvent(tm1, self.onMenuItem1)
-    self.eventManager.addMenuEvent(tm2, self.onMenuItem2)
-    self.eventManager.addMenuEvent(qm, self.onQuitEvent)
+    sendObjOnEvent=True
+    self.eventManager.addMenuEvent(tm1, self.onMenuItem, sendObjOnEvent)
+    self.eventManager.addMenuEvent(tm2, self.onMenuItem, sendObjOnEvent)
+    self.eventManager.addMenuEvent(qm, self.onQuitEvent, sendObjOnEvent)
     
     #let's test some buttons
     hbox = self.factory.createHBox(layout)
@@ -73,17 +74,14 @@ class TestDialog(basedialog.BaseDialog):
 
     # Let's test a quitbutton (same handle as Quit menu)
     self.quitButton = self.factory.createPushButton(layout, "&Quit")
-    self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent)
+    self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent, sendObjOnEvent)
     
     # Let's test a cancel event
     self.eventManager.addCancelEvent(self.onCancelEvent)
     
-  def onMenuItem1(self):
-      print ("Menu item 1")
+  def onMenuItem(self, item):
+      print ("Menu item <<", item.label(), ">>")
       
-  def onMenuItem2(self):
-      print ("Menu item 2")
-
   def onTimeOutButtonEvent(self):
     if self.timeout > 0 :
       self.timeout = 0
@@ -104,8 +102,11 @@ class TestDialog(basedialog.BaseDialog):
   def onCancelEvent(self) :
     print ("Got a cancel event")
 
-  def onQuitEvent(self) :
-    print ("Quit button pressed")
+  def onQuitEvent(self, obj) :
+    if isinstance(obj, yui.YItem):
+      print ("Quit menu pressed")
+    else:
+      print ("Quit button pressed")
     # BaseDialog needs to force to exit the handle event loop 
     self.ExitLoop()
 
