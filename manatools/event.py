@@ -59,6 +59,7 @@ class Event:
         if handler.object == obj :
           if handler.sendObjectOnEventCallBack :
             handler.handler(handler.object, *args, **kargs)
+            break
           else:
             handler.handler(*args, **kargs)
 
