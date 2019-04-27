@@ -198,7 +198,8 @@ class BaseDialog :
       if (eventType == yui.YEvent.WidgetEvent) :
         # widget selected
         widget  = event.widget()
-        self.eventManager.widgetEvent(widget)
+        wEvent = yui.toYWidgetEvent(event)
+        self.eventManager.widgetEvent(widget, wEvent)
       elif (eventType == yui.YEvent.MenuEvent) :
         ### MENU ###
         item = event.item()

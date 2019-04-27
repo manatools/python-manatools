@@ -9,6 +9,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools
 '''
+import inspect
 
 class EventHandlerInfo:
   def __init__(self, obj, handler, sendObj=False):
@@ -58,10 +59,18 @@ class Event:
       for handler in self.handlers:
         if handler.object == obj :
           if handler.sendObjectOnEventCallBack :
-            handler.handler(handler.object, *args, **kargs)
+            params = 1 if inspect.isfunction(handler.handler) else 2
+            if len(inspect.getfullargspec(handler.handler).args) > params:
+              handler.handler(handler.object, *args, **kargs)
+            else:
+              handler.handler(handler.object)
             break
           else:
-            handler.handler(*args, **kargs)
+            params = 0 if inspect.isfunction(handler.handler) else 1
+            if len(inspect.getfullargspec(handler.handler).args) > params:
+              handler.handler(*args, **kargs)
+            else:
+              handler.handler()
 
     def getHandlerCount(self):
         return len(self.handlers)
