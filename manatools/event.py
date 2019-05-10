@@ -32,8 +32,8 @@ class EventHandlerInfo:
 
   def __hash__(self):
     """Override the default hash behavior (that returns the id or the object)"""
-    return id(tuple(sorted(self.__dict__.items())))
-
+    #return id(tuple(sorted(self.__dict__.items())))
+    return hash((self.object.__repr__(), self.handler))
   
 class Event:
     def __init__(self):
@@ -56,7 +56,7 @@ class Event:
       return self
 
     def fire(self, obj, *args, **kargs):
-      for handler in self.handlers:
+      for handler in self.handlers.copy():
         if handler.object == obj :
           if handler.sendObjectOnEventCallBack :
             params = 1 if inspect.isfunction(handler.handler) else 2
