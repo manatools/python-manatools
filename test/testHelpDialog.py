@@ -48,7 +48,7 @@ class HelpInfo(HelpInfoBase):
     index2 = '<b>%s</b>'%self._formatLink("Title 2", 'titleindex2')
     self.text = { 'home': "This text explain how to use manatools Help Dialog. <br><br>%s <br>%s"%(index1, index2),
                  'title1': '<h2>Title 1</h2>This is the title 1 really interesting context. <br> %s'%self._formatLink("Go to index", 'home'),
-                 'titleindex2': '<h2>Title 1</h2>This is the title 2 interesting context. <br>%s'%self._formatLink("Go to index", 'home'),
+                 'titleindex2': '<h2>Title 2</h2>This is the title 2 interesting context. <br>%s'%self._formatLink("Go to index", 'home'),
       }
 
   def _formatLink(self, description, url) :
