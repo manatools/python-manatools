@@ -203,11 +203,8 @@ class BaseDialog :
       elif (eventType == yui.YEvent.MenuEvent) :
         ### MENU ###
         item = event.item()
-        if (item) :
-          self.eventManager.menuEvent(item)
-        else:
-          # TODO URL event
-          pass
+        mEvent = yui.toYMenuEvent(event)
+        self.eventManager.menuEvent(item, mEvent)
       elif (eventType == yui.YEvent.CancelEvent) :
         self.eventManager.cancelEvent()
         break
