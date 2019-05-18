@@ -12,9 +12,16 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 
 import yui
-import gettext
 from enum import Enum
-
+import gettext
+# https://pymotw.com/3/gettext/#module-localization
+t = gettext.translation(
+    'python-manatools',
+    '/usr/share/locale',
+    fallback=True,
+)
+_ = t.gettext
+ngettext = t.ngettext
 
 def destroyUI () :
     '''
@@ -40,8 +47,6 @@ def warningMsgBox (info) :
     '''
     if (not info) :
         return 0
-
-    gettext.install('python-manatools', localedir='/usr/share/locale')
 
     retVal = 0
     yui.YUI.widgetFactory
