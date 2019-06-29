@@ -9,6 +9,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools
 '''
+import inspect
 
 class EventHandlerInfo:
   def __init__(self, obj, handler, sendObj=False):
@@ -31,8 +32,8 @@ class EventHandlerInfo:
 
   def __hash__(self):
     """Override the default hash behavior (that returns the id or the object)"""
-    return id(tuple(sorted(self.__dict__.items())))
-
+    #return id(tuple(sorted(self.__dict__.items())))
+    return hash((self.object.__repr__(), self.handler))
   
 class Event:
     def __init__(self):
@@ -55,13 +56,21 @@ class Event:
       return self
 
     def fire(self, obj, *args, **kargs):
-      for handler in self.handlers:
+      for handler in self.handlers.copy():
         if handler.object == obj :
           if handler.sendObjectOnEventCallBack :
-            handler.handler(handler.object, *args, **kargs)
+            params = 1 if inspect.isfunction(handler.handler) else 2
+            if len(inspect.getfullargspec(handler.handler).args) > params:
+              handler.handler(handler.object, *args, **kargs)
+            else:
+              handler.handler(handler.object)
             break
           else:
-            handler.handler(*args, **kargs)
+            params = 0 if inspect.isfunction(handler.handler) else 1
+            if len(inspect.getfullargspec(handler.handler).args) > params:
+              handler.handler(*args, **kargs)
+            else:
+              handler.handler()
 
     def getHandlerCount(self):
         return len(self.handlers)

@@ -105,7 +105,13 @@ class BaseDialog :
     '''
     raise NotImplementedError("UIlayout is not implemented")
 
-        
+  def doSomethingIntoLoop(self):
+    '''
+    super class should implement this to do something inside the
+    event handler loop, just after the events have been managed
+    '''
+    pass
+
   def run(self):
     '''
     run the Dialog
@@ -170,6 +176,12 @@ class BaseDialog :
     vbox = self.factory.createVBox(parent)
     self.UIlayout(vbox)
 
+  def pollEvent(self):
+    '''
+    perform yui pollEvent
+    '''
+    return self.dialog.pollEvent()
+
   def _handleEvents(self):
     '''
     manage dialog events
@@ -186,15 +198,13 @@ class BaseDialog :
       if (eventType == yui.YEvent.WidgetEvent) :
         # widget selected
         widget  = event.widget()
-        self.eventManager.widgetEvent(widget)
+        wEvent = yui.toYWidgetEvent(event)
+        self.eventManager.widgetEvent(widget, wEvent)
       elif (eventType == yui.YEvent.MenuEvent) :
         ### MENU ###
         item = event.item()
-        if (item) :
-          self.eventManager.menuEvent(item)
-        else:
-          # TODO URL event
-          pass
+        mEvent = yui.toYMenuEvent(event)
+        self.eventManager.menuEvent(item, mEvent)
       elif (eventType == yui.YEvent.CancelEvent) :
         self.eventManager.cancelEvent()
         break
@@ -202,7 +212,9 @@ class BaseDialog :
         self.eventManager.timeoutEvent()
       else:
         print("Unmanaged event type %d"%(eventType))
-        
+
+      self.doSomethingIntoLoop()
+
   def ExitLoop(self):
     '''
     Force to exit the handle event loop, after next event managed
