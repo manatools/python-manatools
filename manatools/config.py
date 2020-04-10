@@ -52,7 +52,7 @@ class AppConfig() :
                 try:
                     f = os.path.join(loc, self._fileName)
                     with open(f, 'r') as ymlfile:
-                        self._systemSettings = yaml.load(ymlfile)
+                        self._systemSettings = yaml.safe_load(ymlfile)
                         break
                 except IOError as e:
                     print ("Skipped exception: <%s> " % str(e))
@@ -60,7 +60,9 @@ class AppConfig() :
 
             try:
                 with open(self._userPrfesPathName, 'r') as ymlfile:
-                    self._userPrefs = yaml.load(ymlfile)
+                    self._userPrefs = yaml.safe_load(ymlfile)
+                if not self._userPrefs:
+                  self._userPrefs = {}
             except IOError as e:
                 print ("Skipped exception: <%s> " % str(e))
 
