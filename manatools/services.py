@@ -1,7 +1,7 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 '''
-Python manatools.services contains systemd services backend
+Python manatools.services contains systemd services back end
 
 This module aims to share all the API to manage system services,
 to be used from GUI applications or console.
@@ -10,11 +10,14 @@ License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 
-@package mamatools.services
+@package manatools.services
 '''
 
 import dbus
 import os.path
+from os import environb
+import subprocess
+from sys import stderr
 
 
 class Services():
@@ -32,6 +35,7 @@ class Services():
         self.include_static_services = False
         self._reload = True
         self._services = {}
+        self._xinetd_services = {}
 
     @property
     def service_info(self):
@@ -90,3 +94,28 @@ class Services():
                     }
 
         return self._services
+
+    @property
+    def xinetd_services(self):
+        '''
+        This function returns all the xinetd services in the system.
+        NOTE that xinetd *must* be enable at boot to get this info
+        '''
+        try:
+            service_info = self.service_info()['xinetd']
+            if service_info['enabled']:
+                env={'LANGUAGE': 'C', 'PATH': "/usr/bin:/usr/sbin"}
+                #TODO : Change to force root command
+                try:
+                    chkconf=subprocess.run(['/usr/sbin/chkconfig', '--list', '--type', 'xinetd'], env=env, timeout=120, check=True, capture_output=True, text=True)
+                    for serv in chkconf.stdout.strip().split('\n'):
+                        servT = serv.split()
+                        try:
+                            self._xinetd_services[servT[0].strip(":")] = servT[1] == 'on'
+                        except IndexError:
+                            continue
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    # TODO return an exception to the exterior
+                    print("chkconfig error when trying to list xinetd services", stderr)
+        except KeyError:
+            return self._xinetd_services
