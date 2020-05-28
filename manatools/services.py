@@ -104,10 +104,11 @@ class Services():
         try:
             service_info = self.service_info()['xinetd']
             if service_info['enabled']:
-                env={'LANGUAGE': 'C', 'PATH': "/usr/bin:/usr/sbin"}
-                #TODO : Change to force root command
+                env = {'LANGUAGE': 'C', 'PATH': "/usr/bin:/usr/sbin"}
+                # TODO : Change to force root command
                 try:
-                    chkconf=subprocess.run(['/usr/sbin/chkconfig', '--list', '--type', 'xinetd'], env=env, timeout=120, check=True, capture_output=True, text=True)
+                    chkconf = subprocess.run(['/usr/sbin/chkconfig', '--list', '--type', 'xinetd'],
+                                             env=env, timeout=120, check=True, capture_output=True, text=True)
                     for serv in chkconf.stdout.strip().split('\n'):
                         servT = serv.split()
                         try:
@@ -119,3 +120,21 @@ class Services():
                     print("chkconfig error when trying to list xinetd services", stderr)
         except KeyError:
             return self._xinetd_services
+
+    def _running_systemd(self):
+        # TODO : Change to force root command
+        try:
+            return subprocess.run(['/usr/bin/mountpoint', '-q', '/sys/fs/cgroup/systemd'], env={'PATH': '/usr/bin:/usr/sbin'}, timeout=120).returncode == 0
+        except subprocess.TimeoutExpired:
+            # TODO : return an exception outside of the function
+            print("moutnpoint error when checking systemd: timeout expired.\n")
+            return False
+
+    def _has_systemd(self):
+        # TODO : Change to force root command
+        try:
+            return subprocess.run(['/usr/bin/rpm', '-q', 'systemd'], env={'PATH': '/usr/bin:/usr/sbin'}, timeout=120).returncode == 0
+        except subprocess.TimeoutExpired:
+            # TODO : return an exception outside of the function
+            print("rpm error when checking systemd: timeout expired.\n")
+            return False
