@@ -11,7 +11,7 @@ import argparse
 import gettext
 
 class AppArgs :
-    ''' 
+    '''
     AppArs contains an base for parsing argument passed from command line.
     command is the application name
     It can be superseded to add specific options

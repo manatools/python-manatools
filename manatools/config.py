@@ -92,7 +92,7 @@ class AppConfig() :
         if category in self._userPrefs.keys():
                 self._userPrefs[category][key] = value
         else:
-            self._userPrefs[category] = {key : value}       
+            self._userPrefs[category] = {key : value}
 
     def saveUserPreferences(self) :
         '''
