@@ -82,13 +82,14 @@ class AppConfig() :
         self._load()
         return self._userPrefs
 
-    def userPrefSet(self, prefs):
+    def userPrefSet(self, category, key, value):
         '''
         Set a value for a user's preference
         category is the first level of parameters
         key is a key for the parameter
         value is a string
         '''
+        self._load()
         if category in self._userPrefs.keys():
                 self._userPrefs[category][key] = value
         else:
