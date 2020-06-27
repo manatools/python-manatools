@@ -1,5 +1,8 @@
 Python-manatools
 ================
+0.0.3
+    - fixed release version (manatools/version.py)
+
 0.0.2
     - Fix setting of a new value in user preferences
 
