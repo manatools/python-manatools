@@ -1,0 +1,39 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the python-manatools package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# Yuri Chornoivan <yurchor@ukr.net>, 2020
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: python-manatools 0.xx\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2018-01-27 23:12+0100\n"
+"PO-Revision-Date: 2020-09-06 07:17+0000\n"
+"Last-Translator: Yuri Chornoivan <yurchor@ukr.net>, 2020\n"
+"Language-Team: Italian (https://www.transifex.com/MageiaLinux/teams/9361/it/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: it\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: manatools/ui/common.py:62 manatools/ui/common.py:100
+#: manatools/ui/common.py:136 manatools/ui/common.py:179
+msgid "&Ok"
+msgstr "&Ok"
+
+#: manatools/ui/common.py:180
+msgid "&Cancel"
+msgstr "&Annulla"
+
+#: manatools/ui/common.py:229
+msgid "&Yes"
+msgstr "&Sì"
+
+#: manatools/ui/common.py:230
+msgid "&No"
+msgstr "&No"
