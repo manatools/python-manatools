@@ -24,7 +24,6 @@ setup(
   long_description=open('README.md').read(),
   #data_files=[('conf/manatools', ['XXX.yy',]), ],
   install_requires=[
-    "argparse",
     "dbus-python",
     "python-gettext",
     "PyYAML",
