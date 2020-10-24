@@ -15,7 +15,6 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 from pystemd.systemd1 import Manager
 import os.path
-from os import environb
 import subprocess
 from sys import stderr
 
@@ -133,3 +132,26 @@ class Services():
             # TODO : return an exception outside of the function
             print("rpm error when checking systemd: timeout expired.\n")
             return False
+
+    def set_service(self, service, enable):
+        '''
+        This function enable/disable at boot the given service
+        '''
+        # NOTE EnableUnitFiles and DisableUnitFiles don't work with legacy services
+        #      and return file not found
+        legacy = os.path.isfile("/etc/rc.d/init.d/{}".format(service))
+        if service in self._xinetd_services.keys():
+            env = {'LANGUAGE': 'C', 'PATH': "/usr/bin:/usr/sbin"}
+            # TODO : Change to force root command
+            try:
+                chkconf = subprocess.run(['/usr/sbin/chkconfig', "-add" if enable else "--del",
+                                          service], env=env, timeout=120, check=True, capture_output=True, text=True)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                # TODO return an exception to the exterior
+                print("chkconfig error when trying to add/delete service", stderr)
+
+        elif not legacy and (self._running_systemd() or self._has_systemd()):
+            service = "{}.service".format(service)
+            if enable:
+                with Manager() as manager:
+                    manager.EnableUnitFiles([service.encode()], False, True)
