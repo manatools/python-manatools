@@ -10,4 +10,4 @@ Author:  Angelo Naselli <anaselli at linux dot it>
 __project_name__ = "python-manatools"
 
 ''' project version '''
-__project_version__ = "0.0.1"
+__project_version__ = "0.0.3"

@@ -1,0 +1,39 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the python-manatools package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# Yuri Chornoivan <yurchor@ukr.net>, 2020
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: python-manatools 0.xx\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2018-01-27 23:12+0100\n"
+"PO-Revision-Date: 2020-09-06 07:17+0000\n"
+"Last-Translator: Yuri Chornoivan <yurchor@ukr.net>, 2020\n"
+"Language-Team: Chinese (Taiwan) (https://www.transifex.com/MageiaLinux/teams/9361/zh_TW/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_TW\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: manatools/ui/common.py:62 manatools/ui/common.py:100
+#: manatools/ui/common.py:136 manatools/ui/common.py:179
+msgid "&Ok"
+msgstr "好的(&O)"
+
+#: manatools/ui/common.py:180
+msgid "&Cancel"
+msgstr "取消(&C)"
+
+#: manatools/ui/common.py:229
+msgid "&Yes"
+msgstr "是的(&Y)"
+
+#: manatools/ui/common.py:230
+msgid "&No"
+msgstr "不是(&N)"

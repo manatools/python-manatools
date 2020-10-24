@@ -118,6 +118,9 @@ class BaseDialog :
     '''
     self.backupTitle = yui.YUI.app().applicationTitle()
     yui.YUI.app().setApplicationTitle(self._title)
+    if self._icon:
+      backupIcon = yui.YUI.app().applicationIcon()
+      yui.YUI.app().setApplicationIcon(self._icon)
 
     self._setupUI()
     
@@ -126,6 +129,8 @@ class BaseDialog :
 
     #restore old application title
     yui.YUI.app().setApplicationTitle(self.backupTitle)
+    if self._icon:
+      yui.YUI.app().setApplicationTitle(backupIcon)
 
     self.dialog.destroy()
     self.dialog = None

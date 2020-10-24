@@ -1,0 +1,13 @@
+Python-manatools
+================
+X.Y.Z
+    - dialog icon set if passed
+
+0.0.3
+    - fixed release version (manatools/version.py)
+
+0.0.2
+    - Fix setting of a new value in user preferences
+
+0.0.1
+    - First publication
