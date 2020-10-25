@@ -13,7 +13,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.services
 '''
 
-from pystemd.systemd1 import Manager
+from pydbus import SystemBus
 import os.path
 import subprocess
 from sys import stderr
@@ -32,7 +32,16 @@ class Services():
         self._reload = True
         self._services = {}
         self._xinetd_services = {}
+        self._bus = SystemBus()
+        self._systemd = self._bus.get(".systemd1")
+        self._manager = self._systemd[".Manager"]
 
+    def check_permission(action, dbus_context):
+        '''
+        Check authorizations
+        '''
+        return dbus_context.is_authorized(action, {'polkit.icon_name': 'manatools.png',}, interactive=True)
+    
     @property
     def service_info(self):
         '''
@@ -42,50 +51,49 @@ class Services():
         '''
         if not self._reload:
             return self._services
-        with Manager() as manager:
-            units = manager.ListUnits()
-            self._services = {}
-            self._reload = False
+        units = self._manager.ListUnits()
+        self._services = {}
+        self._reload = False
 
-            for u in units:
-                unitName = u[0].decode()  # name. Need to be decoded because pystemd uses binary format
-                pos = unitName.find(".service")
-                if pos != -1:
-                    try:
-                        if unitName.find("@") == -1:
-                            st = manager.GetUnitFileState(unitName).decode()
-                            name = unitName[0:pos]
-                            if st and (self.include_static_services or st != 'static'):
-                                self._services[name] = {
-                                    'name':        u[0].decode(),
-                                    'description': u[1].decode(),
-                                    'load_state':  u[2].decode(),
-                                    'active_state': u[3].decode(),
-                                    'sub_state':   u[4].decode(),
-                                    'unit_path':   u[6].decode(),
-                                    'enabled':   st == 'enabled',
-                                }
+        for u in units:
+            unitName = u[0]
+            pos = unitName.find(".service")
+            if pos != -1:
+                try:
+                    if unitName.find("@") == -1:
+                        st = self._manager.GetUnitFileState(unitName)
+                        name = unitName[0:pos]
+                        if st and (self.include_static_services or st != 'static'):
+                            self._services[name] = {
+                                'name':        u[0],
+                                'description': u[1],
+                                'load_state':  u[2],
+                                'active_state': u[3],
+                                'sub_state':   u[4],
+                                'unit_path':   u[6],
+                                'enabled':   st == 'enabled',
+                            }
                             # TODO if not st check unit files see Services.pm:167
-                    except:
-                        pass
+                except:
+                    pass
 
-            unit_files = manager.ListUnitFiles()
-            for u in unit_files:
-                unitName = u[0].decode()
-                st = u[1].decode()
-                pos = unitName.find(".service")
-                if pos != -1:
-                    name = os.path.basename(unitName)
-                    name = name[0:name.find(".service")]
-                    if (not name in self._services.keys()) and (name.find('@') == -1) \
-                        and (os.path.isfile(unitName) or os.path.isfile("/etc/rc.d/init.d/"+name)) \
-                            and not os.path.islink(unitName) and (st == "disabled" or st == "enabled"):
-                        self._services[name] = {
-                            'name':        name+".service",
-                            # 'description': ####TODO get property,
-                            'description': "---",
-                            'enabled':   st == 'enabled',
-                        }
+        unit_files = self._manager.ListUnitFiles()
+        for u in unit_files:
+            unitName = u[0]
+            st = u[1]
+            pos = unitName.find(".service")
+            if pos != -1:
+                name = os.path.basename(unitName)
+                name = name[0:name.find(".service")]
+                if (not name in self._services.keys()) and (name.find('@') == -1) \
+                   and (os.path.isfile(unitName) or os.path.isfile("/etc/rc.d/init.d/"+name)) \
+                   and not os.path.islink(unitName) and (st == "disabled" or st == "enabled"):
+                    self._services[name] = {
+                        'name':        name+".service",
+                        # 'description': ####TODO get property,
+                        'description': "---",
+                        'enabled':   st == 'enabled',
+                    }
 
         return self._services
 
@@ -142,16 +150,20 @@ class Services():
         legacy = os.path.isfile("/etc/rc.d/init.d/{}".format(service))
         if service in self._xinetd_services.keys():
             env = {'LANGUAGE': 'C', 'PATH': "/usr/bin:/usr/sbin"}
-            # TODO : Change to force root command
-            try:
-                chkconf = subprocess.run(['/usr/sbin/chkconfig', "-add" if enable else "--del",
-                                          service], env=env, timeout=120, check=True, capture_output=True, text=True)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                # TODO return an exception to the exterior
-                print("chkconfig error when trying to add/delete service", stderr)
+#            if dbus_context.is_authorized('org.freeedesktop.policykit.exec', {'polkit.icon': 'abcd', 'aaaa': 'zzzz'}, interactive=True):
+            #     try:
+            #         chkconf = subprocess.run(['/usr/sbin/chkconfig', "-add" if enable else "--del",
+            #                                   service], env=env, timeout=120, check=True, capture_output=True, text=True)
+            #     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            #         # TODO return an exception to the exterior
+            #         print("chkconfig error when trying to add/delete service", stderr)
+            # else:
+            #     # TODO return an excpetion to the exterior
+            #     print("You are not authorized to perform this action", stderr)
 
         elif not legacy and (self._running_systemd() or self._has_systemd()):
             service = "{}.service".format(service)
             if enable:
-                with Manager() as manager:
-                    manager.EnableUnitFiles([service.encode()], False, True)
+ #               if self.check_permission(self._manager.EnableUnitFiles(), dbus_context):
+#                    self._manager.EnableUnitFiles([service.encode()], False, True)
+                
