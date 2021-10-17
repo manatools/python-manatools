@@ -5,7 +5,7 @@ License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 
-@package mamatools.config
+@package manatools.config
 '''
 
 import sys

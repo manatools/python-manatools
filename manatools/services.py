@@ -10,7 +10,7 @@ License: LGPLv2+
 
 Author:  Angelo Naselli <anaselli@linux.it>
 
-@package mamatools.services
+@package manatools.services
 '''
 
 import dbus

@@ -5,7 +5,7 @@ License: LGPLv2+
 
 Author:  Papoteur 
 
-@package mamatools.args
+@package manatools.args
 '''
 import argparse
 import gettext
