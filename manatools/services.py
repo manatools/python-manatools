@@ -31,6 +31,13 @@ class Services() :
         self._reload = True
         self._services = {}
     
+    @property
+    def manager(self):
+      '''
+      Returns the Service Manager Interface
+      '''
+      return dbus.Interface(self._systemd, dbus_interface='org.freedesktop.systemd1.Manager')
+
     @property    
     def service_info(self):
         '''
@@ -40,9 +47,8 @@ class Services() :
         '''
         if not self._reload :
             return self._services
-        
-        manager = dbus.Interface(self._systemd, dbus_interface='org.freedesktop.systemd1.Manager')
-        units = manager.ListUnits()
+
+        units = self.manager.ListUnits()
         self._services = {}
         self._reload = False
         
@@ -52,7 +58,7 @@ class Services() :
             if pos != -1 :
                 try:
                     if unitName.find("@") == -1 :
-                        st = manager.GetUnitFileState(unitName)
+                        st = self.manager.GetUnitFileState(unitName)
                         name = unitName[0:pos]
                         if st and (self.include_static_services or st != 'static'):
                             self._services[name] = {
@@ -68,7 +74,7 @@ class Services() :
                 except: 
                     pass   
         
-        unit_files = manager.ListUnitFiles()
+        unit_files = self.manager.ListUnitFiles()
         for u in unit_files:
             unitName = u[0]
             st = u[1]

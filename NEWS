@@ -2,6 +2,7 @@ Python-manatools
 ================
 X.Y.Z
     - dialog icon set if passed
+    - exported Service Manager Interface to allow using systemd api
 
 0.0.3
     - fixed release version (manatools/version.py)
