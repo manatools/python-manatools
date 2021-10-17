@@ -30,13 +30,16 @@ class Services() :
         self.include_static_services = False
         self._reload = True
         self._services = {}
+        self.__manager = None
     
     @property
     def manager(self):
       '''
       Returns the Service Manager Interface
       '''
-      return dbus.Interface(self._systemd, dbus_interface='org.freedesktop.systemd1.Manager')
+      if not self.__manager:
+        self.__manager = dbus.Interface(self._systemd, dbus_interface='org.freedesktop.systemd1.Manager')
+      return self.__manager
 
     @property    
     def service_info(self):
