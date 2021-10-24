@@ -1,7 +1,7 @@
 Python-manatools
 ================
-X.Y.Z
-    - dialog icon set if passed
+0.0.4
+    - set dialog icon if passed to costructor
     - exported Service Manager Interface to allow using systemd api
 
 0.0.3
