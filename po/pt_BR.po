@@ -14,13 +14,14 @@ msgstr ""
 "POT-Creation-Date: 2018-01-27 23:12+0100\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
 "Last-Translator: 3f37d448649cd548fa5a733e33387c2a_dee4ccf, 2020\n"
-"Language-Team: Portuguese (Brazil) (https://www.transifex.com/MageiaLinux/"
+"Language-Team: Portuguese (Brazil) (https://app.transifex.com/MageiaLinux/"
 "teams/9361/pt_BR/)\n"
 "Language: pt_BR\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Plural-Forms: nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % "
+"1000000 == 0 ? 1 : 2;\n"
 
 #: manatools/ui/common.py:62 manatools/ui/common.py:100
 #: manatools/ui/common.py:136 manatools/ui/common.py:179
