@@ -359,9 +359,7 @@ class YPushButtonQt(YWidget):
     
     def _on_clicked(self):
         # Post a YWidgetEvent to the containing dialog (walk parents)
-        dlg = self._parent
-        while dlg is not None and not isinstance(dlg, YDialogQt):
-            dlg = dlg.parent()
+        dlg = self.findDialog()
         if dlg is not None:
             dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
         else:

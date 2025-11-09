@@ -639,10 +639,7 @@ class YPushButtonCurses(YWidget):
             
         if key == ord('\n') or key == ord(' '):
             # Button pressed -> post widget event to containing dialog
-            dlg = getattr(self, '_parent', None)
-            # walk up parents until dialog found
-            while dlg is not None and not isinstance(dlg, YDialogCurses):
-                dlg = getattr(dlg, '_parent', None)
+            dlg = self.findDialog()
             if dlg is not None:
                 try:
                     dlg._post_event(YWidgetEvent(self, YEventReason.Activated))

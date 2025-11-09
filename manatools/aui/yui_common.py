@@ -189,6 +189,13 @@ class YWidget:
     def hasParent(self):
         return self._parent is not None
     
+    def findDialog(self):
+        """Find the parent dialog of this widget."""
+        parent = getattr(self, '_parent', None)
+        while parent is not None and parent.widgetClass() != 'YDialog':
+            parent = getattr(parent, '_parent', None)
+        return parent
+
     def setEnabled(self, enabled=True):
         self._enabled = enabled
         if self._backend_widget:
