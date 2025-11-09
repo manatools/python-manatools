@@ -137,6 +137,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._focused_widget = None
         self._last_draw_time = 0
         self._draw_interval = 0.1  # seconds
+        self._event_result = None
         YDialogCurses._open_dialogs.append(self)
     
     def widgetClass(self):
@@ -155,7 +156,9 @@ class YDialogCurses(YSingleChildContainerWidget):
             self._focused_widget = focusable[0]
             self._focused_widget._focused = True
         
-        self._run_event_loop()
+        # open() must be non-blocking (finalize and show). Event loop is
+        # started by waitForEvent() to match libyui semantics.
+        return True
     
     def isOpen(self):
         return self._is_open
@@ -188,60 +191,10 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._backend_widget = curses.newwin(0, 0, 0, 0)
     
     def _run_event_loop(self):
-        from manatools.aui.yui import YUI
-        ui = YUI.ui()
-        
-        while self._is_open:
-            try:
-                # Draw only if needed (throttle redraws)
-                current_time = time.time()
-                if current_time - self._last_draw_time >= self._draw_interval:
-                    self._draw_dialog()
-                    self._last_draw_time = current_time
-                
-                # Non-blocking input
-                ui._stdscr.nodelay(True)
-                key = ui._stdscr.getch()
-                
-                if key == -1:
-                    time.sleep(0.01)  # Small sleep to prevent CPU spinning
-                    continue
-                
-                # Handle global keys
-                if key == curses.KEY_F10 or key == ord('q') or key == ord('Q'):
-                    print("Quit requested")
-                    break
-                elif key == curses.KEY_RESIZE:
-                    # Handle terminal resize - force redraw
-                    self._last_draw_time = 0
-                    continue
-                
-                # Handle tab navigation
-                if key == ord('\t'):
-                    self._cycle_focus(forward=True)
-                    self._last_draw_time = 0  # Force redraw
-                    continue
-                elif key == curses.KEY_BTAB:  # Shift+Tab
-                    self._cycle_focus(forward=False)
-                    self._last_draw_time = 0  # Force redraw
-                    continue
-                
-                # Send key event to focused widget
-                if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
-                    handled = self._focused_widget._handle_key(key)
-                    if handled:
-                        self._last_draw_time = 0  # Force redraw
-                    
-            except KeyboardInterrupt:
-                print("Keyboard interrupt")
-                break
-            except Exception as e:
-                # Don't crash on curses errors
-                print(f"Curses error: {e}")
-                time.sleep(0.1)
-        
-        self.destroy()
-        print("NCurses dialog closed")
+        # Backwards-compatible helper: run an indefinite loop until dialog closed.
+        # Implemented via waitForEvent with no timeout (block until an event that
+        # may close/destroy the dialog).
+        self.waitForEvent(timeout_millisec=0)
     
     def _draw_dialog(self):
         """Draw the entire dialog (called by event loop)"""
@@ -342,6 +295,105 @@ class YDialogCurses(YSingleChildContainerWidget):
             find_in_widget(self._child)
         
         return focusable
+
+    
+    def _post_event(self, event):
+        """Post an event to this dialog; waitForEvent will return it."""
+        self._event_result = event
+        # If dialog is not open anymore, ensure cleanup
+        if isinstance(event, YCancelEvent):
+            # Mark closed so loop can clean up
+            self._is_open = False
+
+    def waitForEvent(self, timeout_millisec=0):
+        """
+        Run the ncurses event loop until an event is posted or timeout occurs.
+        timeout_millisec == 0 -> block indefinitely until an event (no timeout).
+        Returns a YEvent (YWidgetEvent, YTimeoutEvent, YCancelEvent, ...).
+        """
+        from manatools.aui.yui import YUI
+        ui = YUI.ui()
+
+        # Ensure dialog is open/finalized
+        if not self._is_open:
+            self.open()
+
+        self._event_result = None
+        deadline = None
+        if timeout_millisec and timeout_millisec > 0:
+            deadline = time.time() + (timeout_millisec / 1000.0)
+
+        # Main nested loop: iterate until event posted or timeout
+        while self._is_open and self._event_result is None:
+            try:
+                # Draw only if needed (throttle redraws)
+                current_time = time.time()
+                if current_time - self._last_draw_time >= self._draw_interval:
+                    self._draw_dialog()
+                    self._last_draw_time = current_time
+
+                # Non-blocking input
+                ui._stdscr.nodelay(True)
+                key = ui._stdscr.getch()
+
+                if key == -1:
+                    # no input; check timeout
+                    if deadline and time.time() >= deadline:
+                        self._event_result = YTimeoutEvent()
+                        break
+                    time.sleep(0.01)
+                    continue
+
+                # Handle global keys
+                if key == curses.KEY_F10 or key == ord('q') or key == ord('Q'):
+                    # Post cancel event
+                    self._post_event(YCancelEvent())
+                    break
+                elif key == curses.KEY_RESIZE:
+                    # Handle terminal resize - force redraw
+                    self._last_draw_time = 0
+                    continue
+
+                # Handle tab navigation
+                if key == ord('\t'):
+                    self._cycle_focus(forward=True)
+                    self._last_draw_time = 0  # Force redraw
+                    continue
+                elif key == curses.KEY_BTAB:  # Shift+Tab
+                    self._cycle_focus(forward=False)
+                    self._last_draw_time = 0  # Force redraw
+                    continue
+
+                # Send key event to focused widget
+                if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
+                    handled = self._focused_widget._handle_key(key)
+                    if handled:
+                        self._last_draw_time = 0  # Force redraw
+
+            except KeyboardInterrupt:
+                # treat as cancel
+                self._post_event(YCancelEvent())
+                break
+            except Exception as e:
+                # Don't crash on curses errors
+                # keep running unless fatal
+                time.sleep(0.1)
+
+        # If dialog was closed without explicit event, produce CancelEvent
+        if self._event_result is None:
+            if not self._is_open:
+                self._event_result = YCancelEvent()
+            elif deadline and time.time() >= deadline:
+                self._event_result = YTimeoutEvent()
+
+        # cleanup if dialog closed
+        if not self._is_open:
+            try:
+                self.destroy()
+            except Exception:
+                pass
+
+        return self._event_result if self._event_result is not None else YEvent()
 
 class YVBoxCurses(YWidget):
     def __init__(self, parent=None):
@@ -586,10 +638,17 @@ class YPushButtonCurses(YWidget):
             return False
             
         if key == ord('\n') or key == ord(' '):
-            # Button pressed
-            print(f"Button '{self._label}' pressed")
-            return True
-        
+            # Button pressed -> post widget event to containing dialog
+            dlg = getattr(self, '_parent', None)
+            # walk up parents until dialog found
+            while dlg is not None and not isinstance(dlg, YDialogCurses):
+                dlg = getattr(dlg, '_parent', None)
+            if dlg is not None:
+                try:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+                except Exception:
+                    pass
+            return True        
         return False
 
 class YCheckBoxCurses(YWidget):
