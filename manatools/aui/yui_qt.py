@@ -105,22 +105,27 @@ class YDialogQt(YSingleChildContainerWidget):
         self._color_mode = color_mode
         self._is_open = False
         self._qwidget = None
+        self._event_result = None
+        self._qt_event_loop = None
         YDialogQt._open_dialogs.append(self)
     
     def widgetClass(self):
         return "YDialog"
     
     def open(self):
-        if not self._qwidget:
-            self._create_backend_widget()
-        
-        self._qwidget.show()
-        self._is_open = True
-        
-        # Start Qt event loop if not already running
-        app = QtWidgets.QApplication.instance()
-        if app:
-            app.exec_()
+        """
+        Finalize and show the dialog in a non-blocking way.
+
+        Matches libyui semantics: open() should only finalize and make visible.
+        If the application expects blocking behavior it should call waitForEvent()
+        which will start a nested event loop as required.
+        """
+        if not self._is_open:
+            if not self._qwidget:
+                self._create_backend_widget()
+            
+            self._qwidget.show()
+            self._is_open = True       
     
     def isOpen(self):
         return self._is_open
@@ -165,8 +170,64 @@ class YDialogQt(YSingleChildContainerWidget):
         self._qwidget.closeEvent = self._on_close_event
     
     def _on_close_event(self, event):
+        # Post a cancel event so waitForEvent returns a YCancelEvent when the user
+        # closes the window with the window manager 'X' button.
+        try:
+            self._post_event(YCancelEvent())
+        except Exception:
+            pass
+        # Ensure dialog is destroyed and accept the close
         self.destroy()
         event.accept()
+    
+    def _post_event(self, event):
+        """Internal: post an event to this dialog and quit local event loop if running."""
+        self._event_result = event
+        if self._qt_event_loop is not None and self._qt_event_loop.isRunning():
+            self._qt_event_loop.quit()
+
+    def waitForEvent(self, timeout_millisec=0):
+        """
+        Ensure dialog is finalized/open, then run a nested Qt QEventLoop until an
+        event is posted or timeout occurs. Returns a YEvent (YWidgetEvent, YTimeoutEvent, ...).
+
+        If the application called open() previously this will just block until an event.
+        If open() was not called, it will finalize and show the dialog here (so creation
+        followed by immediate waitForEvent behaves like libyui).
+        """
+        # Ensure dialog is created and visible (finalize if needed)
+        if not self._qwidget:
+            self.open()
+
+        # give Qt a chance to process pending show/layout events
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.processEvents()
+
+        self._event_result = None
+        loop = QtCore.QEventLoop()
+        self._qt_event_loop = loop
+
+        timer = None
+        if timeout_millisec and timeout_millisec > 0:
+            timer = QtCore.QTimer()
+            timer.setSingleShot(True)
+            def on_timeout():
+                # post timeout event and quit
+                self._event_result = YTimeoutEvent()
+                if loop.isRunning():
+                    loop.quit()
+            timer.timeout.connect(on_timeout)
+            timer.start(timeout_millisec)
+
+        loop.exec_()
+
+        # cleanup
+        if timer and timer.isActive():
+            timer.stop()
+        self._qt_event_loop = None
+        return self._event_result if self._event_result is not None else YEvent()
+
 
 class YVBoxQt(YWidget):
     def __init__(self, parent=None):
@@ -297,8 +358,15 @@ class YPushButtonQt(YWidget):
         self._backend_widget.clicked.connect(self._on_clicked)
     
     def _on_clicked(self):
-        print(f"Button clicked: {self._label}")
-        # In a real implementation, this would send a YEvent
+        # Post a YWidgetEvent to the containing dialog (walk parents)
+        dlg = self._parent
+        while dlg is not None and not isinstance(dlg, YDialogQt):
+            dlg = dlg.parent()
+        if dlg is not None:
+            dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        else:
+            # fallback logging for now
+            print(f"Button clicked (no dialog found): {self._label}")
 
 class YCheckBoxQt(YWidget):
     def __init__(self, parent=None, label="", is_checked=False):
