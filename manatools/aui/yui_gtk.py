@@ -4,7 +4,7 @@ GTK backend implementation for YUI
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GObject
+from gi.repository import Gtk, GObject, GLib
 import threading
 from .yui_common import *
 
@@ -93,20 +93,22 @@ class YDialogGtk(YSingleChildContainerWidget):
         self._color_mode = color_mode
         self._is_open = False
         self._window = None
+        self._event_result = None
+        self._glib_loop = None
         YDialogGtk._open_dialogs.append(self)
     
     def widgetClass(self):
         return "YDialog"
     
     def open(self):
-        if not self._window:
-            self._create_backend_widget()
-        
-        self._window.show_all()
-        self._is_open = True
-        
-        # Start GTK main loop
-        Gtk.main()
+        # Finalize and show the dialog in a non-blocking way.
+        # Matching libyui semantics: open() should finalize and make visible,
+        # but must NOT start a global blocking Gtk.main() here.
+        if not self._is_open:
+            if not self._window:
+                self._create_backend_widget()
+            self._window.show_all()
+            self._is_open = True
     
     def isOpen(self):
         return self._is_open
@@ -121,9 +123,67 @@ class YDialogGtk(YSingleChildContainerWidget):
         
         # Stop GTK main loop if no dialogs left
         if not YDialogGtk._open_dialogs:
-            Gtk.main_quit()
+            try:
+                # Only quit the global Gtk main loop if it's actually running
+                if hasattr(Gtk, "main_level") and Gtk.main_level() > 0:
+                    Gtk.main_quit()
+            except Exception:
+                # be defensive: do not raise from cleanup
+                pass
         return True
-    
+
+    def _post_event(self, event):
+        """Internal: post an event to this dialog and quit local GLib.MainLoop if running."""
+        self._event_result = event
+        if self._glib_loop is not None and self._glib_loop.is_running():
+            try:
+                self._glib_loop.quit()
+            except Exception:
+                pass
+
+    def waitForEvent(self, timeout_millisec=0):
+        """
+        Run a GLib.MainLoop until an event is posted or timeout occurs.
+        Returns a YEvent (YWidgetEvent, YTimeoutEvent, ...).
+        """
+        # Ensure dialog is finalized/open (finalize if caller didn't call open()).
+        if not self.isOpen():
+            self.open()            
+
+        # Let GTK process pending events (show/layout) before entering nested loop.
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+
+        self._event_result = None
+        self._glib_loop = GLib.MainLoop()
+ 
+        def on_timeout():
+            # post timeout event and quit loop
+            self._event_result = YTimeoutEvent()
+            try:
+                if self._glib_loop.is_running():
+                    self._glib_loop.quit()
+            except Exception:
+                pass
+            return False  # don't repeat
+
+        self._timeout_id = None
+        if timeout_millisec and timeout_millisec > 0:
+            self._timeout_id = GLib.timeout_add(timeout_millisec, on_timeout)
+
+        # run nested loop
+        self._glib_loop.run()
+
+        # cleanup
+        if self._timeout_id:
+            try:
+                GLib.source_remove(self._timeout_id)
+            except Exception:
+                pass
+            self._timeout_id = None
+        self._glib_loop = None
+        return self._event_result if self._event_result is not None else YEvent()
+
     @classmethod
     def deleteTopmostDialog(cls, doThrow=True):
         if cls._open_dialogs:
@@ -148,10 +208,34 @@ class YDialogGtk(YSingleChildContainerWidget):
             self._window.add(self._child.get_backend_widget())
         
         self._backend_widget = self._window
+        # Connect to both "delete-event" (window manager close) and "destroy"
+        # so we can post a YCancelEvent and stop any nested wait loop.
+        self._window.connect("delete-event", self._on_delete_event)
         self._window.connect("destroy", self._on_destroy)
     
     def _on_destroy(self, widget):
-        self.destroy()
+        # normal widget destruction: ensure internal state cleaned
+        try:
+            # If no nested loop running, remove dialog and quit global loop if needed
+            self.destroy()
+        except Exception:
+            pass
+
+    def _on_delete_event(self, widget, event):
+        # User clicked the window manager close (X) button:
+        # post a YCancelEvent so waitForEvent can return YCancelEvent.
+        try:
+            self._post_event(YCancelEvent())
+        except Exception:
+            pass
+        # Destroy the window and stop further handling
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        # Returning False allows the default handler to destroy the window;
+        # we already destroyed it, so return False to continue.
+        return False
 
 class YVBoxGtk(YWidget):
     def __init__(self, parent=None):
@@ -279,7 +363,14 @@ class YPushButtonGtk(YWidget):
         self._backend_widget.connect("clicked", self._on_clicked)
     
     def _on_clicked(self, button):
-        print(f"Button clicked: {self._label}")
+        # Post a YWidgetEvent to the containing dialog (walk parents)
+        dlg = self._parent
+        while dlg is not None and not isinstance(dlg, YDialogGtk):
+            dlg = dlg.parent()
+        if dlg is not None:
+            dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        else:
+            print(f"Button clicked (no dialog found): {self._label}")
 
 class YCheckBoxGtk(YWidget):
     def __init__(self, parent=None, label="", is_checked=False):
