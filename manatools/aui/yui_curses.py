@@ -1,0 +1,819 @@
+"""
+NCurses backend implementation for YUI
+"""
+
+import curses
+import curses.ascii
+import sys
+import os
+import time
+from .yui_common import *
+
+class YUICurses:
+    def __init__(self):
+        self._widget_factory = YWidgetFactoryCurses()
+        self._optional_widget_factory = None
+        self._application = YApplicationCurses()
+        self._stdscr = None
+        self._colors_initialized = False
+        self._running = False
+        
+        # Initialize curses
+        self._init_curses()
+    
+    def _init_curses(self):
+        try:
+            self._stdscr = curses.initscr()
+            curses.noecho()
+            curses.cbreak()
+            curses.curs_set(1)  # Show cursor
+            self._stdscr.keypad(True)
+            
+            # Enable colors if available
+            if curses.has_colors():
+                curses.start_color()
+                curses.use_default_colors()
+                self._colors_initialized = True
+                # Define some color pairs
+                curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
+                curses.init_pair(2, curses.COLOR_YELLOW, -1)
+                curses.init_pair(3, curses.COLOR_GREEN, -1)
+                curses.init_pair(4, curses.COLOR_RED, -1)
+            
+        except Exception as e:
+            print(f"Error initializing curses: {e}")
+            self._cleanup_curses()
+            raise
+    
+    def _cleanup_curses(self):
+        try:
+            if self._stdscr:
+                curses.nocbreak()
+                self._stdscr.keypad(False)
+                curses.echo()
+                curses.curs_set(1)
+                curses.endwin()
+        except:
+            pass
+    
+    def __del__(self):
+        self._cleanup_curses()
+    
+    def widgetFactory(self):
+        return self._widget_factory
+    
+    def optionalWidgetFactory(self):
+        return self._optional_widget_factory
+    
+    def app(self):
+        return self._application
+    
+    def application(self):
+        return self._application
+    
+    def yApp(self):
+        return self._application
+
+class YApplicationCurses:
+    def __init__(self):
+        self._icon_base_path = ""
+        self._product_name = "YUI Curses"
+    
+    def iconBasePath(self):
+        return self._icon_base_path
+    
+    def setIconBasePath(self, new_icon_base_path):
+        self._icon_base_path = new_icon_base_path
+    
+    def setProductName(self, product_name):
+        self._product_name = product_name
+    
+    def productName(self):
+        return self._product_name
+
+class YWidgetFactoryCurses:
+    def __init__(self):
+        pass
+    
+    def createMainDialog(self, color_mode=YDialogColorMode.YDialogNormalColor):
+        return YDialogCurses(YDialogType.YMainDialog, color_mode)
+    
+    def createVBox(self, parent):
+        return YVBoxCurses(parent)
+    
+    def createHBox(self, parent):
+        return YHBoxCurses(parent)
+    
+    def createLabel(self, parent, text, isHeading=False, isOutputField=False):
+        return YLabelCurses(parent, text, isHeading, isOutputField)
+    
+    def createHeading(self, parent, label):
+        return YLabelCurses(parent, label, isHeading=True)
+    
+    def createInputField(self, parent, label, password_mode=False):
+        return YInputFieldCurses(parent, label, password_mode)
+    
+    def createPushButton(self, parent, label):
+        return YPushButtonCurses(parent, label)
+    
+    def createCheckBox(self, parent, label, is_checked=False):
+        return YCheckBoxCurses(parent, label, is_checked)
+    
+    def createComboBox(self, parent, label, editable=False):
+        return YComboBoxCurses(parent, label, editable)
+
+
+# Curses Widget Implementations
+class YDialogCurses(YSingleChildContainerWidget):
+    _open_dialogs = []
+    _current_dialog = None
+    
+    def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
+        super().__init__()
+        self._dialog_type = dialog_type
+        self._color_mode = color_mode
+        self._is_open = False
+        self._window = None
+        self._focused_widget = None
+        self._last_draw_time = 0
+        self._draw_interval = 0.1  # seconds
+        YDialogCurses._open_dialogs.append(self)
+    
+    def widgetClass(self):
+        return "YDialog"
+    
+    def open(self):
+        if not self._window:
+            self._create_backend_widget()
+        
+        self._is_open = True
+        YDialogCurses._current_dialog = self
+        
+        # Find first focusable widget
+        focusable = self._find_focusable_widgets()
+        if focusable:
+            self._focused_widget = focusable[0]
+            self._focused_widget._focused = True
+        
+        self._run_event_loop()
+    
+    def isOpen(self):
+        return self._is_open
+    
+    def destroy(self, doThrow=True):
+        self._is_open = False
+        if self in YDialogCurses._open_dialogs:
+            YDialogCurses._open_dialogs.remove(self)
+        if YDialogCurses._current_dialog == self:
+            YDialogCurses._current_dialog = None
+        return True
+    
+    @classmethod
+    def deleteTopmostDialog(cls, doThrow=True):
+        if cls._open_dialogs:
+            dialog = cls._open_dialogs[-1]
+            return dialog.destroy(doThrow)
+        return False
+    
+    @classmethod
+    def currentDialog(cls, doThrow=True):
+        if not cls._open_dialogs:
+            if doThrow:
+                raise YUINoDialogException("No dialog open")
+            return None
+        return cls._open_dialogs[-1]
+    
+    def _create_backend_widget(self):
+        # Use the main screen
+        self._backend_widget = curses.newwin(0, 0, 0, 0)
+    
+    def _run_event_loop(self):
+        from manatools.aui.yui import YUI
+        ui = YUI.ui()
+        
+        while self._is_open:
+            try:
+                # Draw only if needed (throttle redraws)
+                current_time = time.time()
+                if current_time - self._last_draw_time >= self._draw_interval:
+                    self._draw_dialog()
+                    self._last_draw_time = current_time
+                
+                # Non-blocking input
+                ui._stdscr.nodelay(True)
+                key = ui._stdscr.getch()
+                
+                if key == -1:
+                    time.sleep(0.01)  # Small sleep to prevent CPU spinning
+                    continue
+                
+                # Handle global keys
+                if key == curses.KEY_F10 or key == ord('q') or key == ord('Q'):
+                    print("Quit requested")
+                    break
+                elif key == curses.KEY_RESIZE:
+                    # Handle terminal resize - force redraw
+                    self._last_draw_time = 0
+                    continue
+                
+                # Handle tab navigation
+                if key == ord('\t'):
+                    self._cycle_focus(forward=True)
+                    self._last_draw_time = 0  # Force redraw
+                    continue
+                elif key == curses.KEY_BTAB:  # Shift+Tab
+                    self._cycle_focus(forward=False)
+                    self._last_draw_time = 0  # Force redraw
+                    continue
+                
+                # Send key event to focused widget
+                if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
+                    handled = self._focused_widget._handle_key(key)
+                    if handled:
+                        self._last_draw_time = 0  # Force redraw
+                    
+            except KeyboardInterrupt:
+                print("Keyboard interrupt")
+                break
+            except Exception as e:
+                # Don't crash on curses errors
+                print(f"Curses error: {e}")
+                time.sleep(0.1)
+        
+        self.destroy()
+        print("NCurses dialog closed")
+    
+    def _draw_dialog(self):
+        """Draw the entire dialog (called by event loop)"""
+        if not hasattr(self, '_backend_widget') or not self._backend_widget:
+            return
+            
+        try:
+            height, width = self._backend_widget.getmaxyx()
+            
+            # Clear screen
+            self._backend_widget.clear()
+            
+            # Draw border
+            self._backend_widget.border()
+            
+            # Draw title
+            title = " YUI NCurses Dialog "
+            title_x = max(0, (width - len(title)) // 2)
+            self._backend_widget.addstr(0, title_x, title, curses.A_BOLD)
+            
+            # Draw content area - fixed coordinates for child
+            content_height = height - 4
+            content_width = width - 4
+            content_y = 2
+            content_x = 2
+            
+            # Draw child content
+            if self._child:
+                self._draw_child_content(content_y, content_x, content_width, content_height)
+            
+            # Draw footer with instructions
+            footer_text = " TAB=Navigate | SPACE=Expand | ENTER=Select | F10/Q=Quit "
+            footer_x = max(0, (width - len(footer_text)) // 2)
+            if footer_x + len(footer_text) < width:
+                self._backend_widget.addstr(height - 1, footer_x, footer_text, curses.A_DIM)
+            
+            # Draw focus indicator
+            if self._focused_widget:
+                focus_text = f" Focus: {getattr(self._focused_widget, '_label', 'Unknown')} "
+                if len(focus_text) < width:
+                    self._backend_widget.addstr(height - 2, 2, focus_text, curses.A_REVERSE)
+            
+            self._backend_widget.refresh()
+            
+        except curses.error as e:
+            # Ignore curses errors (like writing beyond screen bounds)
+            pass
+
+    def _draw_child_content(self, start_y, start_x, max_width, max_height):
+        """Draw the child widget content respecting container hierarchy"""
+        if not self._child:
+            return
+            
+        # Draw only the root child - it will handle drawing its own children
+        if hasattr(self._child, '_draw'):
+            self._child._draw(self._backend_widget, start_y, start_x, max_width, max_height)            
+        
+
+    def _cycle_focus(self, forward=True):
+        """Cycle focus between focusable widgets"""
+        focusable = self._find_focusable_widgets()
+        if not focusable:
+            return
+        
+        current_index = -1
+        if self._focused_widget:
+            for i, widget in enumerate(focusable):
+                if widget == self._focused_widget:
+                    current_index = i
+                    break
+        
+        if current_index == -1:
+            new_index = 0
+        else:
+            if forward:
+                new_index = (current_index + 1) % len(focusable)
+            else:
+                new_index = (current_index - 1) % len(focusable)
+        
+        # Update focus
+        if self._focused_widget:
+            self._focused_widget._focused = False
+        
+        self._focused_widget = focusable[new_index]
+        self._focused_widget._focused = True
+
+    def _find_focusable_widgets(self):
+        """Find all widgets that can receive focus"""
+        focusable = []
+        
+        def find_in_widget(widget):
+            if hasattr(widget, '_can_focus') and widget._can_focus:
+                focusable.append(widget)
+            for child in widget._children:
+                find_in_widget(child)
+        
+        if self._child:
+            find_in_widget(self._child)
+        
+        return focusable
+
+class YVBoxCurses(YWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def widgetClass(self):
+        return "YVBox"
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        current_y = y
+        for child in self._children:
+            if not hasattr(child, '_draw'):
+                continue
+                
+            # Get child height - only consider direct children
+            child_height = getattr(child, '_height', 1)
+            
+            # Check space
+            if current_y + child_height > y + height:
+                break
+            
+            # Draw ONLY the direct child
+            # The child will handle drawing its own children recursively
+            child._draw(window, current_y, x, width, child_height)
+            
+            # Move to next position
+            current_y += child_height + 1  # +1 for spacing
+
+class YHBoxCurses(YWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._height = 1  # HBox always takes one line
+    
+    def widgetClass(self):
+        return "YHBox"
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):        
+        # HBox draws its OWN children horizontally
+        num_children = len(self._children)
+        if num_children == 0:
+            return
+        
+        # Calculate equal widths for horizontal layout
+        child_width = width // num_children
+        current_x = x
+        
+        for i, child in enumerate(self._children):
+            if hasattr(child, '_draw'):                
+                # Last child gets remaining space
+                actual_width = child_width if i < num_children - 1 else (x + width) - current_x
+                
+                # Draw the child - HBox handles its children's positioning
+                child._draw(window, y, current_x, actual_width, height)
+                
+                # Move to next horizontal position
+                current_x += child_width
+
+class YLabelCurses(YWidget):
+    def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
+        super().__init__(parent)
+        self._text = text
+        self._is_heading = isHeading
+        self._is_output_field = isOutputField
+        self._height = 1
+        self._focused = False
+        self._can_focus = False  # Labels don't get focus
+    
+    def widgetClass(self):
+        return "YLabel"
+    
+    def text(self):
+        return self._text
+    
+    def setText(self, new_text):
+        self._text = new_text
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        try:
+            attr = 0
+            if self._is_heading:
+                attr = curses.A_BOLD
+            
+            # Truncate text to fit available width
+            display_text = self._text[:width-1]
+            window.addstr(y, x, display_text, attr)
+        except curses.error:
+            pass
+
+class YInputFieldCurses(YWidget):
+    def __init__(self, parent=None, label="", password_mode=False):
+        super().__init__(parent)
+        self._label = label
+        self._value = ""
+        self._password_mode = password_mode
+        self._cursor_pos = 0
+        self._focused = False
+        self._can_focus = True
+        self._height = 1
+    
+    def widgetClass(self):
+        return "YInputField"
+    
+    def value(self):
+        return self._value
+    
+    def setValue(self, text):
+        self._value = text
+        self._cursor_pos = len(text)
+    
+    def label(self):
+        return self._label
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        try:
+            # Draw label
+            if self._label:
+                label_text = self._label
+                if len(label_text) > width // 3:
+                    label_text = label_text[:width // 3]
+                window.addstr(y, x, label_text)
+                x += len(label_text) + 1
+                width -= len(label_text) + 1
+            
+            # Calculate available space for input
+            if width <= 0:
+                return
+            
+            # Prepare display value
+            if self._password_mode and self._value:
+                display_value = '*' * len(self._value)
+            else:
+                display_value = self._value
+            
+            # Handle scrolling for long values
+            if len(display_value) > width:
+                if self._cursor_pos >= width:
+                    start_pos = self._cursor_pos - width + 1
+                    display_value = display_value[start_pos:start_pos + width]
+                else:
+                    display_value = display_value[:width]
+            
+            # Draw input field background
+            field_bg = ' ' * width
+            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+            window.addstr(y, x, field_bg, attr)
+            
+            # Draw text
+            if display_value:
+                window.addstr(y, x, display_value, attr)
+            
+            # Show cursor if focused
+            if self._focused:
+                cursor_display_pos = min(self._cursor_pos, width - 1)
+                if cursor_display_pos < len(display_value):
+                    window.chgat(y, x + cursor_display_pos, 1, curses.A_REVERSE | curses.A_BOLD)
+                    
+        except curses.error:
+            pass
+    
+    def _handle_key(self, key):
+        if not self._focused:
+            return False
+            
+        handled = True
+        
+        if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
+            if self._cursor_pos > 0:
+                self._value = self._value[:self._cursor_pos-1] + self._value[self._cursor_pos:]
+                self._cursor_pos -= 1
+        elif key == curses.KEY_DC:  # Delete key
+            if self._cursor_pos < len(self._value):
+                self._value = self._value[:self._cursor_pos] + self._value[self._cursor_pos+1:]
+        elif key == curses.KEY_LEFT:
+            if self._cursor_pos > 0:
+                self._cursor_pos -= 1
+        elif key == curses.KEY_RIGHT:
+            if self._cursor_pos < len(self._value):
+                self._cursor_pos += 1
+        elif key == curses.KEY_HOME:
+            self._cursor_pos = 0
+        elif key == curses.KEY_END:
+            self._cursor_pos = len(self._value)
+        elif 32 <= key <= 126:  # Printable characters
+            self._value = self._value[:self._cursor_pos] + chr(key) + self._value[self._cursor_pos:]
+            self._cursor_pos += 1
+        else:
+            handled = False
+        
+        return handled
+
+class YPushButtonCurses(YWidget):
+    def __init__(self, parent=None, label=""):
+        super().__init__(parent)
+        self._label = label
+        self._focused = False
+        self._can_focus = True
+        self._height = 1  # Fixed height - buttons are always one line
+    
+    def widgetClass(self):
+        return "YPushButton"
+    
+    def label(self):
+        return self._label
+    
+    def setLabel(self, label):
+        self._label = label
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        try:
+            # Center the button label within available width
+            button_text = f" {self._label} "
+            text_x = x + max(0, (width - len(button_text)) // 2)
+            
+            # Only draw if we have enough space
+            if text_x + len(button_text) <= x + width:
+                attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+                if self._focused:
+                    attr |= curses.A_BOLD
+                
+                window.addstr(y, text_x, button_text, attr)
+        except curses.error:
+            # Ignore drawing errors (out of bounds)
+            pass
+    
+    def _handle_key(self, key):
+        if not self._focused:
+            return False
+            
+        if key == ord('\n') or key == ord(' '):
+            # Button pressed
+            print(f"Button '{self._label}' pressed")
+            return True
+        
+        return False
+
+class YCheckBoxCurses(YWidget):
+    def __init__(self, parent=None, label="", is_checked=False):
+        super().__init__(parent)
+        self._label = label
+        self._is_checked = is_checked
+        self._focused = False
+        self._can_focus = True
+        self._height = 1
+    
+    def widgetClass(self):
+        return "YCheckBox"
+    
+    def value(self):
+        return self._is_checked
+    
+    def setValue(self, checked):
+        self._is_checked = checked
+    
+    def label(self):
+        return self._label
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        try:
+            checkbox = "[X]" if self._is_checked else "[ ]"
+            text = f"{checkbox} {self._label}"
+            
+            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+            window.addstr(y, x, text, attr)
+        except curses.error:
+            pass
+    
+    def _handle_key(self, key):
+        if not self._focused:
+            return False
+            
+        if key == ord(' ') or key == ord('\n'):
+            self._is_checked = not self._is_checked
+            return True
+        
+        return False
+
+class YComboBoxCurses(YSelectionWidget):
+    def __init__(self, parent=None, label="", editable=False):
+        super().__init__(parent)
+        self._label = label
+        self._editable = editable
+        self._value = ""
+        self._focused = False
+        self._can_focus = True
+        self._height = 1
+        self._expanded = False
+        self._hover_index = 0
+        self._combo_x = 0
+        self._combo_y = 0
+        self._combo_width = 0
+    
+    def widgetClass(self):
+        return "YComboBox"
+    
+    def value(self):
+        return self._value
+    
+    def setValue(self, text):
+        self._value = text
+        # Update selected items
+        self._selected_items = []
+        for item in self._items:
+            if item.label() == text:
+                self._selected_items.append(item)
+                break
+    
+    def editable(self):
+        return self._editable
+    
+    def _create_backend_widget(self):
+        self._backend_widget = None
+    
+    def _draw(self, window, y, x, width, height):
+        # Store position and dimensions for dropdown drawing
+        self._combo_y = y
+        self._combo_x = x
+        self._combo_width = width
+        
+        try:
+            # Calculate available space for combo box
+            label_space = len(self._label) + 1 if self._label else 0
+            combo_space = width - label_space
+            
+            if combo_space <= 3:  # Need at least space for " ▼ "
+                return
+            
+            # Draw label
+            if self._label:
+                label_text = self._label
+                if len(label_text) > label_space - 1:
+                    label_text = label_text[:label_space - 1]
+                window.addstr(y, x, label_text)
+                x += len(label_text) + 1
+            
+            # Prepare display value - always show current value
+            display_value = self._value if self._value else "Select..."
+            max_display_width = combo_space - 3  # Reserve space for " ▼ "
+            if len(display_value) > max_display_width:
+                display_value = display_value[:max_display_width] + "..."
+            
+            # Draw combo box background
+            combo_bg = " " * combo_space
+            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+            window.addstr(y, x, combo_bg, attr)
+            
+            # Draw combo box content
+            combo_text = f" {display_value} ▼"
+            if len(combo_text) > combo_space:
+                combo_text = combo_text[:combo_space]
+            
+            window.addstr(y, x, combo_text, attr)
+            
+            # Draw expanded list if active
+            if self._expanded:
+                self._draw_expanded_list(window)
+            
+        except curses.error:
+            # Ignore drawing errors
+            pass
+
+    def _draw_expanded_list(self, window):
+        """Draw the expanded dropdown list at correct position"""
+        if not self._expanded or not self._items:
+            return
+            
+        try:
+            list_height = min(len(self._items), 6)  # Max 6 items visible
+            
+            # Calculate dropdown position - right below the combo box
+            dropdown_y = self._combo_y + 1
+            dropdown_x = self._combo_x + (len(self._label) + 1 if self._label else 0)
+            dropdown_width = self._combo_width - (len(self._label) + 1 if self._label else 0)
+            
+            # Make sure we don't draw outside screen
+            screen_height, screen_width = window.getmaxyx()
+            
+            # If not enough space below, draw above
+            if dropdown_y + list_height >= screen_height:
+                dropdown_y = max(1, self._combo_y - list_height - 1)
+            
+            # Ensure dropdown doesn't go beyond right edge
+            if dropdown_x + dropdown_width >= screen_width:
+                dropdown_width = screen_width - dropdown_x - 1
+            
+            if dropdown_width <= 5:  # Need reasonable width
+                return
+            
+            # Draw dropdown background for each item
+            for i in range(list_height):
+                if i >= len(self._items):
+                    break
+                    
+                item = self._items[i]
+                item_text = item.label()
+                if len(item_text) > dropdown_width - 2:
+                    item_text = item_text[:dropdown_width - 2] + "..."
+                
+                # Highlight hovered item
+                attr = curses.A_REVERSE if i == self._hover_index else curses.A_NORMAL
+                
+                # Create background for the item
+                bg_text = " " + item_text.ljust(dropdown_width - 2)
+                if len(bg_text) > dropdown_width:
+                    bg_text = bg_text[:dropdown_width]
+                
+                # Ensure we don't write beyond screen bounds
+                if (dropdown_y + i < screen_height and 
+                    dropdown_x < screen_width and 
+                    dropdown_x + len(bg_text) <= screen_width):
+                    try:
+                        window.addstr(dropdown_y + i, dropdown_x, bg_text, attr)
+                    except curses.error:
+                        pass  # Ignore out-of-bounds errors
+                
+        except curses.error:
+            # Ignore drawing errors
+            pass
+
+    def _handle_key(self, key):
+        if not self._focused:
+            return False
+            
+        handled = True
+        
+        if key == ord('\n') or key == ord(' '):
+            # Toggle expanded state
+            self._expanded = not self._expanded
+            if self._expanded and self._items:
+                # Set hover index to current value if exists
+                self._hover_index = 0
+                if self._value:
+                    for i, item in enumerate(self._items):
+                        if item.label() == self._value:
+                            self._hover_index = i
+                            break
+        elif self._expanded:
+            # Handle navigation in expanded list
+            if key == curses.KEY_UP:
+                if self._hover_index > 0:
+                    self._hover_index -= 1
+            elif key == curses.KEY_DOWN:
+                if self._hover_index < len(self._items) - 1:
+                    self._hover_index += 1
+            elif key == ord('\n') or key == ord(' '):
+                # Select hovered item
+                if self._items and 0 <= self._hover_index < len(self._items):
+                    selected_item = self._items[self._hover_index]
+                    self.setValue(selected_item.label())  # Use setValue to update display
+                    self._expanded = False
+            elif key == 27:  # ESC key
+                self._expanded = False
+            else:
+                handled = False
+        else:
+            handled = False
+        
+        return handled

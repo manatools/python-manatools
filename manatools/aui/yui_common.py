@@ -1,0 +1,466 @@
+"""
+Common base classes and definitions shared across all backends
+"""
+
+from enum import Enum
+import uuid
+
+# Enums
+class YUIDimension(Enum):
+    YD_HORIZ = 0
+    YD_VERT = 1
+
+class YAlignmentType(Enum):
+    YAlignUnchanged = 0
+    YAlignBegin = 1
+    YAlignEnd = 2
+    YAlignCenter = 3
+
+class YDialogType(Enum):
+    YMainDialog = 0
+    YPopupDialog = 1
+    YWizardDialog = 2
+
+class YDialogColorMode(Enum):
+    YDialogNormalColor = 0
+    YDialogInfoColor = 1
+    YDialogWarnColor = 2
+
+class YEventType(Enum):
+    NoEvent = 0
+    WidgetEvent = 1
+    MenuEvent = 2
+    KeyEvent = 3
+    CancelEvent = 4
+    TimeoutEvent = 5
+
+class YEventReason(Enum):
+    Activated = 0
+    ValueChanged = 1
+    SelectionChanged = 2
+
+class YCheckBoxState(Enum):
+    YCheckBox_dont_care = -1
+    YCheckBox_off = 0
+    YCheckBox_on = 1
+
+class YButtonRole(Enum):
+    YCustomButton = 0
+    YOKButton = 1
+    YCancelButton = 2
+    YHelpButton = 3
+
+# Exceptions
+class YUIException(Exception):
+    pass
+
+class YUIWidgetNotFoundException(YUIException):
+    pass
+
+class YUINoDialogException(YUIException):
+    pass
+
+class YUIInvalidWidgetException(YUIException):
+    pass
+
+# Events
+class YEvent:
+    def __init__(self, event_type=YEventType.NoEvent, widget=None, reason=None):
+        self._event_type = event_type
+        self._widget = widget
+        self._reason = reason
+        self._serial = 0
+    
+    def eventType(self):
+        return self._event_type
+    
+    def widget(self):
+        return self._widget
+    
+    def reason(self):
+        return self._reason
+    
+    def serial(self):
+        return self._serial
+
+class YWidgetEvent(YEvent):
+    def __init__(self, widget=None, reason=YEventReason.Activated, event_type=YEventType.WidgetEvent):
+        super().__init__(event_type, widget, reason)
+
+class YKeyEvent(YEvent):
+    def __init__(self, key_symbol, focus_widget=None):
+        super().__init__(YEventType.KeyEvent, focus_widget)
+        self._key_symbol = key_symbol
+    
+    def keySymbol(self):
+        return self._key_symbol
+    
+    def focusWidget(self):
+        return self.widget()
+
+class YMenuEvent(YEvent):
+    def __init__(self, item=None, id=None):
+        super().__init__(YEventType.MenuEvent)
+        self._item = item
+        self._id = id
+    
+    def item(self):
+        return self._item
+    
+    def id(self):
+        return self._id
+
+class YCancelEvent(YEvent):
+    def __init__(self):
+        super().__init__(YEventType.CancelEvent)
+
+# Base Widget Class
+class YWidget:
+    _widget_counter = 0
+    
+    def __init__(self, parent=None):
+        YWidget._widget_counter += 1
+        self._id = f"widget_{YWidget._widget_counter}"
+        self._parent = parent
+        self._children = []
+        self._enabled = True
+        self._help_text = ""
+        self._backend_widget = None
+        self._stretchable_horiz = False
+        self._stretchable_vert = False
+        self._weight_horiz = 0
+        self._weight_vert = 0
+        self._notify = True
+        self._auto_shortcut = False
+        self._function_key = 0
+        
+        if parent and hasattr(parent, 'addChild'):
+            parent.addChild(self)
+    
+    def widgetClass(self):
+        return self.__class__.__name__
+    
+    def debugLabel(self):
+        return f"{self.widgetClass()}({self._id})"
+    
+    def helpText(self):
+        return self._help_text
+    
+    def setHelpText(self, help_text):
+        self._help_text = help_text
+    
+    def hasChildren(self):
+        return len(self._children) > 0
+    
+    def firstChild(self):
+        return self._children[0] if self._children else None
+    
+    def lastChild(self):
+        return self._children[-1] if self._children else None
+    
+    def childrenBegin(self):
+        return iter(self._children)
+    
+    def childrenEnd(self):
+        return iter([])
+    
+    def childrenCount(self):
+        return len(self._children)
+    
+    def addChild(self, child):
+        if child not in self._children:
+            self._children.append(child)
+            child._parent = self
+    
+    def removeChild(self, child):
+        if child in self._children:
+            self._children.remove(child)
+            child._parent = None
+    
+    def parent(self):
+        return self._parent
+    
+    def hasParent(self):
+        return self._parent is not None
+    
+    def setEnabled(self, enabled=True):
+        self._enabled = enabled
+        if self._backend_widget:
+            self._set_backend_enabled(enabled)
+    
+    def isEnabled(self):
+        return self._enabled
+    
+    def stretchable(self, dim):
+        if dim == YUIDimension.YD_HORIZ:
+            return self._stretchable_horiz
+        else:
+            return self._stretchable_vert
+    
+    def setStretchable(self, dim, new_stretch):
+        if dim == YUIDimension.YD_HORIZ:
+            self._stretchable_horiz = new_stretch
+        else:
+            self._stretchable_vert = new_stretch
+    
+    def weight(self, dim):
+        if dim == YUIDimension.YD_HORIZ:
+            return self._weight_horiz
+        else:
+            return self._weight_vert
+    
+    def setWeight(self, dim, weight):
+        if dim == YUIDimension.YD_HORIZ:
+            self._weight_horiz = weight
+        else:
+            self._weight_vert = weight
+    
+    def setNotify(self, notify=True):
+        self._notify = notify
+    
+    def notify(self):
+        return self._notify
+    
+    def autoShortcut(self):
+        return self._auto_shortcut
+    
+    def setAutoShortcut(self, auto_shortcut):
+        self._auto_shortcut = auto_shortcut
+    
+    def functionKey(self):
+        return self._function_key
+    
+    def setFunctionKey(self, fkey_no):
+        self._function_key = fkey_no
+    
+    # Backend-specific methods to be implemented by concrete classes
+    def _set_backend_enabled(self, enabled):
+        pass
+    
+    def _create_backend_widget(self):
+        pass
+    
+    def get_backend_widget(self):
+        if self._backend_widget is None:
+            self._create_backend_widget()
+        return self._backend_widget
+
+class YSingleChildContainerWidget(YWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._child = None
+    
+    def addChild(self, child):
+        if self._child is not None:
+            self.removeChild(self._child)
+        self._child = child
+        child._parent = self
+
+class YSelectionWidget(YWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._items = []
+        self._selected_items = []
+        self._label = ""
+        self._icon_base_path = ""
+    
+    def label(self):
+        return self._label
+    
+    def setLabel(self, new_label):
+        self._label = new_label
+    
+    def addItem(self, item):
+        if isinstance(item, str):
+            item = YItem(item)
+        self._items.append(item)
+    
+    def deleteAllItems(self):
+        self._items.clear()
+        self._selected_items.clear()
+    
+    def itemsBegin(self):
+        return iter(self._items)
+    
+    def itemsEnd(self):
+        return iter([])
+    
+    def hasItems(self):
+        return len(self._items) > 0
+    
+    def itemsCount(self):
+        return len(self._items)
+    
+    def selectedItem(self):
+        return self._selected_items[0] if self._selected_items else None
+    
+    def selectedItems(self):
+        return self._selected_items
+    
+    def hasSelectedItem(self):
+        return len(self._selected_items) > 0
+    
+    def selectItem(self, item, selected=True):
+        if selected and item not in self._selected_items:
+            self._selected_items.append(item)
+        elif not selected and item in self._selected_items:
+            self._selected_items.remove(item)
+
+class YSimpleInputField(YWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._value = ""
+        self._label = ""
+    
+    def value(self):
+        return self._value
+    
+    def setValue(self, text):
+        self._value = text
+    
+    def label(self):
+        return self._label
+    
+    def setLabel(self, label):
+        self._label = label
+
+class YItem:
+    def __init__(self, label, selected=False, icon_name=""):
+        self._label = label
+        self._selected = selected
+        self._icon_name = icon_name
+        self._index = 0
+        self._data = None
+    
+    def label(self):
+        return self._label
+    
+    def setLabel(self, new_label):
+        self._label = new_label
+    
+    def selected(self):
+        return self._selected
+    
+    def setSelected(self, selected=True):
+        self._selected = selected
+    
+    def iconName(self):
+        return self._icon_name
+    
+    def hasIconName(self):
+        return bool(self._icon_name)
+    
+    def setIconName(self, new_icon_name):
+        self._icon_name = new_icon_name
+    
+    def index(self):
+        return self._index
+    
+    def setIndex(self, index):
+        self._index = index
+    
+    def data(self):
+        return self._data
+    
+    def setData(self, new_data):
+        self._data = new_data
+
+class YTreeItem(YItem):
+    def __init__(self, label, is_open=False, icon_name=""):
+        super().__init__(label, False, icon_name)
+        self._children = []
+        self._is_open = is_open
+        self._parent_item = None
+    
+    def hasChildren(self):
+        return len(self._children) > 0
+    
+    def childrenBegin(self):
+        return iter(self._children)
+    
+    def childrenEnd(self):
+        return iter([])
+    
+    def addChild(self, item):
+        self._children.append(item)
+        item._parent_item = self
+    
+    def isOpen(self):
+        return self._is_open
+    
+    def setOpen(self, is_open=True):
+        self._is_open = is_open
+
+# Property system
+class YPropertyType(Enum):
+    YUnknownPropertyType = 0
+    YOtherProperty = 1
+    YStringProperty = 2
+    YBoolProperty = 3
+    YIntegerProperty = 4
+
+class YProperty:
+    def __init__(self, name, prop_type, is_readonly=False):
+        self._name = name
+        self._type = prop_type
+        self._is_readonly = is_readonly
+    
+    def name(self):
+        return self._name
+    
+    def type(self):
+        return self._type
+    
+    def isReadOnly(self):
+        return self._is_readonly
+
+class YPropertyValue:
+    def __init__(self, value=None, prop_type=YPropertyType.YUnknownPropertyType):
+        self._value = value
+        self._type = prop_type
+    
+    def type(self):
+        return self._type
+    
+    def stringVal(self):
+        return str(self._value) if self._value else ""
+    
+    def boolVal(self):
+        return bool(self._value)
+    
+    def integerVal(self):
+        return int(self._value) if self._value else 0
+
+class YPropertySet:
+    def __init__(self):
+        self._properties = {}
+    
+    def add(self, prop):
+        self._properties[prop.name()] = prop
+    
+    def contains(self, name):
+        return name in self._properties
+    
+    def isEmpty(self):
+        return len(self._properties) == 0
+
+class YShortcut:
+    def __init__(self, widget):
+        self._widget = widget
+        self._shortcut = ''
+        self._conflict = False
+    
+    def widget(self):
+        return self._widget
+    
+    def shortcutString(self):
+        return self._shortcut
+    
+    def setShortcut(self, new_shortcut):
+        self._shortcut = new_shortcut
+    
+    def conflict(self):
+        return self._conflict
+    
+    def setConflict(self, conflict=True):
+        self._conflict = conflict

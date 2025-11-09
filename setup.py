@@ -17,7 +17,7 @@ setup(
   version=__project_version__,
   author='Angelo Naselli',
   author_email='anaselli@linux.it',
-  packages=['manatools', 'manatools.ui'],
+  packages=['manatools', 'manatools.aui', 'manatools.ui'],
   #scripts=['scripts/'],
   license='LGPLv2+',
   description='Python ManaTools framework.',
