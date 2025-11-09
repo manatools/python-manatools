@@ -15,7 +15,8 @@ def test_combobox(backend_name=None):
         print("Using auto-detection")
     
     try:
-        from manatools.aui.yui import YUI, YUI_ui
+        from manatools.aui.yui import YUI, YUI_ui 
+        import manatools.aui.yui_common as yui
         
         # Force re-detection
         YUI._instance = None
@@ -74,8 +75,14 @@ def test_combobox(backend_name=None):
         # Store reference to check final value
         dialog._test_combo = combo
         
-        # Open dialog
-        dialog.open()
+        while True:
+           event = dialog.waitForEvent()
+           if event.eventType() == yui.YEventType.CancelEvent:
+               dialog.destroy()
+               break
+           if event.widget() == cancel_button:
+               dialog.destroy()
+               break
         
         # Show final result
         print(f"\nFinal ComboBox value: '{dialog._test_combo.value()}'")
