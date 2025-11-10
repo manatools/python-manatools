@@ -670,27 +670,49 @@ class YCheckBoxCurses(YWidget):
         return self._label
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        # In curses, there's no actual backend widget, just internal state
+        pass
     
     def _draw(self, window, y, x, width, height):
+        """Draw the checkbox with its label"""
         try:
-            checkbox = "[X]" if self._is_checked else "[ ]"
-            text = f"{checkbox} {self._label}"
+            # Draw checkbox symbol: [X] or [ ]
+            checkbox_symbol = "[X]" if self._is_checked else "[ ]"
+            text = f"{checkbox_symbol} {self._label}"
             
-            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
-            window.addstr(y, x, text, attr)
+            # Truncate if too wide
+            if len(text) > width:
+                text = text[:width-3] + "..."
+            
+            # Draw with highlighting if focused
+            if self._focused:
+                window.attron(curses.A_REVERSE)
+            
+            window.addstr(y, x, text)
+            
+            if self._focused:
+                window.attroff(curses.A_REVERSE)
         except curses.error:
             pass
     
     def _handle_key(self, key):
-        if not self._focused:
-            return False
-            
-        if key == ord(' ') or key == ord('\n'):
-            self._is_checked = not self._is_checked
+        """Handle keyboard input for checkbox (Space to toggle)"""
+        # Space or Enter to toggle
+        if key in (ord(' '), ord('\n'), curses.KEY_ENTER):
+            self._toggle()
             return True
-        
         return False
+    
+    def _toggle(self):
+        """Toggle checkbox state and post event"""
+        self._is_checked = not self._is_checked
+        
+        # Post a YWidgetEvent to the containing dialog
+        dlg = self.findDialog()
+        if dlg is not None:
+            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+        else:
+            print(f"CheckBox toggled (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxCurses(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
