@@ -405,6 +405,7 @@ class YComboBoxGtk(YSelectionWidget):
         self._label = label
         self._editable = editable
         self._value = ""
+        self._selected_items = []
     
     def widgetClass(self):
         return "YComboBox"
@@ -413,54 +414,126 @@ class YComboBoxGtk(YSelectionWidget):
         return self._value
     
     def setValue(self, text):
+        # Always update internal value
         self._value = text
+        # If backend combo already exists, update it immediately
         if hasattr(self, '_combo_widget') and self._combo_widget:
-            if self._editable:
-                self._combo_widget.get_child().set_text(text)
-            else:
-                # Find and select the item
-                for i, item in enumerate(self._items):
+            try:
+                if self._editable:
+                    # For editable ComboBoxText with entry
+                    entry = self._combo_widget.get_child()
+                    if entry:
+                        entry.set_text(text)
+                else:
+                    # Find and select the item
+                    for i, item in enumerate(self._items):
+                        if item.label() == text:
+                            self._combo_widget.set_active(i)
+                            break
+                # Update selected_items to reflect new value
+                self._selected_items = []
+                for item in self._items:
                     if item.label() == text:
-                        self._combo_widget.set_active(i)
+                        self._selected_items.append(item)
                         break
-    
+            except Exception:
+                # be defensive if widget not fully initialized
+                pass
+
     def editable(self):
         return self._editable
     
     def _create_backend_widget(self):
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        
+
         if self._label:
             label = Gtk.Label(label=self._label)
             label.set_xalign(0.0)
             hbox.pack_start(label, False, False, 0)
-        
+
         if self._editable:
             # Create a ComboBoxText that is editable
             combo = Gtk.ComboBoxText.new_with_entry()
-            combo.get_child().connect("changed", self._on_text_changed)
+            entry = combo.get_child()
+            if entry:
+                entry.connect("changed", self._on_text_changed)
         else:
             combo = Gtk.ComboBoxText()
             combo.connect("changed", self._on_changed)
-        
+
         # Add items to combo box
         for item in self._items:
             combo.append_text(item.label())
-        
+
+        # If a value was set prior to widget creation, apply it now
+        if self._value:
+            try:
+                if self._editable:
+                    entry = combo.get_child()
+                    if entry:
+                        entry.set_text(self._value)
+                else:
+                    for i, item in enumerate(self._items):
+                        if item.label() == self._value:
+                            combo.set_active(i)
+                            break
+                # update selected_items
+                self._selected_items = []
+                for item in self._items:
+                    if item.label() == self._value:
+                        self._selected_items.append(item)
+                        break
+            except Exception:
+                pass
+
         hbox.pack_start(combo, True, True, 0)
         self._backend_widget = hbox
         self._combo_widget = combo
-    
+
     def _on_text_changed(self, entry):
-        self._value = entry.get_text()
-    
+        # editable combo: update value and notify dialog
+        try:
+            text = entry.get_text()
+        except Exception:
+            text = ""
+        self._value = text
+        # update selected items (may be none for free text)
+        self._selected_items = []
+        for item in self._items:
+            if item.label() == self._value:
+                self._selected_items.append(item)
+                break
+        # Post selection-changed event
+        try:
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        except Exception:
+            pass
+
     def _on_changed(self, combo):
-        active_id = combo.get_active()
-        if active_id >= 0:
-            self._value = combo.get_active_text()
+        # non-editable combo: selection changed via index
+        try:
+            active_id = combo.get_active()
+            if active_id >= 0:
+                val = combo.get_active_text()
+            else:
+                val = ""
+        except Exception:
+            val = ""
+
+        if val:
+            self._value = val
             # Update selected items
             self._selected_items = []
             for item in self._items:
                 if item.label() == self._value:
                     self._selected_items.append(item)
                     break
+            # Post selection-changed event to containing dialog
+            try:
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
