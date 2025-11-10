@@ -401,6 +401,7 @@ class YComboBoxQt(YSelectionWidget):
         self._label = label
         self._editable = editable
         self._value = ""
+        self._selected_items = []
     
     def widgetClass(self):
         return "YComboBox"
@@ -416,6 +417,12 @@ class YComboBoxQt(YSelectionWidget):
                 self._combo_widget.setCurrentIndex(index)
             elif self._editable:
                 self._combo_widget.setEditText(text)
+        # update selected_items to keep internal state consistent
+        self._selected_items = []
+        for item in self._items:
+            if item.label() == text:
+                self._selected_items.append(item)
+                break
     
     def editable(self):
         return self._editable
@@ -440,6 +447,8 @@ class YComboBoxQt(YSelectionWidget):
             combo.addItem(item.label())
         
         combo.currentTextChanged.connect(self._on_text_changed)
+        # also handle index change (safer for some input methods)
+        combo.currentIndexChanged.connect(lambda idx: self._on_text_changed(combo.currentText()))
         layout.addWidget(combo)
         
         self._backend_widget = container
@@ -453,3 +462,10 @@ class YComboBoxQt(YSelectionWidget):
             if item.label() == text:
                 self._selected_items.append(item)
                 break
+        # Post selection-changed event to containing dialog
+        try:
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        except Exception:
+            pass
