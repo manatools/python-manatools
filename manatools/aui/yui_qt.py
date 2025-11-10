@@ -392,8 +392,16 @@ class YCheckBoxQt(YWidget):
         self._backend_widget.stateChanged.connect(self._on_state_changed)
     
     def _on_state_changed(self, state):
+        # Update internal state
+        # state is QtCore.Qt.CheckState (Unchecked=0, PartiallyChecked=1, Checked=2)
         self._is_checked = (state == QtCore.Qt.Checked)
-        print(f"Checkbox toggled: {self._label} = {self._is_checked}")
+        
+        # Post a YWidgetEvent to the containing dialog
+        dlg = self.findDialog()
+        if dlg is not None:
+            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+        else:
+            print(f"CheckBox state changed (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
