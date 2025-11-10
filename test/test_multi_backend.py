@@ -16,7 +16,8 @@ def test_backend(backend_name=None):
         print("Using auto-detection")
     
     try:
-        from manatools.aui.yui import YUI, YUI_ui
+        from manatools.aui.yui import YUI, YUI_ui 
+        import manatools.aui.yui_common as yui
         
         # Force re-detection
         YUI._instance = None
@@ -56,22 +57,32 @@ def test_backend(backend_name=None):
         checkbox = factory.createCheckBox(vbox, "Enable features")
         
         # Buttons
+        selected = factory.createLabel(vbox, "")
         hbox = factory.createHBox(vbox)
         ok_button = factory.createPushButton(hbox, "OK")
         cancel_button = factory.createPushButton(hbox, "Cancel")
         
         print("Opening dialog...")
         
-        # Store references
-        dialog._test_combo = combo
-        
-        # Open dialog
-        dialog.open()
+        while True:
+           event = dialog.waitForEvent()
+           typ = event.eventType()
+           if typ == yui.YEventType.CancelEvent:
+                dialog.destroy()
+                break
+           elif typ == yui.YEventType.WidgetEvent:
+                wdg = event.widget() 
+                if wdg == cancel_button:
+                    dialog.destroy()
+                    break
+                elif wdg == combo:
+                    selected.setText(f"Selected: '{combo.value()}'")                
+                elif wdg == ok_button:
+                    selected.setText(f"OK clicked.")
+
         
         # Show results after dialog closes
         print(f"Dialog closed.")
-        if hasattr(dialog, '_test_combo'):
-            print(f"Combo value: '{dialog._test_combo.value()}'")
         
     except Exception as e:
         print(f"Error with backend {backend_name}: {e}")
