@@ -840,18 +840,9 @@ class YComboBoxCurses(YSelectionWidget):
             
         handled = True
         
-        if key == ord('\n') or key == ord(' '):
-            # Toggle expanded state
-            self._expanded = not self._expanded
-            if self._expanded and self._items:
-                # Set hover index to current value if exists
-                self._hover_index = 0
-                if self._value:
-                    for i, item in enumerate(self._items):
-                        if item.label() == self._value:
-                            self._hover_index = i
-                            break
-        elif self._expanded:
+        # If currently expanded, give expanded-list handling priority so Enter
+        # selects the hovered item instead of simply toggling expansion.
+        if self._expanded:
             # Handle navigation in expanded list
             if key == curses.KEY_UP:
                 if self._hover_index > 0:
@@ -863,13 +854,36 @@ class YComboBoxCurses(YSelectionWidget):
                 # Select hovered item
                 if self._items and 0 <= self._hover_index < len(self._items):
                     selected_item = self._items[self._hover_index]
-                    self.setValue(selected_item.label())  # Use setValue to update display
+                    self.setValue(selected_item.label())  # update internal value/selection
                     self._expanded = False
+                    # force parent dialog redraw if present
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        try:
+                            # notify dialog to redraw immediately
+                            dlg._last_draw_time = 0
+                            # post a widget event for selection change
+                            dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                        except Exception:
+                            pass
+                    # selection made -> handled
             elif key == 27:  # ESC key
                 self._expanded = False
             else:
                 handled = False
         else:
-            handled = False
+            # Not expanded: Enter/Space expands the list
+            if key == ord('\n') or key == ord(' '):
+                self._expanded = not self._expanded
+                if self._expanded and self._items:
+                    # Set hover index to current value if exists
+                    self._hover_index = 0
+                    if self._value:
+                        for i, item in enumerate(self._items):
+                            if item.label() == self._value:
+                                self._hover_index = i
+                                break
+            else:
+                handled = False
         
         return handled
