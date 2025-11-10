@@ -71,10 +71,7 @@ def test_combobox(backend_name=None):
         cancel_button = factory.createPushButton(hbox, "Cancel")
         
         print("\nOpening ComboBox test dialog...")
-        
-        # Store reference to check final value
-        dialog._foo = combo
-        
+       
         while True:
            event = dialog.waitForEvent()
            typ = event.eventType()
