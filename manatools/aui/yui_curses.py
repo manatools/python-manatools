@@ -76,9 +76,10 @@ class YUICurses:
 
 class YApplicationCurses:
     def __init__(self):
+        self._application_title = "manatools Curses Application"
+        self._product_name = "manatools YUI Curses"
         self._icon_base_path = ""
-        self._product_name = "YUI Curses"
-    
+
     def iconBasePath(self):
         return self._icon_base_path
     
@@ -90,6 +91,22 @@ class YApplicationCurses:
     
     def productName(self):
         return self._product_name
+
+    def setApplicationTitle(self, title):
+        """Set the application title."""
+        self._application_title = title
+
+    def applicationTitle(self):
+        """Get the application title."""
+        return self._application_title
+
+    def setApplicationIcon(self, Icon):
+        """Set the application title."""
+        self._icon = Icon
+
+    def applicationIcon(self):
+        """Get the application title."""
+        return self.__icon
 
 class YWidgetFactoryCurses:
     def __init__(self):

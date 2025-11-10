@@ -31,9 +31,11 @@ class YUIGtk:
 
 class YApplicationGtk:
     def __init__(self):
-        self._icon_base_path = "/usr/share/icons"
-        self._product_name = "YUI GTK"
-    
+        self._application_title = "manatools GTK Application"
+        self._product_name = "manatools YUI GTK"
+        self._icon_base_path = None
+        self._icon = ""
+
     def iconBasePath(self):
         return self._icon_base_path
     
@@ -45,6 +47,23 @@ class YApplicationGtk:
     
     def productName(self):
         return self._product_name
+    
+    def setApplicationTitle(self, title):
+        """Set the application title."""
+        self._application_title = title
+
+    def applicationTitle(self):
+        """Get the application title."""
+        return self._application_title
+
+    def setApplicationIcon(self, Icon):
+        """Set the application title."""
+        self._icon = Icon
+
+    def applicationIcon(self):
+        """Get the application title."""
+        return self.__icon
+
 
 class YWidgetFactoryGtk:
     def __init__(self):

@@ -34,9 +34,11 @@ class YUIQt:
 
 class YApplicationQt:
     def __init__(self):
-        self._icon_base_path = "/usr/share/icons"
-        self._product_name = "YUI Qt"
-    
+        self._application_title = "manatools Qt Application"
+        self._product_name = "manatools YUI Qt"
+        self._icon_base_path = None
+        self._icon = ""        
+
     def iconBasePath(self):
         return self._icon_base_path
     
@@ -48,6 +50,22 @@ class YApplicationQt:
     
     def productName(self):
         return self._product_name
+    
+    def setApplicationTitle(self, title):
+        """Set the application title."""
+        self._application_title = title
+
+    def applicationTitle(self):
+        """Get the application title."""
+        return self._application_title
+
+    def setApplicationIcon(self, Icon):
+        """Set the application title."""
+        self._icon = Icon
+
+    def applicationIcon(self):
+        """Get the application title."""
+        return self.__icon
 
 class YWidgetFactoryQt:
     def __init__(self):
