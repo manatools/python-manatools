@@ -396,8 +396,15 @@ class YCheckBoxGtk(YWidget):
         self._backend_widget.connect("toggled", self._on_toggled)
     
     def _on_toggled(self, button):
+        # Update internal state
         self._is_checked = button.get_active()
-        print(f"Checkbox toggled: {self._label} = {self._is_checked}")
+        
+        # Post a YWidgetEvent to the containing dialog
+        dlg = self.findDialog()
+        if dlg is not None:
+            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+        else:
+            print(f"Checkbox toggled (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
