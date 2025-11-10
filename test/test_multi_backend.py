@@ -78,8 +78,9 @@ def test_backend(backend_name=None):
                 elif wdg == combo:
                     selected.setText(f"Selected: '{combo.value()}'")                
                 elif wdg == ok_button:
-                    selected.setText(f"OK clicked.")
-
+                    selected.setText(f"OK clicked. - {input_field.value()}")
+                elif wdg == checkbox:
+                    selected.setText(f"{checkbox.label()} - {checkbox.value()}")
         
         # Show results after dialog closes
         print(f"Dialog closed.")
