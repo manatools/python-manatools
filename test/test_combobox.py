@@ -59,13 +59,13 @@ def test_combobox(backend_name=None):
         combo.setValue("Banana")
         
         factory.createLabel(hbox, " - ")        
-        combo = factory.createComboBox(hbox, "Choose option:", False)
-        combo.addItem("Option 1")
-        combo.addItem("Option 2") 
-        combo.addItem("Option 3")
+        combo1 = factory.createComboBox(hbox, "Choose option:", False)
+        combo1.addItem("Option 1")
+        combo1.addItem("Option 2") 
+        combo1.addItem("Option 3")
 
         # Simple buttons
-        factory.createLabel(vbox, "")
+        selected = factory.createLabel(vbox, "")
         hbox = factory.createHBox(vbox)
         ok_button = factory.createPushButton(hbox, "OK")
         cancel_button = factory.createPushButton(hbox, "Cancel")
@@ -73,19 +73,28 @@ def test_combobox(backend_name=None):
         print("\nOpening ComboBox test dialog...")
         
         # Store reference to check final value
-        dialog._test_combo = combo
+        dialog._foo = combo
         
         while True:
            event = dialog.waitForEvent()
-           if event.eventType() == yui.YEventType.CancelEvent:
-               dialog.destroy()
-               break
-           if event.widget() == cancel_button:
-               dialog.destroy()
-               break
+           typ = event.eventType()
+           if typ == yui.YEventType.CancelEvent:
+                dialog.destroy()
+                break
+           elif typ == yui.YEventType.WidgetEvent:
+                wdg = event.widget() 
+                if wdg == cancel_button:
+                    dialog.destroy()
+                    break
+                elif wdg == combo:
+                    selected.setText(f"Selected: '{combo.value()}'")
+                elif wdg == combo1:
+                    selected.setText(f"Selected: '{combo1.value()}'")
+                elif wdg == ok_button:
+                    selected.setText(f"OK clicked.")
         
         # Show final result
-        print(f"\nFinal ComboBox value: '{dialog._test_combo.value()}'")
+        print(f"\nFinal ComboBox value: '{combo.value()}' {combo1.value()}")
         
     except Exception as e:
         print(f"Error testing ComboBox with backend {backend_name}: {e}")
