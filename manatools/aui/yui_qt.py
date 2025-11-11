@@ -502,6 +502,7 @@ class YSelectionBoxQt(YSelectionWidget):
         self._label = label
         self._value = ""
         self._selected_items = []
+        self._multi_selection = False
     
     def widgetClass(self):
         return "YSelectionBox"
@@ -546,6 +547,26 @@ class YSelectionBoxQt(YSelectionWidget):
                         if item in self._selected_items:
                             self._selected_items.remove(item)
                     break
+
+    def setMultiSelection(self, enabled):
+        """Enable or disable multi-selection."""
+        self._multi_selection = bool(enabled)
+        if hasattr(self, '_list_widget') and self._list_widget:
+            mode = QtWidgets.QAbstractItemView.MultiSelection if self._multi_selection else QtWidgets.QAbstractItemView.SingleSelection
+            self._list_widget.setSelectionMode(mode)
+            # if disabling multi-selection, collapse to the first selected item
+            if not self._multi_selection:
+                selected = self._list_widget.selectedItems()
+                if len(selected) > 1:
+                    first = selected[0]
+                    self._list_widget.clearSelection()
+                    first.setSelected(True)
+                    # update internal state to reflect change
+                    self._on_selection_changed()
+
+    def multiSelection(self):
+        """Return whether multi-selection is enabled."""
+        return bool(self._multi_selection)
     
     def _create_backend_widget(self):
         container = QtWidgets.QWidget()
@@ -557,7 +578,8 @@ class YSelectionBoxQt(YSelectionWidget):
             layout.addWidget(label)
         
         list_widget = QtWidgets.QListWidget()
-        list_widget.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+        mode = QtWidgets.QAbstractItemView.MultiSelection if self._multi_selection else QtWidgets.QAbstractItemView.SingleSelection
+        list_widget.setSelectionMode(mode)
         
         # Add items to list widget
         for item in self._items:
