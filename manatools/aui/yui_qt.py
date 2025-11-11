@@ -495,3 +495,100 @@ class YComboBoxQt(YSelectionWidget):
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
         except Exception:
             pass
+
+class YSelectionBoxQt(YSelectionWidget):
+    def __init__(self, parent=None, label=""):
+        super().__init__(parent)
+        self._label = label
+        self._value = ""
+        self._selected_items = []
+    
+    def widgetClass(self):
+        return "YSelectionBox"
+    
+    def value(self):
+        return self._value
+    
+    def setValue(self, text):
+        self._value = text
+        if hasattr(self, '_list_widget') and self._list_widget:
+            # Find and select the item with matching text
+            for i in range(self._list_widget.count()):
+                item = self._list_widget.item(i)
+                if item.text() == text:
+                    self._list_widget.setCurrentItem(item)
+                    break
+        # Update selected_items to keep internal state consistent
+        self._selected_items = []
+        for item in self._items:
+            if item.label() == text:
+                self._selected_items.append(item)
+                break
+    
+    def label(self):
+        return self._label
+    
+    def selectedItems(self):
+        """Get list of selected items"""
+        return self._selected_items
+    
+    def selectItem(self, item, selected=True):
+        """Select or deselect a specific item"""
+        if hasattr(self, '_list_widget') and self._list_widget:
+            for i in range(self._list_widget.count()):
+                list_item = self._list_widget.item(i)
+                if list_item.text() == item.label():
+                    if selected:
+                        self._list_widget.setCurrentItem(list_item)
+                        if item not in self._selected_items:
+                            self._selected_items.append(item)
+                    else:
+                        if item in self._selected_items:
+                            self._selected_items.remove(item)
+                    break
+    
+    def _create_backend_widget(self):
+        container = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        if self._label:
+            label = QtWidgets.QLabel(self._label)
+            layout.addWidget(label)
+        
+        list_widget = QtWidgets.QListWidget()
+        list_widget.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+        
+        # Add items to list widget
+        for item in self._items:
+            list_widget.addItem(item.label())
+        
+        list_widget.itemSelectionChanged.connect(self._on_selection_changed)
+        layout.addWidget(list_widget)
+        
+        self._backend_widget = container
+        self._list_widget = list_widget
+    
+    def _on_selection_changed(self):
+        """Handle selection change in the list widget"""
+        if hasattr(self, '_list_widget') and self._list_widget:
+            # Update selected items
+            self._selected_items = []
+            selected_indices = [index.row() for index in self._list_widget.selectedIndexes()]
+            
+            for idx in selected_indices:
+                if idx < len(self._items):
+                    self._selected_items.append(self._items[idx])
+            
+            # Update value to first selected item
+            if self._selected_items:
+                self._value = self._selected_items[0].label()
+            
+            # Post selection-changed event to containing dialog
+            try:
+                if self.notify():
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
