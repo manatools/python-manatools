@@ -101,6 +101,9 @@ class YWidgetFactoryGtk:
     
     def createComboBox(self, parent, label, editable=False):
         return YComboBoxGtk(parent, label, editable)
+    
+    def createSelectionBox(self, parent, label):
+        return YSelectionBoxGtk(parent, label)
 
 # GTK Widget Implementations
 class YDialogGtk(YSingleChildContainerWidget):
@@ -563,3 +566,175 @@ class YComboBoxGtk(YSelectionWidget):
                     dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
             except Exception:
                 pass
+
+class YSelectionBoxGtk(YSelectionWidget):
+    def __init__(self, parent=None, label=""):
+        super().__init__(parent)
+        self._label = label
+        self._value = ""
+        self._selected_items = []
+        self._multi_selection = False
+        self._treeview = None
+        self._liststore = None
+        self._backend_widget = None
+
+    def widgetClass(self):
+        return "YSelectionBox"
+
+    def label(self):
+        return self._label
+
+    def value(self):
+        return self._value
+
+    def setValue(self, text):
+        """Select first item matching text."""
+        self._value = text
+        # Update internal selected_items
+        self._selected_items = [it for it in self._items if it.label() == text]
+        if self._treeview is None:
+            return
+        # Select matching row in the TreeView
+        sel = self._treeview.get_selection()
+        sel.unselect_all()
+        for i, it in enumerate(self._items):
+            if it.label() == text:
+                sel.select_path(Gtk.TreePath.new_from_string(str(i)))
+                break
+        # notify via handler
+        self._on_selection_changed(sel)
+
+    def selectedItems(self):
+        return list(self._selected_items)
+
+    def selectItem(self, item, selected=True):
+        """Programmatically select/deselect a specific item."""
+        # Update internal state even if widget not yet created
+        if selected:
+            if not self._multi_selection:
+                self._selected_items = [item]
+                self._value = item.label()
+            else:
+                if item not in self._selected_items:
+                    self._selected_items.append(item)
+        else:
+            if item in self._selected_items:
+                self._selected_items.remove(item)
+                self._value = self._selected_items[0].label() if self._selected_items else ""
+
+        if self._treeview is None:
+            return
+
+        # Reflect change in UI
+        sel = self._treeview.get_selection()
+        # find index
+        idx = None
+        for i, it in enumerate(self._items):
+            if it is item or it.label() == item.label():
+                idx = i
+                break
+        if idx is None:
+            return
+        path = Gtk.TreePath.new_from_string(str(idx))
+        if selected:
+            sel.select_path(path)
+        else:
+            sel.unselect_path(path)
+        # notify via handler
+        self._on_selection_changed(sel)
+
+    def setMultiSelection(self, enabled):
+        self._multi_selection = bool(enabled)
+        if self._treeview is None:
+            return
+        sel = self._treeview.get_selection()
+        mode = Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE
+        sel.set_mode(mode)
+        # If disabling multi-selection, ensure only first remains selected
+        if not self._multi_selection:
+            paths, model = sel.get_selected_rows()
+            if len(paths) > 1:
+                first = paths[0]
+                sel.unselect_all()
+                sel.select_path(first)
+                self._on_selection_changed(sel)
+
+    def multiSelection(self):
+        return bool(self._multi_selection)
+
+    def _create_backend_widget(self):
+        # Container with optional label and a TreeView for (multi-)selection
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        if self._label:
+            lbl = Gtk.Label(label=self._label)
+            lbl.set_xalign(0.0)
+            vbox.pack_start(lbl, False, False, 0)
+
+        # ListStore with one string column
+        self._liststore = Gtk.ListStore(str)
+        for it in self._items:
+            self._liststore.append([it.label()])
+
+        treeview = Gtk.TreeView(model=self._liststore)
+        renderer = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn("", renderer, text=0)
+        treeview.append_column(col)
+        treeview.set_headers_visible(False)
+
+        sel = treeview.get_selection()
+        mode = Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE
+        sel.set_mode(mode)
+        sel.connect("changed", self._on_selection_changed)
+
+        # If a value was previously set, apply it
+        if self._value:
+            for i, it in enumerate(self._items):
+                if it.label() == self._value:
+                    sel.select_path(Gtk.TreePath.new_from_string(str(i)))
+                    break
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(treeview)
+        vbox.pack_start(sw, True, True, 0)
+
+        self._backend_widget = vbox
+        self._treeview = treeview
+
+    def _on_selection_changed(self, selection):
+        # Selection may be either Gtk.TreeSelection (from signal) or Gtk.TreeSelection object passed
+        if isinstance(selection, Gtk.TreeSelection):
+            sel = selection
+        else:
+            # If called programmatically with a non-selection, try to fetch current selection
+            if self._treeview is None:
+                return
+            sel = self._treeview.get_selection()
+
+        paths, model = sel.get_selected_rows()
+        self._selected_items = []
+        for p in paths:
+            try:
+                idx = p.get_indices()[0]
+            except Exception:
+                # fallback for single-index string paths
+                try:
+                    idx = int(str(p))
+                except Exception:
+                    continue
+            if 0 <= idx < len(self._items):
+                self._selected_items.append(self._items[idx])
+
+        if self._selected_items:
+            self._value = self._selected_items[0].label()
+        else:
+            self._value = ""
+
+        # Post selection-changed event to containing dialog if notifications enabled
+        try:
+            if getattr(self, "notify", lambda: True)():
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        except Exception:
+            pass
