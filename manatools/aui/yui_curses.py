@@ -114,6 +114,9 @@ class YWidgetFactoryCurses:
     
     def createMainDialog(self, color_mode=YDialogColorMode.YDialogNormalColor):
         return YDialogCurses(YDialogType.YMainDialog, color_mode)
+
+    def createPopupDialog(self, color_mode=YDialogColorMode.YDialogNormalColor):
+        return YDialogCurses(YDialogType.YMainDialog, color_mode)
     
     def createVBox(self, parent):
         return YVBoxCurses(parent)
@@ -138,6 +141,9 @@ class YWidgetFactoryCurses:
     
     def createComboBox(self, parent, label, editable=False):
         return YComboBoxCurses(parent, label, editable)
+    
+    def createSelectionBox(self, parent, label):
+        return YSelectionBoxCurses(parent, label)
 
 
 # Curses Widget Implementations
@@ -925,4 +931,220 @@ class YComboBoxCurses(YSelectionWidget):
             else:
                 handled = False
         
+        return handled
+
+class YSelectionBoxCurses(YSelectionWidget):
+    def __init__(self, parent=None, label=""):
+        super().__init__(parent)
+        self._label = label
+        self._value = ""
+        self._selected_items = []
+        self._multi_selection = False
+
+        # UI state for drawing/navigation
+        self._height = 6  # visible rows for items (excluding optional label)
+        self._scroll_offset = 0
+        self._hover_index = 0  # index into self._items (global)
+        self._can_focus = True
+        self._focused = False
+
+    def widgetClass(self):
+        return "YSelectionBox"
+
+    def label(self):
+        return self._label
+
+    def value(self):
+        return self._value
+
+    def setValue(self, text):
+        """Select first item matching text."""
+        self._value = text
+        # update selected_items
+        self._selected_items = [it for it in self._items if it.label() == text][:1]
+        # update hover to first matching index
+        for idx, it in enumerate(self._items):
+            if it.label() == text:
+                self._hover_index = idx
+                # adjust scroll offset to make hovered visible
+                self._ensure_hover_visible()
+                break
+
+    def selectedItems(self):
+        return list(self._selected_items)
+
+    def selectItem(self, item, selected=True):
+        """Programmatically select/deselect an item."""
+        # find index
+        idx = None
+        for i, it in enumerate(self._items):
+            if it is item or it.label() == item.label():
+                idx = i
+                break
+        if idx is None:
+            return
+
+        if selected:
+            if not self._multi_selection:
+                self._selected_items = [self._items[idx]]
+                self._value = self._items[idx].label()
+            else:
+                if self._items[idx] not in self._selected_items:
+                    self._selected_items.append(self._items[idx])
+        else:
+            if self._items[idx] in self._selected_items:
+                self._selected_items.remove(self._items[idx])
+                self._value = self._selected_items[0].label() if self._selected_items else ""
+
+        # ensure hover and scroll reflect this item
+        self._hover_index = idx
+        self._ensure_hover_visible()
+
+        # notify dialog
+        try:
+            if getattr(self, "notify", lambda: True)():
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        except Exception:
+            pass
+
+    def setMultiSelection(self, enabled):
+        self._multi_selection = bool(enabled)
+        # if disabling multi-selection, reduce to first selected item
+        if not self._multi_selection and len(self._selected_items) > 1:
+            first = self._selected_items[0]
+            self._selected_items = [first]
+            self._value = first.label()
+
+    def multiSelection(self):
+        return bool(self._multi_selection)
+
+    def _ensure_hover_visible(self):
+        """Adjust scroll offset so that hover_index is visible in the box."""
+        visible = self._visible_row_count()
+        if visible <= 0:
+            return
+        if self._hover_index < self._scroll_offset:
+            self._scroll_offset = self._hover_index
+        elif self._hover_index >= self._scroll_offset + visible:
+            self._scroll_offset = self._hover_index - visible + 1
+
+    def _visible_row_count(self):
+        # Use configured height, but don't exceed number of items
+        return min(self._height, max(0, len(self._items)))
+
+    def _create_backend_widget(self):
+        # No curses backend widget object; drawing handled in _draw.
+        # Keep height heuristic: try to show up to 6 items or fewer if not available.
+        self._height = min(6, max(1, len(self._items)))
+        # reset scroll/hover if out of range
+        if self._hover_index >= len(self._items):
+            self._hover_index = max(0, len(self._items) - 1)
+        self._ensure_hover_visible()
+
+    def _draw(self, window, y, x, width, height):
+        """Draw label (optional) and visible portion of items."""
+        try:
+            line = y
+            # draw label if present
+            if self._label:
+                lbl = self._label
+                try:
+                    window.addstr(line, x, lbl[:width], curses.A_BOLD)
+                except curses.error:
+                    pass
+                line += 1
+
+            visible = self._visible_row_count()
+            # ensure visible fits in provided height
+            visible = min(visible, max(0, height - (1 if self._label else 0)))
+            for i in range(visible):
+                item_idx = self._scroll_offset + i
+                if item_idx >= len(self._items):
+                    break
+                item = self._items[item_idx]
+                text = item.label()
+                checkbox = "*" if item in self._selected_items else " "
+                # Display selection marker for multi or single similarly
+                display = f"[{checkbox}] {text}"
+                # truncate
+                if len(display) > width:
+                    display = display[:max(0, width - 3)] + "..."
+                attr = curses.A_NORMAL
+                if self._focused and item_idx == self._hover_index:
+                    attr |= curses.A_REVERSE
+                try:
+                    window.addstr(line + i, x, display.ljust(width), attr)
+                except curses.error:
+                    pass
+
+            # if focused and there are more items than visible, show scrollbar hint
+            if self._focused and len(self._items) > visible and width > 0:
+                try:
+                    # show simple up/down markers at rightmost column
+                    if self._scroll_offset > 0:
+                        window.addch(y + (1 if self._label else 0), x + width - 1, '^')
+                    if (self._scroll_offset + visible) < len(self._items):
+                        window.addch(y + (1 if self._label else 0) + visible - 1, x + width - 1, 'v')
+                except curses.error:
+                    pass
+
+        except curses.error:
+            pass
+
+    def _handle_key(self, key):
+        """Handle navigation and selection keys when focused."""
+        if not self._focused:
+            return False
+
+        handled = True
+        if key == curses.KEY_UP:
+            if self._hover_index > 0:
+                self._hover_index -= 1
+                self._ensure_hover_visible()
+        elif key == curses.KEY_DOWN:
+            if self._hover_index < max(0, len(self._items) - 1):
+                self._hover_index += 1
+                self._ensure_hover_visible()
+        elif key == curses.KEY_PPAGE:  # PageUp
+            step = self._visible_row_count() or 1
+            self._hover_index = max(0, self._hover_index - step)
+            self._ensure_hover_visible()
+        elif key == curses.KEY_NPAGE:  # PageDown
+            step = self._visible_row_count() or 1
+            self._hover_index = min(max(0, len(self._items) - 1), self._hover_index + step)
+            self._ensure_hover_visible()
+        elif key == curses.KEY_HOME:
+            self._hover_index = 0
+            self._ensure_hover_visible()
+        elif key == curses.KEY_END:
+            self._hover_index = max(0, len(self._items) - 1)
+            self._ensure_hover_visible()
+        elif key in (ord(' '), ord('\n')):  # toggle/select
+            if 0 <= self._hover_index < len(self._items):
+                item = self._items[self._hover_index]
+                if self._multi_selection:
+                    # toggle membership
+                    if item in self._selected_items:
+                        self._selected_items.remove(item)
+                    else:
+                        self._selected_items.append(item)
+                    # update primary value to first selected or empty
+                    self._value = self._selected_items[0].label() if self._selected_items else ""
+                else:
+                    # single selection: set as sole selected
+                    self._selected_items = [item]
+                    self._value = item.label()
+                # notify dialog of selection change
+                try:
+                    if getattr(self, "notify", lambda: True)():
+                        dlg = self.findDialog()
+                        if dlg is not None:
+                            dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                except Exception:
+                    pass
+        else:
+            handled = False
+
         return handled
