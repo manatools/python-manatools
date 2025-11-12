@@ -730,12 +730,13 @@ class YCheckBoxCurses(YWidget):
         """Toggle checkbox state and post event"""
         self._is_checked = not self._is_checked
         
-        # Post a YWidgetEvent to the containing dialog
-        dlg = self.findDialog()
-        if dlg is not None:
-            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-        else:
-            print(f"CheckBox toggled (no dialog found): {self._label} = {self._is_checked}")
+        if self.notify():
+            # Post a YWidgetEvent to the containing dialog
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+            else:
+                print(f"CheckBox toggled (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxCurses(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -901,16 +902,17 @@ class YComboBoxCurses(YSelectionWidget):
                     selected_item = self._items[self._hover_index]
                     self.setValue(selected_item.label())  # update internal value/selection
                     self._expanded = False
-                    # force parent dialog redraw if present
-                    dlg = self.findDialog()
-                    if dlg is not None:
-                        try:
-                            # notify dialog to redraw immediately
-                            dlg._last_draw_time = 0
-                            # post a widget event for selection change
-                            dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-                        except Exception:
-                            pass
+                    if self.notify():
+                        # force parent dialog redraw if present
+                        dlg = self.findDialog()
+                        if dlg is not None:
+                            try:
+                                # notify dialog to redraw immediately
+                                dlg._last_draw_time = 0
+                                # post a widget event for selection change
+                                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                            except Exception:
+                                pass
                     # selection made -> handled
             elif key == 27:  # ESC key
                 self._expanded = False
@@ -1000,14 +1002,15 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._hover_index = idx
         self._ensure_hover_visible()
 
-        # notify dialog
-        try:
-            if getattr(self, "notify", lambda: True)():
-                dlg = self.findDialog()
-                if dlg is not None:
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-        except Exception:
-            pass
+        if self.notify():
+            # notify dialog
+            try:
+                if getattr(self, "notify", lambda: True)():
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
