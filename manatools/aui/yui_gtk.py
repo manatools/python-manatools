@@ -508,12 +508,13 @@ class YCheckBoxGtk(YWidget):
         # Update internal state
         self._is_checked = button.get_active()
         
-        # Post a YWidgetEvent to the containing dialog
-        dlg = self.findDialog()
-        if dlg is not None:
-            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-        else:
-            print(f"Checkbox toggled (no dialog found): {self._label} = {self._is_checked}")
+        if self.notify():
+            # Post a YWidgetEvent to the containing dialog
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+            else:
+                print(f"Checkbox toggled (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -619,13 +620,14 @@ class YComboBoxGtk(YSelectionWidget):
             if item.label() == self._value:
                 self._selected_items.append(item)
                 break
-        # Post selection-changed event
-        try:
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-        except Exception:
-            pass
+        if self.notify():
+            # Post selection-changed event
+            try:
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
 
     def _on_changed(self, combo):
         # non-editable combo: selection changed via index
