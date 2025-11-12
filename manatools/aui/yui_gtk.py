@@ -266,14 +266,59 @@ class YVBoxGtk(YWidget):
     def widgetClass(self):
         return "YVBox"
     
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         
         for child in self._children:
             widget = child.get_backend_widget()
-            expand = child.stretchable(YUIDimension.YD_VERT)
+            expand = bool(child.stretchable(YUIDimension.YD_VERT))
+            print(  f"VBoxGtk: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             fill = True
             padding = 0
+
+            # Ensure GTK will actually expand/fill the child when requested.
+            # Some widgets need explicit vexpand/valign (and sensible horiz settings)
+            # to take the extra space; be defensive for widgets that may not
+            # expose those properties.
+            try:
+                if expand:
+                    if hasattr(widget, "set_vexpand"):
+                        widget.set_vexpand(True)
+                    if hasattr(widget, "set_valign"):
+                        widget.set_valign(Gtk.Align.FILL)
+                    # When a child expands vertically, usually we want it to fill
+                    # horizontally as well so it doesn't collapse to minimal width.
+                    if hasattr(widget, "set_hexpand"):
+                        widget.set_hexpand(True)
+                    if hasattr(widget, "set_halign"):
+                        widget.set_halign(Gtk.Align.FILL)
+                else:
+                    if hasattr(widget, "set_vexpand"):
+                        widget.set_vexpand(False)
+                    if hasattr(widget, "set_valign"):
+                        widget.set_valign(Gtk.Align.START)
+                    if hasattr(widget, "set_hexpand"):
+                        widget.set_hexpand(False)
+                    if hasattr(widget, "set_halign"):
+                        widget.set_halign(Gtk.Align.START)
+            except Exception:
+                # be defensive — don't fail UI creation on exotic widgets
+                pass
+
             self._backend_widget.pack_start(widget, expand, fill, padding)
 
 class YHBoxGtk(YWidget):
@@ -282,15 +327,47 @@ class YHBoxGtk(YWidget):
     
     def widgetClass(self):
         return "YHBox"
-    
-    def _create_backend_widget(self):
-        self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        
+
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
         for child in self._children:
             widget = child.get_backend_widget()
-            expand = child.stretchable(YUIDimension.YD_HORIZ)
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
+    def _create_backend_widget(self):
+        self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(YUIDimension.YD_HORIZ))
+            print(  f"HBoxGtk: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             fill = True
             padding = 0
+            # Ensure GTK will actually expand/fill the child when requested.
+            # Some widgets need explicit hexpand/halign to take the extra space.
+            try:
+                if expand:
+                    if hasattr(widget, "set_hexpand"):
+                        widget.set_hexpand(True)
+                    if hasattr(widget, "set_halign"):
+                        widget.set_halign(Gtk.Align.FILL)
+                else:
+                    if hasattr(widget, "set_hexpand"):
+                        widget.set_hexpand(False)
+                    if hasattr(widget, "set_halign"):
+                        widget.set_halign(Gtk.Align.START)
+            except Exception:
+                # be defensive — don't fail UI creation on exotic widgets
+                pass
+
             self._backend_widget.pack_start(widget, expand, fill, padding)
 
 class YLabelGtk(YWidget):
@@ -382,9 +459,19 @@ class YPushButtonGtk(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Button(label=self._label)
+        # Prevent button from being stretched horizontally by default.
+        try:
+            if hasattr(self._backend_widget, "set_hexpand"):
+                self._backend_widget.set_hexpand(False)
+            if hasattr(self._backend_widget, "set_halign"):
+                self._backend_widget.set_halign(Gtk.Align.START)
+        except Exception:
+            pass
         self._backend_widget.connect("clicked", self._on_clicked)
     
     def _on_clicked(self, button):
+        if self.notify() is False:
+            return
         # Post a YWidgetEvent to the containing dialog (walk parents)
         dlg = self.findDialog()
         if dlg is not None:
@@ -577,6 +664,8 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._treeview = None
         self._liststore = None
         self._backend_widget = None
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
 
     def widgetClass(self):
         return "YSelectionBox"
