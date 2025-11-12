@@ -47,7 +47,7 @@ def test_selectionbox(backend_name=None):
         hbox = factory.createHBox( vbox )
         factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
         valueField  = factory.createLabel(hbox, "<SelectionBox value unknown>")
-        #valueField.setStretchable( yui.YD_HORIZ, True ) # // allow stretching over entire dialog width
+        valueField.setStretchable( yui.YUIDimension.YD_HORIZ, True ) # // allow stretching over entire dialog width
 
         valueButton = factory.createPushButton( hbox, "Value" ) 
         #factory.createVSpacing( vbox, 0.3 )
