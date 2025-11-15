@@ -179,6 +179,22 @@ class YDialogCurses(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YDialog"
     
+    @staticmethod
+    def currentDialog(doThrow=True):
+        open_dialog = YDialogCurses._open_dialogs[-1] if YDialogCurses._open_dialogs else None
+        if not open_dialog and doThrow:
+            raise YUINoDialogException("No dialog is currently open")
+        return open_dialog
+
+    @staticmethod
+    def topmostDialog(doThrow=True):
+        ''' same as currentDialog '''
+        return YDialogCurses.currentDialog(doThrow=doThrow)
+    
+    def isTopmostDialog(self):
+        '''Return whether this dialog is the topmost open dialog.'''
+        return YDialogCurses._open_dialogs[-1] == self if YDialogCurses._open_dialogs else False
+
     def open(self):
         if not self._window:
             self._create_backend_widget()
