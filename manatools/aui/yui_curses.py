@@ -297,12 +297,20 @@ class YDialogCurses(YSingleChildContainerWidget):
             else:
                 new_index = (current_index - 1) % len(focusable)
         
-        # Update focus
+        # If the currently focused widget is an expanded combo, collapse it
+        # so tabbing away closes the dropdown but does not change selection.
         if self._focused_widget:
+            try:
+                if getattr(self._focused_widget, "_expanded", False):
+                    self._focused_widget._expanded = False
+            except Exception:
+                pass
             self._focused_widget._focused = False
         
         self._focused_widget = focusable[new_index]
         self._focused_widget._focused = True
+        # Force redraw on focus change
+        self._last_draw_time = 0
 
     def _find_focusable_widgets(self):
         """Find all widgets that can receive focus"""
