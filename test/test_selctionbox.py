@@ -53,7 +53,9 @@ def test_selectionbox(backend_name=None):
         #factory.createVSpacing( vbox, 0.3 )
 
         #rightAlignment = factory.createRight( vbox ) TODO
-        closeButton    = factory.createPushButton( vbox, "Close" )
+        hbox = factory.createHBox( vbox )
+        closeButton    = factory.createPushButton( hbox, "Close" )
+        factory.createLabel(hbox, "   ") # spacer
 
         #
         # Event loop

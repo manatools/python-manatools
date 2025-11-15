@@ -253,7 +253,21 @@ class YVBoxQt(YWidget):
     
     def widgetClass(self):
         return "YVBox"
-    
+
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self._backend_widget)
@@ -263,6 +277,7 @@ class YVBoxQt(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
+            print(  f"YVBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
 class YHBoxQt(YWidget):
@@ -271,7 +286,21 @@ class YHBoxQt(YWidget):
     
     def widgetClass(self):
         return "YHBox"
-    
+
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QHBoxLayout(self._backend_widget)
@@ -281,6 +310,7 @@ class YHBoxQt(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = 1 if child.stretchable(YUIDimension.YD_HORIZ) else 0
+            print(  f"YHBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
 class YLabelQt(YWidget):
@@ -373,6 +403,15 @@ class YPushButtonQt(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QPushButton(self._label)
+        # Set size policy to prevent unwanted expansion
+        try:
+            sp = self._backend_widget.sizePolicy()
+            # Prefer minimal size in both dimensions
+            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Minimum)
+            #sp.setVerticalPolicy(QtWidgets.QSizePolicy.Minimum)
+            self._backend_widget.setSizePolicy(sp)
+        except Exception:
+            pass
         self._backend_widget.clicked.connect(self._on_clicked)
     
     def _on_clicked(self):
@@ -414,12 +453,13 @@ class YCheckBoxQt(YWidget):
         # state is QtCore.Qt.CheckState (Unchecked=0, PartiallyChecked=1, Checked=2)
         self._is_checked = (state == QtCore.Qt.Checked)
         
-        # Post a YWidgetEvent to the containing dialog
-        dlg = self.findDialog()
-        if dlg is not None:
-            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-        else:
-            print(f"CheckBox state changed (no dialog found): {self._label} = {self._is_checked}")
+        if self.notify():
+            # Post a YWidgetEvent to the containing dialog
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+            else:
+                print(f"CheckBox state changed (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -488,13 +528,14 @@ class YComboBoxQt(YSelectionWidget):
             if item.label() == text:
                 self._selected_items.append(item)
                 break
-        # Post selection-changed event to containing dialog
-        try:
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-        except Exception:
-            pass
+        if self.notify():
+            # Post selection-changed event to containing dialog
+            try:
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
 
 class YSelectionBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label=""):
@@ -503,6 +544,8 @@ class YSelectionBoxQt(YSelectionWidget):
         self._value = ""
         self._selected_items = []
         self._multi_selection = False
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
     
     def widgetClass(self):
         return "YSelectionBox"
