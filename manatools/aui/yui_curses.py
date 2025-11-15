@@ -934,16 +934,16 @@ class YComboBoxCurses(YSelectionWidget):
             return
             
         try:
-            list_height = min(len(self._items), 6) # Max 6 items visible
-            
+            # Make sure we don't draw outside screen
+            screen_height, screen_width = window.getmaxyx()
+
+            list_height = min(len(self._items), screen_height)
+           
             # Calculate dropdown position - right below the combo box
             dropdown_y = self._combo_y + 1
             dropdown_x = self._combo_x + (len(self._label) + 1 if self._label else 0)
             dropdown_width = self._combo_width - (len(self._label) + 1 if self._label else 0)
-            
-            # Make sure we don't draw outside screen
-            screen_height, screen_width = window.getmaxyx()
-            
+           
             # If not enough space below, draw above
             if dropdown_y + list_height >= screen_height:
                 dropdown_y = max(1, self._combo_y - list_height - 1)
