@@ -802,19 +802,20 @@ class YSelectionBoxGtk(YSelectionWidget):
                 return
             sel = self._treeview.get_selection()
 
-        paths, model = sel.get_selected_rows()
+        # Robustly build selected items by checking each known row path.
+        # This avoids corner cases with path types returned by get_selected_rows()
+        # and ensures indices align with self._items.
         self._selected_items = []
-        for p in paths:
+        if self._treeview is None or self._liststore is None:
+            return
+        for i, it in enumerate(self._items):
             try:
-                idx = p.get_indices()[0]
+                path = Gtk.TreePath.new_from_string(str(i))
+                if sel.path_is_selected(path):
+                    self._selected_items.append(it)
             except Exception:
-                # fallback for single-index string paths
-                try:
-                    idx = int(str(p))
-                except Exception:
-                    continue
-            if 0 <= idx < len(self._items):
-                self._selected_items.append(self._items[idx])
+                # ignore malformed paths or selection APIs we can't query
+                continue
 
         if self._selected_items:
             self._value = self._selected_items[0].label()
