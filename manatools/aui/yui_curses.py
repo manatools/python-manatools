@@ -228,7 +228,28 @@ class YDialogCurses(YSingleChildContainerWidget):
             self._backend_widget.border()
             
             # Draw title
-            title = " YUI NCurses Dialog "
+            title = " manatools YUI NCurses Dialog "
+            try:
+                from . import yui as yui_mod
+                appobj = None
+                # YUI._backend may hold the backend instance (YUIQt)
+                backend = getattr(yui_mod.YUI, "_backend", None)
+                if backend:
+                    if hasattr(backend, "application"):
+                        appobj = backend.application()
+                # fallback: YUI._instance might be set and expose application/yApp
+                if not appobj:
+                    inst = getattr(yui_mod.YUI, "_instance", None)
+                    if inst:
+                        if hasattr(inst, "application"):
+                            appobj = inst.application()
+                if appobj and hasattr(appobj, "applicationTitle"):
+                    atitle = appobj.applicationTitle()
+                    if atitle:
+                        title = atitle
+            except Exception:
+                # ignore and keep default
+                pass
             title_x = max(0, (width - len(title)) // 2)
             self._backend_widget.addstr(0, title_x, title, curses.A_BOLD)
             
