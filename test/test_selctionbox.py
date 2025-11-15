@@ -45,7 +45,8 @@ def test_selectionbox(backend_name=None):
         checkBox = factory.createCheckBox( hbox, "Notify on change", selBox.notify() )
 
         hbox = factory.createHBox( vbox )
-        factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
+        label = factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
+        label.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         valueField  = factory.createLabel(hbox, "<SelectionBox value unknown>")
         valueField.setStretchable( yui.YUIDimension.YD_HORIZ, True ) # // allow stretching over entire dialog width
 
@@ -60,7 +61,7 @@ def test_selectionbox(backend_name=None):
         #
         # Event loop
         #
-        valueField.setText( "???" )
+        #valueField.setText( "???" )
         while True:
           event = dialog.waitForEvent()
           if not event:
