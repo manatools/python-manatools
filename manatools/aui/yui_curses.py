@@ -1050,6 +1050,10 @@ class YSelectionBoxCurses(YSelectionWidget):
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
+        # Track last computed visible rows during last _draw call so
+        # navigation/ensure logic uses actual available space.
+        self._current_visible_rows = None
+
     def widgetClass(self):
         return "YSelectionBox"
 
@@ -1125,7 +1129,10 @@ class YSelectionBoxCurses(YSelectionWidget):
 
     def _ensure_hover_visible(self):
         """Adjust scroll offset so that hover_index is visible in the box."""
-        visible = self._visible_row_count()
+        # Prefer the visible row count computed during the last _draw call
+        # (which takes the actual available height into account). Fallback
+        # to the configured visible row count if no draw happened yet.
+        visible = self._current_visible_rows if self._current_visible_rows is not None else self._visible_row_count()
         if visible <= 0:
             return
         if self._hover_index < self._scroll_offset:
@@ -1145,6 +1152,8 @@ class YSelectionBoxCurses(YSelectionWidget):
         if self._hover_index >= len(self._items):
             self._hover_index = max(0, len(self._items) - 1)
         self._ensure_hover_visible()
+        # reset the cached visible rows so future navigation uses the next draw's value
+        self._current_visible_rows = None
 
     def _draw(self, window, y, x, width, height):
         """Draw label (optional) and visible portion of items."""
@@ -1160,6 +1169,10 @@ class YSelectionBoxCurses(YSelectionWidget):
                 line += 1
 
             visible = self._visible_row_count()
+            # ensure visible fits in provided height
+            visible = min(visible, max(0, height - (1 if self._label else 0)))
+            # remember actual visible rows for navigation logic (_ensure_hover_visible)
+            self._current_visible_rows = visible
             # ensure visible fits in provided height
             visible = min(visible, max(0, height - (1 if self._label else 0)))
             for i in range(visible):
@@ -1192,7 +1205,7 @@ class YSelectionBoxCurses(YSelectionWidget):
                         window.addch(y + (1 if self._label else 0) + visible - 1, x + width - 1, 'v')
                 except curses.error:
                     pass
-
+            # keep _current_visible_rows until next draw; navigation will use it
         except curses.error:
             pass
 
