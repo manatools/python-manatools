@@ -24,4 +24,9 @@ Missing Widgets comparing libyui:
     [ ] YReplacePoint
     [ ] YRadioButton, YRadioButtonGroup
 
-To check how to manage YEvents and YItems.
+To check how to manage YEvents [X] and YItems [ ].
+
+Nice to have: improvements outside YUI API
+    [ ] window title
+    [ ] window icons
+    [ ] selected YItem(s) in event
