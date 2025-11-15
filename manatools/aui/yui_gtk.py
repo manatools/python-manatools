@@ -51,6 +51,30 @@ class YApplicationGtk:
     def setApplicationTitle(self, title):
         """Set the application title."""
         self._application_title = title
+        try:
+            # Try to update a running Gtk.Application so dialogs can read it via app.get_application_name()
+            app = None
+            try:
+                if hasattr(Gtk.Application, "get_default"):
+                    app = Gtk.Application.get_default()
+            except Exception:
+                app = None
+            if app:
+                # Prefer the setter if available
+                if hasattr(app, "set_application_name"):
+                    try:
+                        app.set_application_name(title)
+                    except Exception:
+                        pass
+                # as fallback try setting a property that might be used by specific apps
+                if hasattr(app, "set_application_id"):
+                    try:
+                        # don't override a real application id, but try best-effort
+                        app.set_application_id(str(title))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def applicationTitle(self):
         """Get the application title."""
@@ -222,7 +246,31 @@ class YDialogGtk(YSingleChildContainerWidget):
         return cls._open_dialogs[-1]
     
     def _create_backend_widget(self):
-        self._window = Gtk.Window(title="YUI GTK Dialog")
+        # Determine window title:from YApplicationQt instance stored on the YUI backend
+        title = "Manatools YUI GTK Dialog"
+        
+        try:
+            from . import yui as yui_mod
+            appobj = None
+            # YUI._backend may hold the backend instance (YUIGtk)
+            backend = getattr(yui_mod.YUI, "_backend", None)
+            if backend:
+                if hasattr(backend, "application"):
+                    appobj = backend.application()
+            # fallback: YUI._instance might be set and expose application/yApp
+            if not appobj:
+                inst = getattr(yui_mod.YUI, "_instance", None)
+                if inst:
+                    if hasattr(inst, "application"):
+                        appobj = inst.application()
+            if appobj and hasattr(appobj, "applicationTitle"):
+                atitle = appobj.applicationTitle()
+                if atitle:
+                    title = atitle
+        except Exception:
+            # ignore and keep default
+            pass
+        self._window = Gtk.Window(title=title)
         self._window.set_default_size(600, 400)
         self._window.set_border_width(10)
         
