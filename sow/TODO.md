@@ -8,9 +8,9 @@ Next is the starting todo list.
 
 Missing Widgets comparing libyui:
 
-    [ ] YComboBox (on going)
-    [ ] YSelectionBox
-    [ ] YMultiSelectionBox
+    [X] YComboBox
+    [X] YSelectionBox
+    [X] YMultiSelectionBox
     [ ] YTree
     [ ] YTable
     [ ] YProgressBar
