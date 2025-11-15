@@ -31,9 +31,9 @@ def test_selectionbox(backend_name=None):
 
 ###############
         dialog = factory.createPopupDialog()
-        vbox = factory.createVBox( dialog )
-        hbox = factory.createHBox( vbox )
-        selBox = factory.createSelectionBox( hbox, "Menu" )
+        mainVbox = factory.createVBox( dialog )
+        hbox = factory.createHBox( mainVbox )
+        selBox = factory.createSelectionBox( hbox, "Choose your pizza" )
 
         selBox.addItem( "Pizza Margherita" )
         selBox.addItem( "Pizza Capricciosa" )
@@ -42,19 +42,23 @@ def test_selectionbox(backend_name=None):
         selBox.addItem( "Pizza Quattro Stagioni" )
         selBox.addItem( "Calzone" )
 
-        checkBox = factory.createCheckBox( hbox, "Notify on change", selBox.notify() )
+        vbox = factory.createVBox( hbox )
+        notifyCheckBox = factory.createCheckBox( vbox, "Notify on change", selBox.notify() )
+        notifyCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
+        multiSelectionCheckBox = factory.createCheckBox( vbox, "Multi-selection", selBox.multiSelection() )
+        multiSelectionCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
 
-        hbox = factory.createHBox( vbox )
+        hbox = factory.createHBox( mainVbox )
+        valueButton = factory.createPushButton( hbox, "Value" ) 
         label = factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
         label.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         valueField  = factory.createLabel(hbox, "<SelectionBox value unknown>")
         valueField.setStretchable( yui.YUIDimension.YD_HORIZ, True ) # // allow stretching over entire dialog width
 
-        valueButton = factory.createPushButton( hbox, "Value" ) 
         #factory.createVSpacing( vbox, 0.3 )
 
         #rightAlignment = factory.createRight( vbox ) TODO
-        hbox = factory.createHBox( vbox )
+        hbox = factory.createHBox( mainVbox )
         closeButton    = factory.createPushButton( hbox, "Close" )
         factory.createLabel(hbox, "   ") # spacer
 
@@ -76,13 +80,23 @@ def test_selectionbox(backend_name=None):
               if wdg == closeButton:
                 dialog.destroy()
                 break
-              elif (wdg == valueButton):
-                item = selBox.selectedItem()
-                valueField.setText( item.label() if item else "<none>" )   
-              elif (wdg == checkBox):
-                selBox.setNotify( checkBox.value() )             
+              elif (wdg == valueButton):                
+                if selBox.multiSelection():
+                    labels = [item.label() for item in selBox.selectedItems()]
+                    valueField.setText( ", ".join(labels) )
+                else:
+                    item = selBox.selectedItem()
+                    valueField.setText( item.label() if item else "<none>" )
+              elif (wdg == notifyCheckBox):
+                selBox.setNotify( notifyCheckBox.value() )          
+              elif (wdg == multiSelectionCheckBox):   
+                selBox.setMultiSelection( multiSelectionCheckBox.value() )
               elif (wdg == selBox):		# selBox will only send events with setNotify() TODO
-                valueField.setText(selBox.value())
+                if selBox.multiSelection():
+                    labels = [item.label() for item in selBox.selectedItems()]
+                    valueField.setText( ", ".join(labels) )
+                else:
+                    valueField.setText(selBox.value())
         
     except Exception as e:
         print(f"Error testing ComboBox with backend {backend_name}: {e}")
