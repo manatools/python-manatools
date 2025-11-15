@@ -424,29 +424,61 @@ class YVBoxCurses(YWidget):
     
     def widgetClass(self):
         return "YVBox"
-    
+
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
     def _create_backend_widget(self):
         self._backend_widget = None
     
     def _draw(self, window, y, x, width, height):
-        current_y = y
+        # Calculate total fixed height and number of stretchable children
+        fixed_height = 0
+        stretchable_count = 0
+        child_heights = []
         for child in self._children:
+            min_height = getattr(child, '_height', 1)
+            if child.stretchable(YUIDimension.YD_VERT):
+                stretchable_count += 1
+                child_heights.append(None)  # placeholder for stretchable
+            else:
+                fixed_height += min_height
+                child_heights.append(min_height)
+        
+        # Calculate available height for stretchable children
+        spacing = len(self._children) - 1
+        available_height = max(0, height - fixed_height - spacing)
+        stretch_height = available_height // stretchable_count if stretchable_count else 0
+
+        # Assign heights
+        for idx, child in enumerate(self._children):
+            if child_heights[idx] is None:
+                # Stretchable child
+                child_heights[idx] = max(1, stretch_height)
+
+        # Draw children
+        current_y = y
+        for idx, child in enumerate(self._children):
             if not hasattr(child, '_draw'):
                 continue
-                
-            # Get child height - only consider direct children
-            child_height = getattr(child, '_height', 1)
-            
-            # Check space
-            if current_y + child_height > y + height:
+            ch = child_heights[idx]
+            if current_y + ch > y + height:
                 break
-            
-            # Draw ONLY the direct child
-            # The child will handle drawing its own children recursively
-            child._draw(window, current_y, x, width, child_height)
-            
-            # Move to next position
-            current_y += child_height + 1  # +1 for spacing
+            child._draw(window, current_y, x, width, ch)
+            current_y += ch
+            if idx < len(self._children) - 1:
+                current_y += 1  # spacing
 
 class YHBoxCurses(YWidget):
     def __init__(self, parent=None):
@@ -458,27 +490,93 @@ class YHBoxCurses(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
-    
-    def _draw(self, window, y, x, width, height):        
-        # HBox draws its OWN children horizontally
+
+    # Returns the stretchability of the layout box:
+    #  * The layout box is stretchable if one of the children is stretchable in
+    #  * this dimension or if one of the child widgets has a layout weight in
+    #  * this dimension.
+    def stretchable(self, dim):
+        for child in self._children:
+            widget = child.get_backend_widget()
+            expand = bool(child.stretchable(dim))
+            weight = bool(child.weight(dim))
+            if expand or weight:
+                return True
+        # No child is stretchable in this dimension
+        return False
+
+    def _child_min_width(self, child, max_width):
+        # Best-effort minimal width heuristic
+        try:
+            if hasattr(child, "minWidth"):
+                return min(max_width, max(1, int(child.minWidth())))
+        except Exception:
+            pass
+        # Heuristics based on common attributes
+        try:
+            cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
+            if cls in ("YLabel", "YPushButton", "YCheckBox"):
+                text = getattr(child, "_text", None)
+                if text is None:
+                    text = getattr(child, "_label", "")
+                pad = 4 if cls == "YPushButton" else 0
+                return min(max_width, max(1, len(str(text)) + pad))
+        except Exception:
+            pass
+        return max(1, min(10, max_width))  # safe default
+
+    def _draw(self, window, y, x, width, height):
         num_children = len(self._children)
-        if num_children == 0:
+        if num_children == 0 or width <= 0 or height <= 0:
             return
-        
-        # Calculate equal widths for horizontal layout
-        child_width = width // num_children
-        current_x = x
-        
+
+        spacing = max(0, num_children - 1)
+        available = max(0, width - spacing)
+
+        # Allocate fixed width for non-stretchable children
+        widths = [0] * num_children
+        stretchables = []
+        fixed_total = 0
         for i, child in enumerate(self._children):
-            if hasattr(child, '_draw'):                
-                # Last child gets remaining space
-                actual_width = child_width if i < num_children - 1 else (x + width) - current_x
-                
-                # Draw the child - HBox handles its children's positioning
-                child._draw(window, y, current_x, actual_width, height)
-                
-                # Move to next horizontal position
-                current_x += child_width
+            if child.stretchable(YUIDimension.YD_HORIZ):
+                stretchables.append(i)
+            else:
+                w = self._child_min_width(child, available)
+                widths[i] = w
+                fixed_total += w
+
+        # Remaining width goes to stretchable children
+        remaining = max(0, available - fixed_total)
+        if stretchables:
+            per = remaining // len(stretchables)
+            extra = remaining % len(stretchables)
+            for k, idx in enumerate(stretchables):
+                widths[idx] = max(1, per + (1 if k < extra else 0))
+        else:
+            # No stretchables: distribute leftover evenly
+            if fixed_total < available:
+                leftover = available - fixed_total
+                per = leftover // num_children
+                extra = leftover % num_children
+                for i in range(num_children):
+                    base = widths[i] if widths[i] else 1
+                    widths[i] = base + per + (1 if i < extra else 0)
+            else:
+                # If even fixed widths overflow, clamp proportionally
+                pass  # widths already reflect minimal values
+
+        # Draw children
+        cx = x
+        for i, child in enumerate(self._children):
+            w = widths[i]
+            if w <= 0:
+                continue
+            if hasattr(child, "_draw"):
+                ch = min(height, getattr(child, "_height", height))
+                child._draw(window, y, cx, w, ch)
+            cx += w
+            if i < num_children - 1:
+                cx += 1  # one-column spacing
 
 class YLabelCurses(YWidget):
     def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
@@ -949,6 +1047,8 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._hover_index = 0  # index into self._items (global)
         self._can_focus = True
         self._focused = False
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
 
     def widgetClass(self):
         return "YSelectionBox"
