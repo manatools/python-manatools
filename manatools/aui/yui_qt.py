@@ -10,13 +10,12 @@ class YUIQt:
     def __init__(self):
         self._widget_factory = YWidgetFactoryQt()
         self._optional_widget_factory = None
-        self._application = YApplicationQt()
-        
         # Ensure QApplication exists
         self._qapp = QtWidgets.QApplication.instance()
         if not self._qapp:
             self._qapp = QtWidgets.QApplication(sys.argv)
-    
+        self._application = YApplicationQt()
+
     def widgetFactory(self):
         return self._widget_factory
     
@@ -58,7 +57,15 @@ class YApplicationQt:
         try:
             app = QtWidgets.QApplication.instance()
             if app:
+                print(f"YApplicationQt: setting QApplication applicationName to '{title}'")
                 app.setApplicationName(title)
+                top_level_widgets = app.topLevelWidgets()
+
+                for widget in top_level_widgets:
+                    if isinstance(widget, QtWidgets.QMainWindow):
+                        main_window = widget
+                        main_window.setWindowTitle(title)
+                        break
         except Exception:
             pass
 
