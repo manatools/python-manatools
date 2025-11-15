@@ -926,7 +926,7 @@ class YComboBoxCurses(YSelectionWidget):
             return
             
         try:
-            list_height = min(len(self._items), 6)  # Max 6 items visible
+            list_height = min(len(self._items), 6) # Max 6 items visible
             
             # Calculate dropdown position - right below the combo box
             dropdown_y = self._combo_y + 1
@@ -1042,7 +1042,11 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._multi_selection = False
 
         # UI state for drawing/navigation
-        self._height = 6  # visible rows for items (excluding optional label)
+        # actual minimal height for layout (keep small so parent can expand it)
+        self._height = 1
+        # preferred rows used for paging when no draw happened yet
+        self._preferred_rows = 6
+
         self._scroll_offset = 0
         self._hover_index = 0  # index into self._items (global)
         self._can_focus = True
@@ -1141,16 +1145,17 @@ class YSelectionBoxCurses(YSelectionWidget):
             self._scroll_offset = self._hover_index - visible + 1
 
     def _visible_row_count(self):
-        # Use configured height, but don't exceed number of items
-        return min(self._height, max(0, len(self._items)))
+        # Return preferred visible rows for navigation (PageUp/PageDown step).
+        # Use preferred_rows (default 6) rather than forcing the layout minimum.
+        return max(1, getattr(self, "_preferred_rows", 6))
 
     def _create_backend_widget(self):
         # No curses backend widget object; drawing handled in _draw.
-        # Keep height heuristic: try to show up to 6 items or fewer if not available.
-        self._height = min(6, max(1, len(self._items)))
+        # Keep minimal layout height small so parent can give more space.
+        self._height = len(self._items) + (1 if self._label else 0)
         # reset scroll/hover if out of range
         if self._hover_index >= len(self._items):
-            self._hover_index = max(0, len(self._items) - 1)
+             self._hover_index = max(0, len(self._items) - 1)
         self._ensure_hover_visible()
         # reset the cached visible rows so future navigation uses the next draw's value
         self._current_visible_rows = None
@@ -1169,12 +1174,16 @@ class YSelectionBoxCurses(YSelectionWidget):
                 line += 1
 
             visible = self._visible_row_count()
-            # ensure visible fits in provided height
-            visible = min(visible, max(0, height - (1 if self._label else 0)))
+            # compute how many rows we can actually draw given provided height.
+            available_rows = max(0, height - (1 if self._label else 0))
+            if self.stretchable(YUIDimension.YD_VERT):
+                # If widget is stretchable vertically, use all available rows (up to number of items)
+                visible = min(len(self._items), available_rows)
+            else:
+                # Otherwise prefer configured height but don't exceed available rows or items
+                visible = min(len(self._items), self._visible_row_count(), available_rows)
             # remember actual visible rows for navigation logic (_ensure_hover_visible)
             self._current_visible_rows = visible
-            # ensure visible fits in provided height
-            visible = min(visible, max(0, height - (1 if self._label else 0)))
             for i in range(visible):
                 item_idx = self._scroll_offset + i
                 if item_idx >= len(self._items):
