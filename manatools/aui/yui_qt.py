@@ -54,6 +54,13 @@ class YApplicationQt:
     def setApplicationTitle(self, title):
         """Set the application title."""
         self._application_title = title
+        # also keep Qt's application name in sync so dialogs can read it without importing YUI
+        try:
+            app = QtWidgets.QApplication.instance()
+            if app:
+                app.setApplicationName(title)
+        except Exception:
+            pass
 
     def applicationTitle(self):
         """Get the application title."""
@@ -64,8 +71,8 @@ class YApplicationQt:
         self._icon = Icon
 
     def applicationIcon(self):
-        """Get the application title."""
-        return self.__icon
+        """Get the application icon."""
+        return self._icon
 
 class YWidgetFactoryQt:
     def __init__(self):
@@ -174,9 +181,34 @@ class YDialogQt(YSingleChildContainerWidget):
     
     def _create_backend_widget(self):
         self._qwidget = QtWidgets.QMainWindow()
-        self._qwidget.setWindowTitle("YUI Qt Dialog")
-        self._qwidget.resize(600, 400)
+        # Determine window title:from YApplicationQt instance stored on the YUI backend
+        title = "Manatools YUI Qt Dialog"
         
+        try:
+            from . import yui as yui_mod
+            appobj = None
+            # YUI._backend may hold the backend instance (YUIQt)
+            backend = getattr(yui_mod.YUI, "_backend", None)
+            if backend:
+                if hasattr(backend, "application"):
+                    appobj = backend.application()
+            # fallback: YUI._instance might be set and expose application/yApp
+            if not appobj:
+                inst = getattr(yui_mod.YUI, "_instance", None)
+                if inst:
+                    if hasattr(inst, "application"):
+                        appobj = inst.application()
+            if appobj and hasattr(appobj, "applicationTitle"):
+                atitle = appobj.applicationTitle()
+                if atitle:
+                    title = atitle
+        except Exception:
+            # ignore and keep default
+            pass
+
+        self._qwidget.setWindowTitle(title)
+        self._qwidget.resize(600, 400)
+
         central_widget = QtWidgets.QWidget()
         self._qwidget.setCentralWidget(central_widget)
         
