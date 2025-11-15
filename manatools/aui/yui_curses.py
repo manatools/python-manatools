@@ -39,7 +39,6 @@ class YUICurses:
                 curses.init_pair(2, curses.COLOR_YELLOW, -1)
                 curses.init_pair(3, curses.COLOR_GREEN, -1)
                 curses.init_pair(4, curses.COLOR_RED, -1)
-            
         except Exception as e:
             print(f"Error initializing curses: {e}")
             self._cleanup_curses()
@@ -95,6 +94,20 @@ class YApplicationCurses:
     def setApplicationTitle(self, title):
         """Set the application title."""
         self._application_title = title
+        # Update terminal/window title for xterm-like terminals when stdout is a TTY
+        escape_sequences = [
+            f"\033]0;{title}\007",   # Standard
+            f"\033]1;{title}\007",   # Icon name
+            f"\033]2;{title}\007",   # Window title
+            f"\033]30;{title}\007",  # Konsole variant 1
+            f"\033]31;{title}\007",  # Konsole variant 2
+        ]
+        try:
+            for seq in escape_sequences:
+                sys.stdout.write(seq)
+            sys.stdout.flush()            
+        except Exception:
+            pass
 
     def applicationTitle(self):
         """Get the application title."""
@@ -247,6 +260,8 @@ class YDialogCurses(YSingleChildContainerWidget):
                     atitle = appobj.applicationTitle()
                     if atitle:
                         title = atitle
+                if appobj:
+                    appobj.setApplicationTitle(title)
             except Exception:
                 # ignore and keep default
                 pass
