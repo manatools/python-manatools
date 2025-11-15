@@ -144,6 +144,23 @@ class YDialogQt(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YDialog"
     
+    @staticmethod
+    def currentDialog(doThrow=True):
+        '''Return the currently open dialog (topmost), or raise if none.'''
+        open_dialog = YDialogQt._open_dialogs[-1] if YDialogQt._open_dialogs else None
+        if not open_dialog and doThrow:
+            raise YUINoDialogException("No dialog is currently open")
+        return open_dialog
+    
+    @staticmethod
+    def topmostDialog(doThrow=True):
+        ''' same as currentDialog '''
+        return YDialogQt.currentDialog(doThrow=doThrow)
+    
+    def isTopmostDialog(self):
+        '''Return whether this dialog is the topmost open dialog.'''
+        return YDialogQt._open_dialogs[-1] == self if YDialogQt._open_dialogs else False
+
     def open(self):
         """
         Finalize and show the dialog in a non-blocking way.
