@@ -52,27 +52,21 @@ class YApplicationGtk:
         """Set the application title."""
         self._application_title = title
         try:
-            # Try to update a running Gtk.Application so dialogs can read it via app.get_application_name()
-            app = None
+
+            # update the top most YDialogGtk windows created, i.e. the current one
             try:
-                if hasattr(Gtk.Application, "get_default"):
-                    app = Gtk.Application.get_default()
+                # YDialogGtk is defined in this module; update its open dialogs' windows
+                dlg =YDialogGtk.currentDialog(doThrow=False)
+                try:
+                    win = getattr(dlg, "_window", None)
+                    if win:
+                        win.set_title(title)
+                        print(f"YApplicationGtk: set YDialogGtk window title to '{title}'")
+                except Exception:
+                    pass
             except Exception:
-                app = None
-            if app:
-                # Prefer the setter if available
-                if hasattr(app, "set_application_name"):
-                    try:
-                        app.set_application_name(title)
-                    except Exception:
-                        pass
-                # as fallback try setting a property that might be used by specific apps
-                if hasattr(app, "set_application_id"):
-                    try:
-                        # don't override a real application id, but try best-effort
-                        app.set_application_id(str(title))
-                    except Exception:
-                        pass
+                pass
+
         except Exception:
             pass
 
@@ -146,6 +140,22 @@ class YDialogGtk(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YDialog"
     
+    @staticmethod
+    def currentDialog(doThrow=True):
+        open_dialog = YDialogGtk._open_dialogs[-1] if YDialogGtk._open_dialogs else None
+        if not open_dialog and doThrow:
+            raise YUINoDialogException("No dialog is currently open")
+        return open_dialog
+
+    @staticmethod
+    def topmostDialog(doThrow=True):
+        ''' same as currentDialog '''
+        return YDialogGtk.currentDialog(doThrow=doThrow)
+    
+    def isTopmostDialog(self):
+        '''Return whether this dialog is the topmost open dialog.'''
+        return YDialogGtk._open_dialogs[-1] == self if YDialogGtk._open_dialogs else False
+
     def open(self):
         # Finalize and show the dialog in a non-blocking way.
         # Matching libyui semantics: open() should finalize and make visible,
