@@ -212,13 +212,7 @@ class YDialogCurses(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         # Use the main screen
         self._backend_widget = curses.newwin(0, 0, 0, 0)
-    
-    def _run_event_loop(self):
-        # Backwards-compatible helper: run an indefinite loop until dialog closed.
-        # Implemented via waitForEvent with no timeout (block until an event that
-        # may close/destroy the dialog).
-        self.waitForEvent(timeout_millisec=0)
-    
+
     def _draw_dialog(self):
         """Draw the entire dialog (called by event loop)"""
         if not hasattr(self, '_backend_widget') or not self._backend_widget:
@@ -229,7 +223,7 @@ class YDialogCurses(YSingleChildContainerWidget):
             
             # Clear screen
             self._backend_widget.clear()
-            
+
             # Draw border
             self._backend_widget.border()
             
@@ -258,8 +252,12 @@ class YDialogCurses(YSingleChildContainerWidget):
             if self._focused_widget:
                 focus_text = f" Focus: {getattr(self._focused_widget, '_label', 'Unknown')} "
                 if len(focus_text) < width:
-                    self._backend_widget.addstr(height - 2, 2, focus_text, curses.A_REVERSE)
+                    self._backend_widget.addstr(height - 1, 2, focus_text, curses.A_REVERSE)
+                #if the focused widget has an expnded list (menus, combos,...), draw it on top
+                if hasattr(self._focused_widget, "_draw_expanded_list"):
+                    self._focused_widget._draw_expanded_list(self._backend_widget)
             
+            # Refresh main window first
             self._backend_widget.refresh()
             
         except curses.error as e:
