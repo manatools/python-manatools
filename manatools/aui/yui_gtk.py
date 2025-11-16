@@ -5,8 +5,13 @@ import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, GLib
 import threading
+import os
+try:
+    from gi.repository import GdkPixbuf
+except Exception:
+    GdkPixbuf = None
 from .yui_common import *
-
+ 
 class YUIGtk:
     def __init__(self):
         self._widget_factory = YWidgetFactoryGtk()
@@ -34,6 +39,48 @@ class YApplicationGtk:
         self._product_name = "manatools YUI GTK"
         self._icon_base_path = None
         self._icon = ""
+        # cached resolved GdkPixbuf.Pixbuf (or None)
+        self._gtk_icon_pixbuf = None
+
+    def _resolve_pixbuf(self, icon_spec):
+        """Resolve icon_spec into a GdkPixbuf.Pixbuf if possible.
+        Prefer local path resolved against iconBasePath if set, else try theme lookup.
+        """
+        if not icon_spec:
+            return None
+        # try explicit path (icon_base_path forced)
+        try:
+            # if base path set and icon_spec not absolute, try join
+            if self._icon_base_path:
+                cand = icon_spec if os.path.isabs(icon_spec) else os.path.join(self._icon_base_path, icon_spec)
+                if os.path.exists(cand) and GdkPixbuf is not None:
+                    try:
+                        return GdkPixbuf.Pixbuf.new_from_file(cand)
+                    except Exception:
+                        pass
+            # try absolute path
+            if os.path.isabs(icon_spec) and os.path.exists(icon_spec) and GdkPixbuf is not None:
+                try:
+                    return GdkPixbuf.Pixbuf.new_from_file(icon_spec)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # fallback: try icon theme lookup
+        try:
+            theme = Gtk.IconTheme.get_default()
+            # request a reasonable size (48) - theme will scale as needed
+            if theme and theme.has_icon(icon_spec) and GdkPixbuf is not None:
+                try:
+                    pix = theme.load_icon(icon_spec, 48, 0)
+                    if pix is not None:
+                        return pix
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -69,10 +116,68 @@ class YApplicationGtk:
     def applicationTitle(self):
         """Get the application title."""
         return self._application_title
-
+    
     def setApplicationIcon(self, Icon):
-        self._icon = Icon
+        """Set application icon spec (theme name or path). If iconBasePath is set, prefer local file."""
+        try:
+            self._icon = Icon or ""
+        except Exception:
+            self._icon = ""
+        # resolve and cache a GdkPixbuf if possible
+        try:
+            self._gtk_icon_pixbuf = self._resolve_pixbuf(self._icon)
+        except Exception:
+            self._gtk_icon_pixbuf = None
 
+        # Try to set a global default icon for windows (best-effort)
+        try:
+            if self._gtk_icon_pixbuf is not None:
+                # Gtk.Window.set_default_icon/from_file may be available
+                try:
+                    Gtk.Window.set_default_icon(self._gtk_icon_pixbuf)
+                except Exception:
+                    try:
+                        # try using file path if we resolved one from disk
+                        if self._icon_base_path:
+                            cand = self._icon if os.path.isabs(self._icon) else os.path.join(self._icon_base_path, self._icon)
+                            if os.path.exists(cand):
+                                Gtk.Window.set_default_icon_from_file(cand)
+                        else:
+                            # if _icon was an absolute file
+                            if os.path.isabs(self._icon) and os.path.exists(self._icon):
+                                Gtk.Window.set_default_icon_from_file(self._icon)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Apply icon to any open YDialogGtk windows
+        try:
+            for dlg in getattr(YDialogGtk, "_open_dialogs", []) or []:
+                try:
+                    win = getattr(dlg, "_window", None)
+                    if win:
+                        if self._gtk_icon_pixbuf is not None:
+                            try:
+                                # try direct pixbuf assignment
+                                win.set_icon(self._gtk_icon_pixbuf)
+                            except Exception:
+                                try:
+                                    # try setting icon name as fallback
+                                    win.set_icon_name(self._icon)
+                                except Exception:
+                                    pass
+                        else:
+                            # if we have only a name, try icon name
+                            try:
+                                win.set_icon_name(self._icon)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    
     def applicationIcon(self):
         return self._icon
 
@@ -284,11 +389,40 @@ class YDialogGtk(YSingleChildContainerWidget):
                 atitle = appobj.applicationTitle()
                 if atitle:
                     title = atitle
+            # try to obtain resolved pixbuf from application and store for window icon
+            _resolved_pixbuf = None
+            try:
+                _resolved_pixbuf = getattr(appobj, "_gtk_icon_pixbuf", None)
+            except Exception:
+                _resolved_pixbuf = None
         except Exception:
             pass
 
         # Create Gtk4 Window
         self._window = Gtk.Window(title=title)
+        # set window icon if available
+        try:
+            if _resolved_pixbuf is not None:
+                try:
+                    self._window.set_icon(_resolved_pixbuf)
+                except Exception:
+                    try:
+                        # fallback to name if pixbuf not accepted
+                        icname = getattr(appobj, "applicationIcon", lambda : None)()
+                        if icname:
+                            self._window.set_icon_name(icname)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    # try setting icon name if application provided it
+                    icname = getattr(appobj, "applicationIcon", lambda : None)()
+                    if icname:
+                        self._window.set_icon_name(icname)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         try:
             self._window.set_default_size(600, 400)
         except Exception:
