@@ -926,10 +926,47 @@ class YSelectionBoxGtk(YSelectionWidget):
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
+        # If listbox already created, update its selection mode at runtime.
         if self._listbox is None:
             return
-        # Gtk.ListBox selection handling is manual; we simply keep _multi_selection flag
-        # and adjust selection behaviour in _on_row_selected.
+        try:
+            mode = Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE
+            self._listbox.set_selection_mode(mode)
+        except Exception:
+            pass
+        # Rewire signals: disconnect previous handlers and connect appropriate one.
+        try:
+            # Disconnect any previously stored handlers
+            try:
+                for key, hid in list(getattr(self, "_signal_handlers", {}).items()):
+                    if hid and isinstance(hid, int):
+                        try:
+                            self._listbox.disconnect(hid)
+                        except Exception:
+                            pass
+                self._signal_handlers = {}
+            except Exception:
+                self._signal_handlers = {}
+
+            # Connect new handler based on mode
+            if self._multi_selection:
+                try:
+                    hid = self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))
+                    self._signal_handlers['selected-rows-changed'] = hid
+                except Exception:
+                    try:
+                        hid = self._listbox.connect("row-selected", lambda lb, row: self._on_selected_rows_changed(lb))
+                        self._signal_handlers['row-selected_for_multi'] = hid
+                    except Exception:
+                        pass
+            else:
+                try:
+                    hid = self._listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+                    self._signal_handlers['row-selected'] = hid
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def multiSelection(self):
         return bool(self._multi_selection)
@@ -974,6 +1011,13 @@ class YSelectionBoxGtk(YSelectionWidget):
                     row.add(lbl)
                 except Exception:
                     pass
+
+            # Make every row selectable so users can multi-select if mode allows.
+            try:
+                row.set_selectable(True)
+            except Exception:
+                pass
+            
             # If this item matches current value, mark selected
             try:
                 if self._value and it.label() == self._value:
@@ -983,12 +1027,6 @@ class YSelectionBoxGtk(YSelectionWidget):
                 pass
             self._rows.append(row)
             listbox.append(row)
-
-        # connect selection signal
-        try:
-            listbox.connect("row-activated", self._on_row_activated)
-        except Exception:
-            pass
 
         sw = Gtk.ScrolledWindow()
         # allow scrolled window to expand vertically and horizontally
@@ -1026,81 +1064,141 @@ class YSelectionBoxGtk(YSelectionWidget):
         except Exception:
             vbox.add(sw)
 
+        # connect selection signal: choose appropriate signal per selection mode
+        # store handler ids so we can disconnect later if selection mode changes at runtime
+        self._signal_handlers = {}
+        try:
+            # ensure any previous handlers are disconnected (defensive)
+            try:
+                for hid in list(self._signal_handlers.values()):
+                    if hid and isinstance(hid, int):
+                        try:
+                            listbox.disconnect(hid)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            if self._multi_selection:
+                # Prefer a bulk selection-changed signal when available in bindings
+                try:
+                    hid = listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))
+                    self._signal_handlers['selected-rows-changed'] = hid
+                except Exception:
+                    # fallback to row-selected if the other signal isn't available
+                    hid = listbox.connect("row-selected", lambda lb, row: self._on_selected_rows_changed(lb))
+                    self._signal_handlers['row-selected_for_multi'] = hid
+            else:
+                # single selection: react to row-selected and enforce single selection semantics
+                hid = listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+                self._signal_handlers['row-selected'] = hid
+        except Exception:
+            pass
+
         self._backend_widget = vbox
         self._listbox = listbox
 
-    def _on_row_activated(self, listbox, row):
+    def _row_is_selected(self, r):
+        """Robust helper to detect whether a ListBoxRow is selected."""
+        try:
+            return bool(r.get_selected())
+        except Exception:
+            pass
+        try:
+            props = getattr(r, "props", None)
+            if props and hasattr(props, "selected"):
+                return bool(getattr(props, "selected"))
+        except Exception:
+            pass
+        return bool(getattr(r, "_selected_flag", False))
+
+    def _on_row_selected(self, listbox, row):
         """
-        Update internal selected items list.
-
-        The 'row' argument may be the affected row (or None). Use it when available,
-        otherwise probe all cached rows with robust checks.
+        Handler for single-selection mode. Ensure only the provided row is selected
+        and update internal state accordingly.
         """
-        self._selected_items = []
-
-        # Helper to test if a row is selected in a robust way and to set selection.
-        def _row_is_selected(r):
-            try:
-                return bool(r.get_selected())
-            except Exception:
-                # fallback to an internal flag if the binding doesn't expose get_selected()
-                return bool(getattr(r, "_selected_flag", False))
-
-        def _set_row_selected(r, val):
-            try:
-                r.set_selected(bool(val))
-            except Exception:
-                try:
-                    setattr(r, "_selected_flag", bool(val))
-                except Exception:
-                    pass
-
-        if row is not None:
-            try:
-                idx = self._rows.index(row)
-            except Exception:
-                idx = None
-
-            if idx is not None:
-                if not self._multi_selection:
-                    # single-selection: clear others, select this one
-                    for i, r in enumerate(getattr(self, "_rows", [])):
-                        try:
-                            _set_row_selected(r, i == idx)
-                        except Exception:
-                            pass
-                    if idx < len(self._items):
-                        self._selected_items = [self._items[idx]]
-                else:
-                    # multi-selection: toggle this row selection
+        try:
+            # If a row was provided, enforce single-selection: deselect others
+            if row is not None:
+                for r in getattr(self, "_rows", []):
                     try:
-                        cur = _row_is_selected(row)
-                        _set_row_selected(row, not cur)
+                        r.set_selected(r is row)
                     except Exception:
-                        pass
-                    # rebuild selected list
-                    for i, r in enumerate(getattr(self, "_rows", [])):
+                        # fallback flag
                         try:
-                            if _row_is_selected(r) and i < len(self._items):
-                                self._selected_items.append(self._items[i])
+                            setattr(r, "_selected_flag", (r is row))
                         except Exception:
                             pass
-        else:
-            # fallback: scan all rows
+
+            # rebuild selected_items scanning cached rows (defensive)
+            self._selected_items = []
             for i, r in enumerate(getattr(self, "_rows", [])):
                 try:
-                    if _row_is_selected(r) and i < len(self._items):
+                    if self._row_is_selected(r) and i < len(self._items):
                         self._selected_items.append(self._items[i])
                 except Exception:
                     pass
 
-        # normalize value: first selected label or None
-        if self._selected_items:
+            self._value = self._selected_items[0].label() if self._selected_items else None
+        except Exception:
+            # be defensive
+            self._selected_items = []
+            self._value = None
+
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+
+    def _on_selected_rows_changed(self, listbox):
+        """
+        Handler for multi-selection (or bulk selection change). Rebuild selected list
+        using either ListBox APIs (if available) or by scanning cached rows.
+        """
+        try:
+            # Try to use any available API that returns selected rows
+            sel_rows = None
             try:
-                self._value = self._selected_items[0].label()
+                # Some bindings may provide get_selected_rows()
+                sel_rows = listbox.get_selected_rows()
             except Exception:
-                self._value = None
-        else:
+                sel_rows = None
+
+            self._selected_items = []
+            if sel_rows:
+                # sel_rows may be list of Row objects or Paths; try to match by identity
+                for r in sel_rows:
+                    try:
+                        # if r is a ListBoxRow already
+                        if isinstance(r, type(self._rows[0])) if self._rows else False:
+                            try:
+                                idx = self._rows.index(r)
+                                if idx < len(self._items):
+                                    self._selected_items.append(self._items[idx])
+                            except Exception:
+                                pass
+                        else:
+                            # fallback: scan cached rows to find selected ones
+                            for i, cr in enumerate(getattr(self, "_rows", [])):
+                                try:
+                                    if self._row_is_selected(cr) and i < len(self._items):
+                                        self._selected_items.append(self._items[i])
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            else:
+                # Generic fallback: scan cached rows and collect selected ones
+                for i, r in enumerate(getattr(self, "_rows", [])):
+                    try:
+                        if self._row_is_selected(r) and i < len(self._items):
+                            self._selected_items.append(self._items[i])
+                    except Exception:
+                        pass
+
+            self._value = self._selected_items[0].label() if self._selected_items else None
+        except Exception:
+            self._selected_items = []
             self._value = None
 
         if self.notify():
