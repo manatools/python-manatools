@@ -78,6 +78,7 @@ class YApplicationCurses:
         self._application_title = "manatools Curses Application"
         self._product_name = "manatools YUI Curses"
         self._icon_base_path = ""
+        self._icon = ""
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -90,6 +91,14 @@ class YApplicationCurses:
     
     def productName(self):
         return self._product_name
+
+    def setApplicationIcon(self, Icon):
+        """Set the application icon."""
+        self._icon = Icon
+
+    def applicationIcon(self):
+        """Get the application icon."""
+        return self._icon
 
     def setApplicationTitle(self, title):
         """Set the application title."""
