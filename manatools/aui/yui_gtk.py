@@ -853,6 +853,11 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._multi_selection = False
         self._listbox = None
         self._backend_widget = None
+        # keep a stable list of rows we create so we don't rely on ListBox container APIs
+        # (GTK4 bindings may not expose get_children())
+        self._rows = []
+        # Preferred visible rows for layout/paging; parent can give more space when stretchable
+        self._preferred_rows = 6
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
@@ -871,18 +876,20 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._selected_items = [it for it in self._items if it.label() == text]
         if self._listbox is None:
             return
-        # find and select corresponding row
-        children = self._listbox.get_children()
-        for i, row in enumerate(children):
+        # find and select corresponding row using the cached rows list
+        for i, row in enumerate(getattr(self, "_rows", [])):
             if i >= len(self._items):
                 continue
-            if self._items[i].label() == text:
-                try:
+            try:
+                if self._items[i].label() == text:
                     row.set_selectable(True)
                     row.set_selected(True)
-                except Exception:
-                    pass
-                break
+                else:
+                    # ensure others are not selected in single-selection mode
+                    if not self._multi_selection:
+                        row.set_selected(False)
+            except Exception:
+                pass
         # notify
         self._on_selection_changed()
 
@@ -906,11 +913,11 @@ class YSelectionBoxGtk(YSelectionWidget):
             return
 
         # reflect change in UI
-        children = self._listbox.get_children()
+        rows = getattr(self, "_rows", [])
         for i, it in enumerate(self._items):
             if it is item or it.label() == item.label():
                 try:
-                    row = children[i]
+                    row = rows[i]
                     row.set_selected(selected)
                 except Exception:
                     pass
@@ -944,10 +951,17 @@ class YSelectionBoxGtk(YSelectionWidget):
         # Use Gtk.ListBox inside a ScrolledWindow for Gtk4
         listbox = Gtk.ListBox()
         listbox.set_selection_mode(Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE)
+        # allow listbox to expand if parent allocates more space
+        try:
+            listbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            listbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+        except Exception:
+            pass
         # populate rows
+        self._rows = []
         for it in self._items:
             row = Gtk.ListBoxRow()
-            lbl = Gtk.Label(label=it.label())
+            lbl = Gtk.Label(label=it.label() or "")
             try:
                 if hasattr(lbl, "set_xalign"):
                     lbl.set_xalign(0.0)
@@ -960,15 +974,37 @@ class YSelectionBoxGtk(YSelectionWidget):
                     row.add(lbl)
                 except Exception:
                     pass
+            # If this item matches current value, mark selected
+            try:
+                if self._value and it.label() == self._value:
+                    row.set_selectable(True)
+                    row.set_selected(True)
+            except Exception:
+                pass
+            self._rows.append(row)
             listbox.append(row)
 
         # connect selection signal
         try:
-            listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+            listbox.connect("row-activated", self._on_row_activated)
         except Exception:
             pass
 
         sw = Gtk.ScrolledWindow()
+        # allow scrolled window to expand vertically and horizontally
+        try:
+            sw.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            sw.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            # give a reasonable minimum content height so layout initially shows several rows;
+            # Gtk4 expects pixels — try a conservative estimate (rows * ~20px)
+            min_h = int(getattr(self, "_preferred_rows", 6) * 20)
+            try:
+                # some Gtk4 bindings expose set_min_content_height
+                sw.set_min_content_height(min_h)
+            except Exception:
+                pass
+        except Exception:
+            pass
         # policy APIs changed in Gtk4: use set_overlay_scrolling and set_min_content_height if needed
         try:
             sw.set_child(listbox)
@@ -978,6 +1014,13 @@ class YSelectionBoxGtk(YSelectionWidget):
             except Exception:
                 pass
 
+        # also request vexpand on the outer vbox so parent layout sees it can grow
+        try:
+            vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+        except Exception:
+            pass
+
         try:
             vbox.append(sw)
         except Exception:
@@ -986,22 +1029,79 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._backend_widget = vbox
         self._listbox = listbox
 
-    def _on_row_selected(self, listbox, row):
-        # Build selected items list from listbox rows' selected state
-        self._selected_items = []
-        children = listbox.get_children()
-        for i, r in enumerate(children):
-            try:
-                if r.get_selected():
-                    if i < len(self._items):
-                        self._selected_items.append(self._items[i])
-            except Exception:
-                pass
+    def _on_row_activated(self, listbox, row):
+        """
+        Update internal selected items list.
 
-        if self._selected_items:
-            self._value = self._selected_items[0].label()
+        The 'row' argument may be the affected row (or None). Use it when available,
+        otherwise probe all cached rows with robust checks.
+        """
+        self._selected_items = []
+
+        # Helper to test if a row is selected in a robust way and to set selection.
+        def _row_is_selected(r):
+            try:
+                return bool(r.get_selected())
+            except Exception:
+                # fallback to an internal flag if the binding doesn't expose get_selected()
+                return bool(getattr(r, "_selected_flag", False))
+
+        def _set_row_selected(r, val):
+            try:
+                r.set_selected(bool(val))
+            except Exception:
+                try:
+                    setattr(r, "_selected_flag", bool(val))
+                except Exception:
+                    pass
+
+        if row is not None:
+            try:
+                idx = self._rows.index(row)
+            except Exception:
+                idx = None
+
+            if idx is not None:
+                if not self._multi_selection:
+                    # single-selection: clear others, select this one
+                    for i, r in enumerate(getattr(self, "_rows", [])):
+                        try:
+                            _set_row_selected(r, i == idx)
+                        except Exception:
+                            pass
+                    if idx < len(self._items):
+                        self._selected_items = [self._items[idx]]
+                else:
+                    # multi-selection: toggle this row selection
+                    try:
+                        cur = _row_is_selected(row)
+                        _set_row_selected(row, not cur)
+                    except Exception:
+                        pass
+                    # rebuild selected list
+                    for i, r in enumerate(getattr(self, "_rows", [])):
+                        try:
+                            if _row_is_selected(r) and i < len(self._items):
+                                self._selected_items.append(self._items[i])
+                        except Exception:
+                            pass
         else:
-            self._value = ""
+            # fallback: scan all rows
+            for i, r in enumerate(getattr(self, "_rows", [])):
+                try:
+                    if _row_is_selected(r) and i < len(self._items):
+                        self._selected_items.append(self._items[i])
+                except Exception:
+                    pass
+
+        # normalize value: first selected label or None
+        if self._selected_items:
+            try:
+                self._value = self._selected_items[0].label()
+            except Exception:
+                self._value = None
+        else:
+            self._value = None
 
         if self.notify():
             dlg = self.findDialog()
