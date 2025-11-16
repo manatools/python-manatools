@@ -951,7 +951,7 @@ class YSelectionBoxGtk(YSelectionWidget):
             # Connect new handler based on mode
             if self._multi_selection:
                 try:
-                    hid = self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))
+                    hid = self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))                    
                     self._signal_handlers['selected-rows-changed'] = hid
                 except Exception:
                     try:
@@ -1079,19 +1079,12 @@ class YSelectionBoxGtk(YSelectionWidget):
             except Exception:
                 pass
 
-            if self._multi_selection:
-                # Prefer a bulk selection-changed signal when available in bindings
-                try:
-                    hid = listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))
-                    self._signal_handlers['selected-rows-changed'] = hid
-                except Exception:
-                    # fallback to row-selected if the other signal isn't available
-                    hid = listbox.connect("row-selected", lambda lb, row: self._on_selected_rows_changed(lb))
-                    self._signal_handlers['row-selected_for_multi'] = hid
-            else:
-                # single selection: react to row-selected and enforce single selection semantics
+            # Use row-selected for both single and multi modes; handler will toggle for multi
+            try:
                 hid = listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
                 self._signal_handlers['row-selected'] = hid
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -1114,23 +1107,35 @@ class YSelectionBoxGtk(YSelectionWidget):
 
     def _on_row_selected(self, listbox, row):
         """
-        Handler for single-selection mode. Ensure only the provided row is selected
-        and update internal state accordingly.
+        Handler for row selection. In single-selection mode behaves as before
+        (select provided row and deselect others). In multi-selection mode toggles
+        the provided row and rebuilds the selected items list.
         """
         try:
-            # If a row was provided, enforce single-selection: deselect others
             if row is not None:
-                for r in getattr(self, "_rows", []):
+                if self._multi_selection:
+                    # toggle selection state for this row
                     try:
-                        r.set_selected(r is row)
-                    except Exception:
-                        # fallback flag
+                        cur = self._row_is_selected(row)
                         try:
-                            setattr(r, "_selected_flag", (r is row))
+                            row.set_selected(not cur)
                         except Exception:
-                            pass
+                            # fallback: store a flag when set_selected isn't available
+                            setattr(row, "_selected_flag", not cur)
+                    except Exception:
+                        pass
+                else:
+                    # single-selection: select provided row and deselect others
+                    for r in getattr(self, "_rows", []):
+                        try:
+                            r.set_selected(r is row)
+                        except Exception:
+                            try:
+                                setattr(r, "_selected_flag", (r is row))
+                            except Exception:
+                                pass
 
-            # rebuild selected_items scanning cached rows (defensive)
+            # rebuild selected_items scanning cached rows (works for both modes)
             self._selected_items = []
             for i, r in enumerate(getattr(self, "_rows", [])):
                 try:
@@ -1161,6 +1166,7 @@ class YSelectionBoxGtk(YSelectionWidget):
             try:
                 # Some bindings may provide get_selected_rows()
                 sel_rows = listbox.get_selected_rows()
+                print(f"Using get_selected_rows() {len(sel_rows)} API")
             except Exception:
                 sel_rows = None
 
