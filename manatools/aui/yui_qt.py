@@ -4,6 +4,7 @@ Qt backend implementation for YUI
 
 import sys
 from PySide6 import QtWidgets, QtCore, QtGui
+import os
 from .yui_common import *
 
 class YUIQt:
@@ -36,7 +37,9 @@ class YApplicationQt:
         self._application_title = "manatools Qt Application"
         self._product_name = "manatools YUI Qt"
         self._icon_base_path = None
-        self._icon = ""        
+        self._icon = ""
+        # cached QIcon resolved from _icon (None if not resolved)
+        self._qt_icon = None
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -66,6 +69,84 @@ class YApplicationQt:
                         main_window.setWindowTitle(title)
                         break
         except Exception:
+            pass
+
+    def _resolve_qicon(self, icon_spec):
+        """Resolve icon_spec (path or theme name) into a QtGui.QIcon or None.
+        If iconBasePath is set, prefer that as absolute path base.
+        """
+        if not icon_spec:
+            return None
+        # if we have a base path and the spec is not absolute, try that first
+        try:
+            if self._icon_base_path:
+                cand = icon_spec
+                if not os.path.isabs(cand):
+                    cand = os.path.join(self._icon_base_path, icon_spec)
+                if os.path.exists(cand):
+                    return QtGui.QIcon(cand)
+            # if icon_spec looks like an absolute path, try it
+            if os.path.isabs(icon_spec) and os.path.exists(icon_spec):
+                return QtGui.QIcon(icon_spec)
+        except Exception:
+            pass
+        # fallback to theme lookup
+        try:
+            theme_icon = QtGui.QIcon.fromTheme(icon_spec)
+            if not theme_icon.isNull():
+                return theme_icon
+        except Exception:
+            pass
+        return None
+
+    def setApplicationIcon(self, Icon):
+        """Set application icon spec (theme name or path). Try to apply it to QApplication and active dialogs.
+
+        If iconBasePath is set, icon is considered relative to that path and will force local file usage.
+        """
+        try:
+            self._icon = Icon
+        except Exception:
+            self._icon = ""
+        # resolve into a QIcon and cache
+        try:
+            self._qt_icon = self._resolve_qicon(self._icon)
+        except Exception:
+            self._qt_icon = None
+
+        # apply to global QApplication
+        try:
+            app = QtWidgets.QApplication.instance()
+            if app and self._qt_icon:
+                try:
+                    app.setWindowIcon(self._qt_icon)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # apply to any open YDialogQt windows (if backend used)
+        try:
+            # avoid importing the whole module if not available
+            from . import yui as yui_mod
+            # try to update dialogs known in YDialogQt._open_dialogs
+            dlg_cls = getattr(yui_mod, "YDialogQt", None)
+            if dlg_cls is None:
+                # fallback to import local symbol if module structure different
+                dlg_cls = globals().get("YDialogQt", None)
+            if dlg_cls is not None:
+                for dlg in getattr(dlg_cls, "_open_dialogs", []) or []:
+                    try:
+                        w = getattr(dlg, "_qwidget", None)
+                        if w and self._qt_icon:
+                            try:
+                                w.setWindowIcon(self._qt_icon)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+        except Exception:
+            # best-effort; ignore failures
             pass
 
     def applicationTitle(self):
@@ -225,11 +306,48 @@ class YDialogQt(YSingleChildContainerWidget):
                 atitle = appobj.applicationTitle()
                 if atitle:
                     title = atitle
+            # try to obtain a resolved QIcon from the application backend if available
+            app_qicon = None
+            if appobj:
+                # prefer cached Qt icon if set by setApplicationIcon
+                app_qicon = getattr(appobj, "_qt_icon", None)
+                # otherwise try to resolve applicationIcon string on the fly
+                if not app_qicon:
+                    try:
+                        icon_spec = appobj.applicationIcon()
+                        if icon_spec:
+                            # use the application's iconBasePath if present
+                            base = getattr(appobj, "_icon_base_path", None)
+                            if base and not os.path.isabs(icon_spec):
+                                p = os.path.join(base, icon_spec)
+                                if os.path.exists(p):
+                                    app_qicon = QtGui.QIcon(p)
+                            if not app_qicon:
+                                q = QtGui.QIcon.fromTheme(icon_spec)
+                                if not q.isNull():
+                                    app_qicon = q
+                    except Exception:
+                        pass
+            # if we have a qicon, set it on the QApplication and the new window
+            if app_qicon:
+                try:
+                    qapp = QtWidgets.QApplication.instance()
+                    if qapp:
+                        qapp.setWindowIcon(app_qicon)
+                except Exception:
+                    pass
+            # store resolved qicon locally to apply to this window
+            _resolved_qicon = app_qicon
         except Exception:
             # ignore and keep default
-            pass
+            _resolved_qicon = None
 
         self._qwidget.setWindowTitle(title)
+        try:
+            if _resolved_qicon:
+                self._qwidget.setWindowIcon(_resolved_qicon)
+        except Exception:
+            pass
         self._qwidget.resize(600, 400)
 
         central_widget = QtWidgets.QWidget()
