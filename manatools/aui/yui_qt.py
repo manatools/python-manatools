@@ -3,7 +3,7 @@ Qt backend implementation for YUI
 """
 
 import sys
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PySide6 import QtWidgets, QtCore, QtGui
 from .yui_common import *
 
 class YUIQt:
@@ -175,9 +175,9 @@ class YDialogQt(YSingleChildContainerWidget):
             
             self._qwidget.show()
             self._is_open = True       
-    
+     
     def isOpen(self):
-        return self._is_open
+         return self._is_open
     
     def destroy(self, doThrow=True):
         if self._qwidget:
@@ -294,7 +294,8 @@ class YDialogQt(YSingleChildContainerWidget):
             timer.timeout.connect(on_timeout)
             timer.start(timeout_millisec)
 
-        loop.exec_()
+        # PySide6 / Qt6 uses exec()
+        loop.exec()
 
         # cleanup
         if timer and timer.isActive():
@@ -461,13 +462,25 @@ class YPushButtonQt(YWidget):
         self._backend_widget = QtWidgets.QPushButton(self._label)
         # Set size policy to prevent unwanted expansion
         try:
-            sp = self._backend_widget.sizePolicy()
-            # Prefer minimal size in both dimensions
-            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Minimum)
-            #sp.setVerticalPolicy(QtWidgets.QSizePolicy.Minimum)
-            self._backend_widget.setSizePolicy(sp)
+            try:
+                sp = self._backend_widget.sizePolicy()
+                # PySide6 may expect enum class; try both styles defensively
+                try:
+                    sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Minimum)
+                except Exception:
+                    try:
+                        sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Minimum)
+                    except Exception:
+                        pass
+                self._backend_widget.setSizePolicy(sp)
+            except Exception:
+                try:
+                    # fallback: set using convenience form (two args)
+                    self._backend_widget.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Preferred)
+                except Exception:
+                    pass
         except Exception:
-            pass
+             pass
         self._backend_widget.clicked.connect(self._on_clicked)
     
     def _on_clicked(self):
@@ -494,7 +507,15 @@ class YCheckBoxQt(YWidget):
     def setValue(self, checked):
         self._is_checked = checked
         if self._backend_widget:
-            self._backend_widget.setChecked(checked)
+            try:
+                # avoid emitting signals while programmatically changing state
+                self._backend_widget.blockSignals(True)
+                self._backend_widget.setChecked(checked)
+            finally:
+                try:
+                    self._backend_widget.blockSignals(False)
+                except Exception:
+                    pass
     
     def label(self):
         return self._label
@@ -507,8 +528,8 @@ class YCheckBoxQt(YWidget):
     def _on_state_changed(self, state):
         # Update internal state
         # state is QtCore.Qt.CheckState (Unchecked=0, PartiallyChecked=1, Checked=2)
-        self._is_checked = (state == QtCore.Qt.Checked)
-        
+        self._is_checked = (QtCore.Qt.CheckState(state) == QtCore.Qt.CheckState.Checked)
+
         if self.notify():
             # Post a YWidgetEvent to the containing dialog
             dlg = self.findDialog()
