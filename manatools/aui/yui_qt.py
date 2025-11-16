@@ -57,7 +57,6 @@ class YApplicationQt:
         try:
             app = QtWidgets.QApplication.instance()
             if app:
-                print(f"YApplicationQt: setting QApplication applicationName to '{title}'")
                 app.setApplicationName(title)
                 top_level_widgets = app.topLevelWidgets()
 
