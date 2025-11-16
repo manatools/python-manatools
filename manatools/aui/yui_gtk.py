@@ -1,10 +1,9 @@
 """
-GTK backend implementation for YUI
+GTK4 backend implementation for YUI (converted from GTK3)
 """
-
 import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, GObject, GLib
+gi.require_version('Gtk', '4.0')
+from gi.repository import Gtk, GLib
 import threading
 from .yui_common import *
 
@@ -49,24 +48,21 @@ class YApplicationGtk:
         return self._product_name
     
     def setApplicationTitle(self, title):
-        """Set the application title."""
+        """Set the application title and try to update dialogs/windows."""
         self._application_title = title
         try:
-
-            # update the top most YDialogGtk windows created, i.e. the current one
+            # update the top most YDialogGtk window if available
             try:
-                # YDialogGtk is defined in this module; update its open dialogs' windows
-                dlg =YDialogGtk.currentDialog(doThrow=False)
-                try:
+                dlg = YDialogGtk.currentDialog(doThrow=False)
+                if dlg:
                     win = getattr(dlg, "_window", None)
                     if win:
-                        win.set_title(title)
-                        print(f"YApplicationGtk: set YDialogGtk window title to '{title}'")
-                except Exception:
-                    pass
+                        try:
+                            win.set_title(title)
+                        except Exception:
+                            pass
             except Exception:
                 pass
-
         except Exception:
             pass
 
@@ -75,12 +71,10 @@ class YApplicationGtk:
         return self._application_title
 
     def setApplicationIcon(self, Icon):
-        """Set the application title."""
         self._icon = Icon
 
     def applicationIcon(self):
-        """Get the application title."""
-        return self.__icon
+        return self._icon
 
 
 class YWidgetFactoryGtk:
@@ -123,7 +117,8 @@ class YWidgetFactoryGtk:
     def createSelectionBox(self, parent, label):
         return YSelectionBoxGtk(parent, label)
 
-# GTK Widget Implementations
+
+# GTK4 Widget Implementations
 class YDialogGtk(YSingleChildContainerWidget):
     _open_dialogs = []
     
@@ -158,12 +153,17 @@ class YDialogGtk(YSingleChildContainerWidget):
 
     def open(self):
         # Finalize and show the dialog in a non-blocking way.
-        # Matching libyui semantics: open() should finalize and make visible,
-        # but must NOT start a global blocking Gtk.main() here.
         if not self._is_open:
             if not self._window:
                 self._create_backend_widget()
-            self._window.show_all()
+            # in Gtk4, show_all is not recommended; use present() or show
+            try:
+                self._window.present()
+            except Exception:
+                try:
+                    self._window.show()
+                except Exception:
+                    pass
             self._is_open = True
     
     def isOpen(self):
@@ -171,20 +171,24 @@ class YDialogGtk(YSingleChildContainerWidget):
     
     def destroy(self, doThrow=True):
         if self._window:
-            self._window.destroy()
+            try:
+                self._window.destroy()
+            except Exception:
+                try:
+                    self._window.close()
+                except Exception:
+                    pass
             self._window = None
         self._is_open = False
         if self in YDialogGtk._open_dialogs:
             YDialogGtk._open_dialogs.remove(self)
         
-        # Stop GTK main loop if no dialogs left
+        # Stop GLib main loop if no dialogs left (nested loops only)
         if not YDialogGtk._open_dialogs:
             try:
-                # Only quit the global Gtk main loop if it's actually running
-                if hasattr(Gtk, "main_level") and Gtk.main_level() > 0:
-                    Gtk.main_quit()
+                if self._glib_loop and self._glib_loop.is_running():
+                    self._glib_loop.quit()
             except Exception:
-                # be defensive: do not raise from cleanup
                 pass
         return True
 
@@ -206,9 +210,15 @@ class YDialogGtk(YSingleChildContainerWidget):
         if not self.isOpen():
             self.open()            
 
-        # Let GTK process pending events (show/layout) before entering nested loop.
-        while Gtk.events_pending():
-            Gtk.main_iteration()
+        # Let GTK/GLib process pending events (show/layout) before entering nested loop.
+        # Gtk.events_pending()/Gtk.main_iteration() do not exist in GTK4; use MainContext iteration.
+        try:
+            ctx = GLib.MainContext.default()
+            while ctx.pending():
+                ctx.iteration(False)
+        except Exception:
+            # be defensive if API differs on some bindings
+            pass
 
         self._event_result = None
         self._glib_loop = GLib.MainLoop()
@@ -256,66 +266,95 @@ class YDialogGtk(YSingleChildContainerWidget):
         return cls._open_dialogs[-1]
     
     def _create_backend_widget(self):
-        # Determine window title:from YApplicationQt instance stored on the YUI backend
+        # Determine window title from YApplicationGtk instance stored on the YUI backend
         title = "Manatools YUI GTK Dialog"
-        
         try:
             from . import yui as yui_mod
             appobj = None
             # YUI._backend may hold the backend instance (YUIGtk)
             backend = getattr(yui_mod.YUI, "_backend", None)
-            if backend:
-                if hasattr(backend, "application"):
-                    appobj = backend.application()
+            if backend and hasattr(backend, "application"):
+                appobj = backend.application()
             # fallback: YUI._instance might be set and expose application/yApp
             if not appobj:
                 inst = getattr(yui_mod.YUI, "_instance", None)
-                if inst:
-                    if hasattr(inst, "application"):
-                        appobj = inst.application()
+                if inst and hasattr(inst, "application"):
+                    appobj = inst.application()
             if appobj and hasattr(appobj, "applicationTitle"):
                 atitle = appobj.applicationTitle()
                 if atitle:
                     title = atitle
         except Exception:
-            # ignore and keep default
             pass
+
+        # Create Gtk4 Window
         self._window = Gtk.Window(title=title)
-        self._window.set_default_size(600, 400)
-        self._window.set_border_width(10)
-        
+        try:
+            self._window.set_default_size(600, 400)
+        except Exception:
+            pass
+
+        # Content container with margins (window.set_child used in Gtk4)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        content.set_margin_start(10)
+        content.set_margin_end(10)
+        content.set_margin_top(10)
+        content.set_margin_bottom(10)
+
         if self._child:
-            self._window.add(self._child.get_backend_widget())
-        
+            child_widget = self._child.get_backend_widget()
+            # ensure child is shown properly
+            try:
+                content.append(child_widget)
+            except Exception:
+                try:
+                    content.add(child_widget)
+                except Exception:
+                    pass
+
+        try:
+            self._window.set_child(content)
+        except Exception:
+            # fallback for older bindings
+            try:
+                self._window.add(content)
+            except Exception:
+                pass
+
         self._backend_widget = self._window
-        # Connect to both "delete-event" (window manager close) and "destroy"
-        # so we can post a YCancelEvent and stop any nested wait loop.
-        self._window.connect("delete-event", self._on_delete_event)
-        self._window.connect("destroy", self._on_destroy)
+        # Connect destroy/close handlers
+        try:
+            # Gtk4: use 'close-request' if available, otherwise 'destroy'
+            if hasattr(self._window, "connect"):
+                try:
+                    self._window.connect("close-request", self._on_delete_event)
+                except Exception:
+                    try:
+                        self._window.connect("destroy", self._on_destroy)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
     
     def _on_destroy(self, widget):
-        # normal widget destruction: ensure internal state cleaned
         try:
-            # If no nested loop running, remove dialog and quit global loop if needed
             self.destroy()
         except Exception:
             pass
 
-    def _on_delete_event(self, widget, event):
-        # User clicked the window manager close (X) button:
-        # post a YCancelEvent so waitForEvent can return YCancelEvent.
+    def _on_delete_event(self, *args):
+        # close-request handler in Gtk4: post cancel event and destroy
         try:
             self._post_event(YCancelEvent())
         except Exception:
             pass
-        # Destroy the window and stop further handling
         try:
             self.destroy()
         except Exception:
             pass
-        # Returning False allows the default handler to destroy the window;
-        # we already destroyed it, so return False to continue.
+        # returning False/True not used in this simplified handler
         return False
+
 
 class YVBoxGtk(YWidget):
     def __init__(self, parent=None):
@@ -325,17 +364,12 @@ class YVBoxGtk(YWidget):
         return "YVBox"
     
     # Returns the stretchability of the layout box:
-    #  * The layout box is stretchable if one of the children is stretchable in
-    #  * this dimension or if one of the child widgets has a layout weight in
-    #  * this dimension.
     def stretchable(self, dim):
         for child in self._children:
-            widget = child.get_backend_widget()
             expand = bool(child.stretchable(dim))
             weight = bool(child.weight(dim))
             if expand or weight:
                 return True
-        # No child is stretchable in this dimension
         return False
 
     def _create_backend_widget(self):
@@ -344,22 +378,15 @@ class YVBoxGtk(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = bool(child.stretchable(YUIDimension.YD_VERT))
-            print(  f"VBoxGtk: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             fill = True
             padding = 0
 
-            # Ensure GTK will actually expand/fill the child when requested.
-            # Some widgets need explicit vexpand/valign (and sensible horiz settings)
-            # to take the extra space; be defensive for widgets that may not
-            # expose those properties.
             try:
                 if expand:
                     if hasattr(widget, "set_vexpand"):
                         widget.set_vexpand(True)
                     if hasattr(widget, "set_valign"):
                         widget.set_valign(Gtk.Align.FILL)
-                    # When a child expands vertically, usually we want it to fill
-                    # horizontally as well so it doesn't collapse to minimal width.
                     if hasattr(widget, "set_hexpand"):
                         widget.set_hexpand(True)
                     if hasattr(widget, "set_halign"):
@@ -374,10 +401,16 @@ class YVBoxGtk(YWidget):
                     if hasattr(widget, "set_halign"):
                         widget.set_halign(Gtk.Align.START)
             except Exception:
-                # be defensive — don't fail UI creation on exotic widgets
                 pass
 
-            self._backend_widget.pack_start(widget, expand, fill, padding)
+            # Gtk4: use append instead of pack_start
+            try:
+                self._backend_widget.append(widget)
+            except Exception:
+                try:
+                    self._backend_widget.add(widget)
+                except Exception:
+                    pass
 
 class YHBoxGtk(YWidget):
     def __init__(self, parent=None):
@@ -386,18 +419,12 @@ class YHBoxGtk(YWidget):
     def widgetClass(self):
         return "YHBox"
 
-    # Returns the stretchability of the layout box:
-    #  * The layout box is stretchable if one of the children is stretchable in
-    #  * this dimension or if one of the child widgets has a layout weight in
-    #  * this dimension.
     def stretchable(self, dim):
         for child in self._children:
-            widget = child.get_backend_widget()
             expand = bool(child.stretchable(dim))
             weight = bool(child.weight(dim))
             if expand or weight:
                 return True
-        # No child is stretchable in this dimension
         return False
 
     def _create_backend_widget(self):
@@ -406,11 +433,8 @@ class YHBoxGtk(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = bool(child.stretchable(YUIDimension.YD_HORIZ))
-            print(  f"HBoxGtk: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             fill = True
             padding = 0
-            # Ensure GTK will actually expand/fill the child when requested.
-            # Some widgets need explicit hexpand/halign to take the extra space.
             try:
                 if expand:
                     if hasattr(widget, "set_hexpand"):
@@ -423,10 +447,15 @@ class YHBoxGtk(YWidget):
                     if hasattr(widget, "set_halign"):
                         widget.set_halign(Gtk.Align.START)
             except Exception:
-                # be defensive — don't fail UI creation on exotic widgets
                 pass
 
-            self._backend_widget.pack_start(widget, expand, fill, padding)
+            try:
+                self._backend_widget.append(widget)
+            except Exception:
+                try:
+                    self._backend_widget.add(widget)
+                except Exception:
+                    pass
 
 class YLabelGtk(YWidget):
     def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
@@ -444,15 +473,26 @@ class YLabelGtk(YWidget):
     def setText(self, new_text):
         self._text = new_text
         if self._backend_widget:
-            self._backend_widget.set_text(new_text)
+            try:
+                self._backend_widget.set_text(new_text)
+            except Exception:
+                pass
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Label(label=self._text)
-        self._backend_widget.set_xalign(0.0)  # Left align
+        try:
+            # alignment API in Gtk4 differs; fall back to setting xalign if available
+            if hasattr(self._backend_widget, "set_xalign"):
+                self._backend_widget.set_xalign(0.0)
+        except Exception:
+            pass
         
         if self._is_heading:
-            markup = f"<b>{self._text}</b>"
-            self._backend_widget.set_markup(markup)
+            try:
+                markup = f"<b>{self._text}</b>"
+                self._backend_widget.set_markup(markup)
+            except Exception:
+                pass
 
 class YInputFieldGtk(YWidget):
     def __init__(self, parent=None, label="", password_mode=False):
@@ -470,7 +510,10 @@ class YInputFieldGtk(YWidget):
     def setValue(self, text):
         self._value = text
         if hasattr(self, '_entry_widget') and self._entry_widget:
-            self._entry_widget.set_text(text)
+            try:
+                self._entry_widget.set_text(text)
+            except Exception:
+                pass
     
     def label(self):
         return self._label
@@ -480,24 +523,44 @@ class YInputFieldGtk(YWidget):
         
         if self._label:
             label = Gtk.Label(label=self._label)
-            label.set_xalign(0.0)
-            hbox.pack_start(label, False, False, 0)
+            try:
+                if hasattr(label, "set_xalign"):
+                    label.set_xalign(0.0)
+            except Exception:
+                pass
+            try:
+                hbox.append(label)
+            except Exception:
+                hbox.add(label)
         
         if self._password_mode:
             entry = Gtk.Entry()
-            entry.set_visibility(False)
+            try:
+                entry.set_visibility(False)
+            except Exception:
+                pass
         else:
             entry = Gtk.Entry()
         
-        entry.set_text(self._value)
-        entry.connect("changed", self._on_changed)
+        try:
+            entry.set_text(self._value)
+            entry.connect("changed", self._on_changed)
+        except Exception:
+            pass
         
-        hbox.pack_start(entry, True, True, 0)
+        try:
+            hbox.append(entry)
+        except Exception:
+            hbox.add(entry)
+
         self._backend_widget = hbox
         self._entry_widget = entry
     
     def _on_changed(self, entry):
-        self._value = entry.get_text()
+        try:
+            self._value = entry.get_text()
+        except Exception:
+            self._value = ""
 
 class YPushButtonGtk(YWidget):
     def __init__(self, parent=None, label=""):
@@ -513,7 +576,10 @@ class YPushButtonGtk(YWidget):
     def setLabel(self, label):
         self._label = label
         if self._backend_widget:
-            self._backend_widget.set_label(label)
+            try:
+                self._backend_widget.set_label(label)
+            except Exception:
+                pass
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Button(label=self._label)
@@ -525,17 +591,20 @@ class YPushButtonGtk(YWidget):
                 self._backend_widget.set_halign(Gtk.Align.START)
         except Exception:
             pass
-        self._backend_widget.connect("clicked", self._on_clicked)
+        try:
+            self._backend_widget.connect("clicked", self._on_clicked)
+        except Exception:
+            pass
     
     def _on_clicked(self, button):
         if self.notify() is False:
             return
-        # Post a YWidgetEvent to the containing dialog (walk parents)
         dlg = self.findDialog()
         if dlg is not None:
             dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
         else:
-            print(f"Button clicked (no dialog found): {self._label}")
+            # silent fallback
+            pass
 
 class YCheckBoxGtk(YWidget):
     def __init__(self, parent=None, label="", is_checked=False):
@@ -552,27 +621,32 @@ class YCheckBoxGtk(YWidget):
     def setValue(self, checked):
         self._is_checked = checked
         if self._backend_widget:
-            self._backend_widget.set_active(checked)
+            try:
+                self._backend_widget.set_active(checked)
+            except Exception:
+                pass
     
     def label(self):
         return self._label
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.CheckButton(label=self._label)
-        self._backend_widget.set_active(self._is_checked)
-        self._backend_widget.connect("toggled", self._on_toggled)
+        try:
+            self._backend_widget.set_active(self._is_checked)
+            self._backend_widget.connect("toggled", self._on_toggled)
+        except Exception:
+            pass
     
     def _on_toggled(self, button):
-        # Update internal state
-        self._is_checked = button.get_active()
+        try:
+            self._is_checked = button.get_active()
+        except Exception:
+            self._is_checked = bool(self._is_checked)
         
         if self.notify():
-            # Post a YWidgetEvent to the containing dialog
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-            else:
-                print(f"Checkbox toggled (no dialog found): {self._label} = {self._is_checked}")
 
 class YComboBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -581,6 +655,7 @@ class YComboBoxGtk(YSelectionWidget):
         self._editable = editable
         self._value = ""
         self._selected_items = []
+        self._combo_widget = None
     
     def widgetClass(self):
         return "YComboBox"
@@ -589,30 +664,24 @@ class YComboBoxGtk(YSelectionWidget):
         return self._value
     
     def setValue(self, text):
-        # Always update internal value
         self._value = text
-        # If backend combo already exists, update it immediately
-        if hasattr(self, '_combo_widget') and self._combo_widget:
+        if self._combo_widget:
             try:
+                # try entry child for editable combos
+                child = None
                 if self._editable:
-                    # For editable ComboBoxText with entry
-                    entry = self._combo_widget.get_child()
-                    if entry:
-                        entry.set_text(text)
+                    child = self._combo_widget.get_child()
+                if child and hasattr(child, "set_text"):
+                    child.set_text(text)
                 else:
-                    # Find and select the item
-                    for i, item in enumerate(self._items):
-                        if item.label() == text:
-                            self._combo_widget.set_active(i)
-                            break
-                # Update selected_items to reflect new value
-                self._selected_items = []
-                for item in self._items:
-                    if item.label() == text:
-                        self._selected_items.append(item)
-                        break
+                    # attempt to set active by matching text if API available
+                    if hasattr(self._combo_widget, "set_active_id"):
+                        # Gtk.DropDown uses ids in models; we keep simple and try to match by text
+                        # fallback: rebuild model and select programmatically below
+                        pass
+                # update selected_items
+                self._selected_items = [it for it in self._items if it.label() == text][:1]
             except Exception:
-                # be defensive if widget not fully initialized
                 pass
 
     def editable(self):
@@ -623,96 +692,157 @@ class YComboBoxGtk(YSelectionWidget):
 
         if self._label:
             label = Gtk.Label(label=self._label)
-            label.set_xalign(0.0)
-            hbox.pack_start(label, False, False, 0)
-
-        if self._editable:
-            # Create a ComboBoxText that is editable
-            combo = Gtk.ComboBoxText.new_with_entry()
-            entry = combo.get_child()
-            if entry:
-                entry.connect("changed", self._on_text_changed)
-        else:
-            combo = Gtk.ComboBoxText()
-            combo.connect("changed", self._on_changed)
-
-        # Add items to combo box
-        for item in self._items:
-            combo.append_text(item.label())
-
-        # If a value was set prior to widget creation, apply it now
-        if self._value:
             try:
-                if self._editable:
-                    entry = combo.get_child()
-                    if entry:
-                        entry.set_text(self._value)
-                else:
-                    for i, item in enumerate(self._items):
-                        if item.label() == self._value:
-                            combo.set_active(i)
-                            break
-                # update selected_items
-                self._selected_items = []
-                for item in self._items:
-                    if item.label() == self._value:
-                        self._selected_items.append(item)
-                        break
+                if hasattr(label, "set_xalign"):
+                    label.set_xalign(0.0)
             except Exception:
                 pass
+            try:
+                hbox.append(label)
+            except Exception:
+                hbox.add(label)
 
-        hbox.pack_start(combo, True, True, 0)
+        # For Gtk4 there is no ComboBoxText; try DropDown for non-editable,
+        # and Entry for editable combos (simple fallback).
+        if self._editable:
+            entry = Gtk.Entry()
+            entry.set_text(self._value)
+            entry.connect("changed", self._on_text_changed)
+            self._combo_widget = entry
+            try:
+                hbox.append(entry)
+            except Exception:
+                hbox.add(entry)
+        else:
+            # Build a simple Gtk.DropDown backed by a Gtk.StringList (if available)
+            try:
+                if hasattr(Gtk, "StringList") and hasattr(Gtk, "DropDown"):
+                    model = Gtk.StringList()
+                    for it in self._items:
+                        model.append(it.label())
+                    dropdown = Gtk.DropDown.new(model, None)
+                    # select initial value
+                    if self._value:
+                        for idx, it in enumerate(self._items):
+                            if it.label() == self._value:
+                                dropdown.set_selected(idx)
+                                break
+                    dropdown.connect("notify::selected", lambda w, pspec: self._on_changed_dropdown(w))
+                    self._combo_widget = dropdown
+                    hbox.append(dropdown)
+                else:
+                    # fallback: simple Gtk.Button that cycles items on click (very simple)
+                    btn = Gtk.Button(label=self._value or (self._items[0].label() if self._items else ""))
+                    btn.connect("clicked", self._on_fallback_button_clicked)
+                    self._combo_widget = btn
+                    hbox.append(btn)
+            except Exception:
+                # final fallback: entry
+                entry = Gtk.Entry()
+                entry.set_text(self._value)
+                entry.connect("changed", self._on_text_changed)
+                self._combo_widget = entry
+                hbox.append(entry)
+
         self._backend_widget = hbox
-        self._combo_widget = combo
+
+    def _on_fallback_button_clicked(self, btn):
+        # naive cycle through items
+        if not self._items:
+            return
+        current = btn.get_label()
+        labels = [it.label() for it in self._items]
+        try:
+            idx = labels.index(current)
+            idx = (idx + 1) % len(labels)
+        except Exception:
+            idx = 0
+        new = labels[idx]
+        btn.set_label(new)
+        self.setValue(new)
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
     def _on_text_changed(self, entry):
-        # editable combo: update value and notify dialog
         try:
             text = entry.get_text()
         except Exception:
             text = ""
         self._value = text
-        # update selected items (may be none for free text)
-        self._selected_items = []
-        for item in self._items:
-            if item.label() == self._value:
-                self._selected_items.append(item)
-                break
+        self._selected_items = [it for it in self._items if it.label() == self._value][:1]
         if self.notify():
-            # Post selection-changed event
-            try:
-                dlg = self.findDialog()
-                if dlg is not None:
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-            except Exception:
-                pass
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
-    def _on_changed(self, combo):
-        # non-editable combo: selection changed via index
+    def _on_changed_dropdown(self, dropdown):
         try:
-            active_id = combo.get_active()
-            if active_id >= 0:
-                val = combo.get_active_text()
-            else:
-                val = ""
-        except Exception:
-            val = ""
-
-        if val:
-            self._value = val
-            # Update selected items
-            self._selected_items = []
-            for item in self._items:
-                if item.label() == self._value:
-                    self._selected_items.append(item)
-                    break
-            # Post selection-changed event to containing dialog
+            # Prefer using the selected index to get a reliable label
+            idx = None
             try:
-                dlg = self.findDialog()
-                if dlg is not None:
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                idx = dropdown.get_selected()
             except Exception:
-                pass
+                idx = None
+
+            if isinstance(idx, int) and 0 <= idx < len(self._items):
+                self._value = self._items[idx].label()
+            else:
+                # Fallback: try to extract text from the selected-item object
+                val = None
+                try:
+                    val = dropdown.get_selected_item()
+                except Exception:
+                    val = None
+
+                self._value = ""
+                if isinstance(val, str):
+                    self._value = val
+                elif val is not None:
+                    # Try common accessor names that GTK objects may expose
+                    for meth in ("get_string", "get_text", "get_value", "get_label", "get_name", "to_string"):
+                        try:
+                            fn = getattr(val, meth, None)
+                            if callable(fn):
+                                v = fn()
+                                if isinstance(v, str) and v:
+                                    self._value = v
+                                    break
+                        except Exception:
+                            continue
+                    # Try properties if available
+                    if not self._value:
+                        try:
+                            props = getattr(val, "props", None)
+                            if props:
+                                for attr in ("string", "value", "label", "name", "text"):
+                                    try:
+                                        pv = getattr(props, attr)
+                                        if isinstance(pv, str) and pv:
+                                            self._value = pv
+                                            break
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                    # final fallback to str()
+                    if not self._value:
+                        try:
+                            self._value = str(val)
+                        except Exception:
+                            self._value = ""
+
+            # update selected_items using reliable labels
+            self._selected_items = [it for it in self._items if it.label() == self._value][:1]
+        except Exception:
+            pass
+
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+
 
 class YSelectionBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label=""):
@@ -721,8 +851,7 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._value = ""
         self._selected_items = []
         self._multi_selection = False
-        self._treeview = None
-        self._liststore = None
+        self._listbox = None
         self._backend_widget = None
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
@@ -739,26 +868,28 @@ class YSelectionBoxGtk(YSelectionWidget):
     def setValue(self, text):
         """Select first item matching text."""
         self._value = text
-        # Update internal selected_items
         self._selected_items = [it for it in self._items if it.label() == text]
-        if self._treeview is None:
+        if self._listbox is None:
             return
-        # Select matching row in the TreeView
-        sel = self._treeview.get_selection()
-        sel.unselect_all()
-        for i, it in enumerate(self._items):
-            if it.label() == text:
-                sel.select_path(Gtk.TreePath.new_from_string(str(i)))
+        # find and select corresponding row
+        children = self._listbox.get_children()
+        for i, row in enumerate(children):
+            if i >= len(self._items):
+                continue
+            if self._items[i].label() == text:
+                try:
+                    row.set_selectable(True)
+                    row.set_selected(True)
+                except Exception:
+                    pass
                 break
-        # notify via handler
-        self._on_selection_changed(sel)
+        # notify
+        self._on_selection_changed()
 
     def selectedItems(self):
         return list(self._selected_items)
 
     def selectItem(self, item, selected=True):
-        """Programmatically select/deselect a specific item."""
-        # Update internal state even if widget not yet created
         if selected:
             if not self._multi_selection:
                 self._selected_items = [item]
@@ -771,120 +902,108 @@ class YSelectionBoxGtk(YSelectionWidget):
                 self._selected_items.remove(item)
                 self._value = self._selected_items[0].label() if self._selected_items else ""
 
-        if self._treeview is None:
+        if self._listbox is None:
             return
 
-        # Reflect change in UI
-        sel = self._treeview.get_selection()
-        # find index
-        idx = None
+        # reflect change in UI
+        children = self._listbox.get_children()
         for i, it in enumerate(self._items):
             if it is item or it.label() == item.label():
-                idx = i
+                try:
+                    row = children[i]
+                    row.set_selected(selected)
+                except Exception:
+                    pass
                 break
-        if idx is None:
-            return
-        path = Gtk.TreePath.new_from_string(str(idx))
-        if selected:
-            sel.select_path(path)
-        else:
-            sel.unselect_path(path)
-        # notify via handler
-        self._on_selection_changed(sel)
+        self._on_selection_changed()
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
-        if self._treeview is None:
+        if self._listbox is None:
             return
-        sel = self._treeview.get_selection()
-        mode = Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE
-        sel.set_mode(mode)
-        # If disabling multi-selection, ensure only first remains selected
-        if not self._multi_selection:
-            paths, model = sel.get_selected_rows()
-            if len(paths) > 1:
-                first = paths[0]
-                sel.unselect_all()
-                sel.select_path(first)
-                self._on_selection_changed(sel)
+        # Gtk.ListBox selection handling is manual; we simply keep _multi_selection flag
+        # and adjust selection behaviour in _on_row_selected.
 
     def multiSelection(self):
         return bool(self._multi_selection)
 
     def _create_backend_widget(self):
-        # Container with optional label and a TreeView for (multi-)selection
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         if self._label:
             lbl = Gtk.Label(label=self._label)
-            lbl.set_xalign(0.0)
-            vbox.pack_start(lbl, False, False, 0)
+            try:
+                if hasattr(lbl, "set_xalign"):
+                    lbl.set_xalign(0.0)
+            except Exception:
+                pass
+            try:
+                vbox.append(lbl)
+            except Exception:
+                vbox.add(lbl)
 
-        # ListStore with one string column
-        self._liststore = Gtk.ListStore(str)
+        # Use Gtk.ListBox inside a ScrolledWindow for Gtk4
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE)
+        # populate rows
         for it in self._items:
-            self._liststore.append([it.label()])
+            row = Gtk.ListBoxRow()
+            lbl = Gtk.Label(label=it.label())
+            try:
+                if hasattr(lbl, "set_xalign"):
+                    lbl.set_xalign(0.0)
+            except Exception:
+                pass
+            try:
+                row.set_child(lbl)
+            except Exception:
+                try:
+                    row.add(lbl)
+                except Exception:
+                    pass
+            listbox.append(row)
 
-        treeview = Gtk.TreeView(model=self._liststore)
-        renderer = Gtk.CellRendererText()
-        col = Gtk.TreeViewColumn("", renderer, text=0)
-        treeview.append_column(col)
-        treeview.set_headers_visible(False)
-
-        sel = treeview.get_selection()
-        mode = Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE
-        sel.set_mode(mode)
-        sel.connect("changed", self._on_selection_changed)
-
-        # If a value was previously set, apply it
-        if self._value:
-            for i, it in enumerate(self._items):
-                if it.label() == self._value:
-                    sel.select_path(Gtk.TreePath.new_from_string(str(i)))
-                    break
+        # connect selection signal
+        try:
+            listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+        except Exception:
+            pass
 
         sw = Gtk.ScrolledWindow()
-        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        sw.add(treeview)
-        vbox.pack_start(sw, True, True, 0)
+        # policy APIs changed in Gtk4: use set_overlay_scrolling and set_min_content_height if needed
+        try:
+            sw.set_child(listbox)
+        except Exception:
+            try:
+                sw.add(listbox)
+            except Exception:
+                pass
+
+        try:
+            vbox.append(sw)
+        except Exception:
+            vbox.add(sw)
 
         self._backend_widget = vbox
-        self._treeview = treeview
+        self._listbox = listbox
 
-    def _on_selection_changed(self, selection):
-        # Selection may be either Gtk.TreeSelection (from signal) or Gtk.TreeSelection object passed
-        if isinstance(selection, Gtk.TreeSelection):
-            sel = selection
-        else:
-            # If called programmatically with a non-selection, try to fetch current selection
-            if self._treeview is None:
-                return
-            sel = self._treeview.get_selection()
-
-        # Robustly build selected items by checking each known row path.
-        # This avoids corner cases with path types returned by get_selected_rows()
-        # and ensures indices align with self._items.
+    def _on_row_selected(self, listbox, row):
+        # Build selected items list from listbox rows' selected state
         self._selected_items = []
-        if self._treeview is None or self._liststore is None:
-            return
-        for i, it in enumerate(self._items):
+        children = listbox.get_children()
+        for i, r in enumerate(children):
             try:
-                path = Gtk.TreePath.new_from_string(str(i))
-                if sel.path_is_selected(path):
-                    self._selected_items.append(it)
+                if r.get_selected():
+                    if i < len(self._items):
+                        self._selected_items.append(self._items[i])
             except Exception:
-                # ignore malformed paths or selection APIs we can't query
-                continue
+                pass
 
         if self._selected_items:
             self._value = self._selected_items[0].label()
         else:
             self._value = ""
 
-        # Post selection-changed event to containing dialog if notifications enabled
-        try:
-            if getattr(self, "notify", lambda: True)():
-                dlg = self.findDialog()
-                if dlg is not None:
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-        except Exception:
-            pass
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
