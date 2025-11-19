@@ -222,6 +222,28 @@ class YWidgetFactoryGtk:
     def createSelectionBox(self, parent, label):
         return YSelectionBoxGtk(parent, label)
 
+    # Alignment helpers
+    def createLeft(self, parent):
+        return YAlignmentGtk(parent, horAlign="Left",  vertAlign=None)
+
+    def createRight(self, parent):
+        return YAlignmentGtk(parent, horAlign="Right", vertAlign=None)
+
+    def createTop(self, parent):
+        return YAlignmentGtk(parent, horAlign=None,   vertAlign="Top")
+
+    def createBottom(self, parent):
+        return YAlignmentGtk(parent, horAlign=None,   vertAlign="Bottom")
+
+    def createHCenter(self, parent):
+        return YAlignmentGtk(parent, horAlign="HCenter", vertAlign=None)
+
+    def createVCenter(self, parent):
+        return YAlignmentGtk(parent, horAlign=None,      vertAlign="VCenter")
+
+    def createHVCenter(self, parent):
+        return YAlignmentGtk(parent, horAlign="HCenter", vertAlign="VCenter")
+
 
 # GTK4 Widget Implementations
 class YDialogGtk(YSingleChildContainerWidget):
@@ -1345,3 +1367,137 @@ class YSelectionBoxGtk(YSelectionWidget):
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+class YAlignmentGtk(YSingleChildContainerWidget):
+    """
+    Single-child container that aligns its child using Gtk.Align.
+    Works reliably inside HBox/VBox: right/center expand horizontally to push content.
+    """
+    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+        super().__init__(parent)
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+        self._backend_widget = None
+
+    def widgetClass(self):
+        return "YAlignment"
+
+    def _to_gtk_align(self, spec, axis="h"):
+        # Accept strings ("Left","Right","HCenter","Top","Bottom","VCenter","HVCenter")
+        if spec is None:
+            return None
+        try:
+            s = str(getattr(spec, "name", spec)).lower()
+        except Exception:
+            s = str(spec).lower()
+        if axis == "h":
+            if s in ("left", "begin", "start"):
+                return Gtk.Align.START
+            if s in ("right", "end"):
+                return Gtk.Align.END
+            if s in ("hcenter", "center", "centre", "hvcenter"):
+                return Gtk.Align.CENTER
+        else:
+            if s in ("top", "begin", "start"):
+                return Gtk.Align.START
+            if s in ("bottom", "end"):
+                return Gtk.Align.END
+            if s in ("vcenter", "center", "centre", "hvcenter"):
+                return Gtk.Align.CENTER
+        if s == "fill":
+            return Gtk.Align.FILL
+        return None
+
+    def stretchable(self, dim):
+        # Expand horizontally when Right/HCenter/HVCenter; vertically for VCenter/HVCenter
+        if dim == YUIDimension.YD_HORIZ:
+            return str(self._halign_spec).lower() in ("right", "hcenter", "hvcenter")
+        if dim == YUIDimension.YD_VERT:
+            return str(self._valign_spec).lower() in ("vcenter", "hvcenter")
+        return False
+
+    def setAlignment(self, horAlign=None, vertAlign=None):
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+        # Re-apply if backend exists
+        if self._backend_widget and self._child:
+            try:
+                cw = self._child.get_backend_widget()
+                hal = self._to_gtk_align(self._halign_spec, "h")
+                val = self._to_gtk_align(self._valign_spec, "v")
+                if hal is not None and hasattr(cw, "set_halign"):
+                    cw.set_halign(hal)
+                if val is not None and hasattr(cw, "set_valign"):
+                    cw.set_valign(val)
+            except Exception:
+                pass
+
+    def addChild(self, child):
+        try:
+            super().addChild(child)
+        except Exception:
+            self._child = child
+        # If backend already created, attach immediately
+        if self._backend_widget:
+            self._attach_child_backend()
+
+    def setChild(self, child):
+        try:
+            super().setChild(child)
+        except Exception:
+            self._child = child
+        if self._backend_widget:
+            self._attach_child_backend()
+
+    def _attach_child_backend(self):
+        if not self._child or not self._backend_widget:
+            return
+        try:
+            for ch in list(getattr(self._backend_widget, "get_children", lambda: [])()) or []:
+                # clean previous child if re-attaching
+                try:
+                    self._backend_widget.remove(ch)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            cw = self._child.get_backend_widget()
+            if cw:
+                # apply alignment to child
+                hal = self._to_gtk_align(self._halign_spec, "h")
+                val = self._to_gtk_align(self._valign_spec, "v")
+                try:
+                    print(f"YAlignmentGtk: attaching child {self._child.widgetClass()} with halign={hal}, valign={val}")
+                    if hal is not None and hasattr(cw, "set_halign"):
+                        print("YAlignmentGtk: setting child halign")
+                        cw.set_halign(hal)
+                    if val is not None and hasattr(cw, "set_valign"):
+                        print("YAlignmentGtk: setting child valign")
+                        cw.set_valign(val)
+                except Exception:
+                    print("YAlignmentGtk: failed to set child alignment")
+                    pass
+                try:
+                    self._backend_widget.append(cw)
+                except Exception:
+                    self._backend_widget.add(cw)
+        except Exception:
+            pass
+
+    def _create_backend_widget(self):
+        # Wrapper box; expansion hints depend on target alignment
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        try:
+            box.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            box.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            # fill along expanding axis
+            if hasattr(box, "set_halign"):
+                box.set_halign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_HORIZ) else Gtk.Align.START)
+            if hasattr(box, "set_valign"):
+                box.set_valign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_VERT) else Gtk.Align.START)
+        except Exception:
+            pass
+        self._backend_widget = box
+        # attach child if already present
+        if getattr(self, "_child", None):
+            self._attach_child_backend()
