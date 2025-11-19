@@ -207,6 +207,28 @@ class YWidgetFactoryQt:
     def createComboBox(self, parent, label, editable=False):
         return YComboBoxQt(parent, label, editable)
 
+    # Alignment helpers
+    def createLeft(self, parent):
+        return YAlignmentQt(parent, horAlign="Left",  vertAlign=None)
+
+    def createRight(self, parent):
+        return YAlignmentQt(parent, horAlign="Right", vertAlign=None)
+
+    def createTop(self, parent):
+        return YAlignmentQt(parent, horAlign=None,   vertAlign="Top")
+
+    def createBottom(self, parent):
+        return YAlignmentQt(parent, horAlign=None,   vertAlign="Bottom")
+
+    def createHCenter(self, parent):
+        return YAlignmentQt(parent, horAlign="HCenter", vertAlign=None)
+
+    def createVCenter(self, parent):
+        return YAlignmentQt(parent, horAlign=None,      vertAlign="VCenter")
+
+    def createHVCenter(self, parent):
+        return YAlignmentQt(parent, horAlign="HCenter", vertAlign="VCenter")
+
 # Qt Widget Implementations
 class YDialogQt(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -851,3 +873,130 @@ class YSelectionBoxQt(YSelectionWidget):
                         dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
             except Exception:
                 pass
+
+class YAlignmentQt(YSingleChildContainerWidget):
+    """
+    Single-child alignment container for Qt6. Uses a QWidget + QGridLayout,
+    applying Qt.Alignment flags to the child. The container expands along
+    axes needed by Right/HCenter/VCenter/HVCenter to allow alignment.
+    """
+    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+        super().__init__(parent)
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+        self._backend_widget = None
+        self._layout = None
+
+    def widgetClass(self):
+        return "YAlignment"
+
+    def _to_qt_align(self, spec, axis="h"):
+        if spec is None:
+            return None
+        s = str(getattr(spec, "name", spec)).lower()
+        if axis == "h":
+            if s in ("left", "begin", "start"):
+                return QtCore.Qt.AlignmentFlag.AlignLeft
+            if s in ("right", "end"):
+                return QtCore.Qt.AlignmentFlag.AlignRight
+            if s in ("hcenter", "center", "centre", "hvcenter"):
+                return QtCore.Qt.AlignmentFlag.AlignHCenter
+        else:
+            if s in ("top", "begin", "start"):
+                return QtCore.Qt.AlignmentFlag.AlignTop
+            if s in ("bottom", "end"):
+                return QtCore.Qt.AlignmentFlag.AlignBottom
+            if s in ("vcenter", "center", "centre", "hvcenter"):
+                return QtCore.Qt.AlignmentFlag.AlignVCenter
+        return None
+
+    def stretchable(self, dim):
+        if dim == YUIDimension.YD_HORIZ:
+            return str(self._halign_spec).lower() in ("right", "hcenter", "hvcenter")
+        if dim == YUIDimension.YD_VERT:
+            return str(self._valign_spec).lower() in ("vcenter", "hvcenter")
+        return False
+
+    def setAlignment(self, horAlign=None, vertAlign=None):
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+        self._reapply_alignment()
+
+    def _reapply_alignment(self):
+        if not (self._layout and self._child):
+            return
+        try:
+            w = self._child.get_backend_widget()
+            if w:
+                self._layout.removeWidget(w)
+                flags = QtCore.Qt.AlignmentFlag(0)
+                ha = self._to_qt_align(self._halign_spec, "h")
+                va = self._to_qt_align(self._valign_spec, "v")
+                if ha:
+                    flags |= ha
+                if va:
+                    flags |= va
+                self._layout.addWidget(w, 0, 0, flags)
+        except Exception:
+            pass
+
+    def addChild(self, child):
+        try:
+            super().addChild(child)
+        except Exception:
+            self._child = child
+        if self._backend_widget:
+            self._attach_child_backend()
+
+    def setChild(self, child):
+        try:
+            super().setChild(child)
+        except Exception:
+            self._child = child
+        if self._backend_widget:
+            self._attach_child_backend()
+
+    def _attach_child_backend(self):
+        if not (self._backend_widget and self._layout and self._child):
+            return
+        try:
+            w = self._child.get_backend_widget()
+            if w:
+                # clear previous
+                try:
+                    self._layout.removeWidget(w)
+                except Exception:
+                    pass
+                flags = QtCore.Qt.AlignmentFlag(0)
+                ha = self._to_qt_align(self._halign_spec, "h")
+                va = self._to_qt_align(self._valign_spec, "v")
+                if ha:
+                    flags |= ha
+                if va:
+                    flags |= va
+                self._layout.addWidget(w, 0, 0, flags)
+        except Exception:
+            pass
+
+    def _create_backend_widget(self):
+        container = QtWidgets.QWidget()
+        grid = QtWidgets.QGridLayout(container)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(0)
+
+        # Size policy: expand along axes needed for alignment to work
+        sp = container.sizePolicy()
+        try:
+            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ)
+                                   else QtWidgets.QSizePolicy.Policy.Preferred)
+            sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT)
+                                 else QtWidgets.QSizePolicy.Policy.Preferred)
+        except Exception:
+            pass
+        container.setSizePolicy(sp)
+
+        self._backend_widget = container
+        self._layout = grid
+
+        if getattr(self, "_child", None):
+            self._attach_child_backend()
