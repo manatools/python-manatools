@@ -167,6 +167,28 @@ class YWidgetFactoryCurses:
     def createSelectionBox(self, parent, label):
         return YSelectionBoxCurses(parent, label)
 
+    # Alignment helpers
+    def createLeft(self, parent):
+        return YAlignmentCurses(parent, horAlign="Left",  vertAlign=None)
+
+    def createRight(self, parent):
+        return YAlignmentCurses(parent, horAlign="Right", vertAlign=None)
+
+    def createTop(self, parent):
+        return YAlignmentCurses(parent, horAlign=None,   vertAlign="Top")
+
+    def createBottom(self, parent):
+        return YAlignmentCurses(parent, horAlign=None,   vertAlign="Bottom")
+
+    def createHCenter(self, parent):
+        return YAlignmentCurses(parent, horAlign="HCenter", vertAlign=None)
+
+    def createVCenter(self, parent):
+        return YAlignmentCurses(parent, horAlign=None,      vertAlign="VCenter")
+
+    def createHVCenter(self, parent):
+        return YAlignmentCurses(parent, horAlign="HCenter", vertAlign="VCenter")
+
 
 # Curses Widget Implementations
 class YDialogCurses(YSingleChildContainerWidget):
@@ -1340,3 +1362,85 @@ class YSelectionBoxCurses(YSelectionWidget):
             handled = False
 
         return handled
+
+class YAlignmentCurses(YSingleChildContainerWidget):
+    """
+    Single-child alignment container for ncurses. It becomes stretchable on the
+    requested axes, and positions the child inside its draw area accordingly.
+    """
+    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+        super().__init__(parent)
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+        self._backend_widget = None  # not used by curses
+        self._height = 1
+
+    def widgetClass(self):
+        return "YAlignment"
+
+    def stretchable(self, dim):
+        if dim == YUIDimension.YD_HORIZ:
+            return str(self._halign_spec).lower() in ("right", "hcenter", "hvcenter")
+        if dim == YUIDimension.YD_VERT:
+            return str(self._valign_spec).lower() in ("vcenter", "hvcenter")
+        return False
+
+    def setAlignment(self, horAlign=None, vertAlign=None):
+        self._halign_spec = horAlign
+        self._valign_spec = vertAlign
+
+    def addChild(self, child):
+        try:
+            super().addChild(child)
+        except Exception:
+            self._child = child
+
+    def setChild(self, child):
+        try:
+            super().setChild(child)
+        except Exception:
+            self._child = child
+
+    def _create_backend_widget(self):
+        self._backend_widget = None
+        self._height = max(1, getattr(self._child, "_height", 1) if self._child else 1)
+
+    def _child_min_width(self, child, max_width):
+        # Heuristic minimal width similar to YHBoxCurses
+        try:
+            cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
+            if cls in ("YLabel", "YPushButton", "YCheckBox"):
+                text = getattr(child, "_text", None)
+                if text is None:
+                    text = getattr(child, "_label", "")
+                pad = 4 if cls == "YPushButton" else 0
+                return min(max_width, max(1, len(str(text)) + pad))
+        except Exception:
+            pass
+        return max(1, min(10, max_width))
+
+    def _draw(self, window, y, x, width, height):
+        if not self._child or not hasattr(self._child, "_draw"):
+            return
+        try:
+            # width to give to the child: minimal needed (so it can be pushed)
+            ch_min_w = self._child_min_width(self._child, width)
+            # Horizontal position
+            hs = str(self._halign_spec).lower() if self._halign_spec else "left"
+            if hs in ("right",):
+                cx = x + max(0, width - ch_min_w)
+            elif hs in ("hcenter", "center", "centre", "hvcenter"):
+                cx = x + max(0, (width - ch_min_w) // 2)
+            else:
+                cx = x
+            # Vertical position (single line widgets mostly)
+            vs = str(self._valign_spec).lower() if self._valign_spec else "top"
+            if vs in ("vcenter", "center", "centre", "hvcenter"):
+                cy = y + max(0, (height - 1) // 2)
+            elif vs in ("bottom", "end"):
+                cy = y + max(0, height - 1)
+            else:
+                cy = y
+            self._child._draw(window, cy, cx, min(ch_min_w, max(1, width)), min(height, getattr(self._child, "_height", 1)))
+        except Exception:
+            pass
