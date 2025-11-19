@@ -1394,12 +1394,38 @@ class YAlignmentCurses(YSingleChildContainerWidget):
             super().addChild(child)
         except Exception:
             self._child = child
+        # Ensure child is visible to traversal (dialog looks at widget._children)
+        try:
+            if not hasattr(self, "_children") or self._children is None:
+                self._children = []
+            if child not in self._children:
+                self._children.append(child)
+            # keep parent pointer consistent
+            try:
+                setattr(child, "_parent", self)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def setChild(self, child):
         try:
             super().setChild(child)
         except Exception:
             self._child = child
+        # Mirror to _children so focus traversal finds it
+        try:
+            if not hasattr(self, "_children") or self._children is None:
+                self._children = []
+            # replace existing children with this single child to avoid stale entries
+            if self._children != [child]:
+                self._children = [child]
+            try:
+                setattr(child, "_parent", self)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def _create_backend_widget(self):
         self._backend_widget = None
