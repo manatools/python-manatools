@@ -1438,33 +1438,6 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.END
         return None
 
-
-    #def _to_gtk_align(self, spec, axis="h"):
-    #    """Convert a spec (string/enum) to Gtk.Align or None."""
-    #    if spec is None:
-    #        return None
-    #    try:
-    #        s = str(getattr(spec, "name", spec)).lower()
-    #    except Exception:
-    #        s = str(spec).lower()
-    #    if axis == "h":
-    #        if "left" in s or s in ("start", "begin"):
-    #            return Gtk.Align.START
-    #        if "right" in s or "end" in s:
-    #            return Gtk.Align.END
-    #        if "center" in s or "hcenter" in s or "hvcenter" in s:
-    #            return Gtk.Align.CENTER
-    #    else:
-    #        if "top" in s or s in ("start", "begin"):
-    #            return Gtk.Align.START
-    #        if "bottom" in s or "end" in s:
-    #            return Gtk.Align.END
-    #        if "center" in s or "vcenter" in s or "hvcenter" in s:
-    #            return Gtk.Align.CENTER
-    #    if "fill" in s or "expand" in s:
-    #        return Gtk.Align.FILL
-    #    return None
-
     def stretchable(self, dim):
         """Report whether this alignment should expand in given dimension.
 
