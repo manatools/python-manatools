@@ -222,25 +222,29 @@ class YWidgetFactoryGtk:
 
     # Alignment helpers
     def createLeft(self, parent):
-        return YAlignmentGtk(parent, horAlign="Left",  vertAlign=None)
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignBegin,  vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createRight(self, parent):
-        return YAlignmentGtk(parent, horAlign="Right", vertAlign=None)
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignEnd, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createTop(self, parent):
-        return YAlignmentGtk(parent, horAlign=None,   vertAlign="Top")
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignBegin)
 
     def createBottom(self, parent):
-        return YAlignmentGtk(parent, horAlign=None,   vertAlign="Bottom")
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignEnd)
 
     def createHCenter(self, parent):
-        return YAlignmentGtk(parent, horAlign="HCenter", vertAlign=None)
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createVCenter(self, parent):
-        return YAlignmentGtk(parent, horAlign=None,      vertAlign="VCenter")
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignUnchanged,      vertAlign=YAlignmentType.YAlignCenter)
 
     def createHVCenter(self, parent):
-        return YAlignmentGtk(parent, horAlign="HCenter", vertAlign="VCenter")
+        return YAlignmentGtk(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignCenter)
+
+    def createAlignment(self, parent, horAlignment: YAlignmentType, vertAlignment: YAlignmentType):
+        """Create a generic YAlignment using YAlignmentType enums (or compatible specs)."""
+        return YAlignmentGtk(parent, horAlign=horAlignment, vertAlign=vertAlignment)
 
 
 # GTK4 Widget Implementations
@@ -1397,7 +1401,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     - Defers attaching the child if its backend is not yet created (GLib.idle_add).
     - Supports an optional repeating background pixbuf painted in the draw signal.
     """
-    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+    def __init__(self, parent=None, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         super().__init__(parent)
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
@@ -1412,31 +1416,54 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YAlignment"
 
-    def _to_gtk_align(self, spec, axis="h"):
-        """Convert a spec (string/enum) to Gtk.Align or None."""
-        if spec is None:
-            return None
-        try:
-            s = str(getattr(spec, "name", spec)).lower()
-        except Exception:
-            s = str(spec).lower()
-        if axis == "h":
-            if "left" in s or s in ("start", "begin"):
+    def _to_gtk_halign(self):
+        """Convert Horizontal YAlignmentType to Gtk.Align or None."""        
+        if self._halign_spec:
+            if self._halign_spec == YAlignmentType.YAlignBegin:
                 return Gtk.Align.START
-            if "right" in s or "end" in s:
-                return Gtk.Align.END
-            if "center" in s or "hcenter" in s or "hvcenter" in s:
+            if self._halign_spec == YAlignmentType.YAlignCenter:
                 return Gtk.Align.CENTER
-        else:
-            if "top" in s or s in ("start", "begin"):
-                return Gtk.Align.START
-            if "bottom" in s or "end" in s:
+            if self._halign_spec == YAlignmentType.YAlignEnd:
                 return Gtk.Align.END
-            if "center" in s or "vcenter" in s or "hvcenter" in s:
-                return Gtk.Align.CENTER
-        if "fill" in s or "expand" in s:
-            return Gtk.Align.FILL
         return None
+    
+    def _to_gtk_valign(self):
+        """Convert Vertical YAlignmentType to Gtk.Align or None."""        
+        if self._valign_spec:
+            if self._valign_spec == YAlignmentType.YAlignBegin:
+                return Gtk.Align.START
+            if self._valign_spec == YAlignmentType.YAlignCenter:
+                return Gtk.Align.CENTER
+            if self._valign_spec == YAlignmentType.YAlignEnd:
+                return Gtk.Align.END
+        return None
+
+
+    #def _to_gtk_align(self, spec, axis="h"):
+    #    """Convert a spec (string/enum) to Gtk.Align or None."""
+    #    if spec is None:
+    #        return None
+    #    try:
+    #        s = str(getattr(spec, "name", spec)).lower()
+    #    except Exception:
+    #        s = str(spec).lower()
+    #    if axis == "h":
+    #        if "left" in s or s in ("start", "begin"):
+    #            return Gtk.Align.START
+    #        if "right" in s or "end" in s:
+    #            return Gtk.Align.END
+    #        if "center" in s or "hcenter" in s or "hvcenter" in s:
+    #            return Gtk.Align.CENTER
+    #    else:
+    #        if "top" in s or s in ("start", "begin"):
+    #            return Gtk.Align.START
+    #        if "bottom" in s or "end" in s:
+    #            return Gtk.Align.END
+    #        if "center" in s or "vcenter" in s or "hvcenter" in s:
+    #            return Gtk.Align.CENTER
+    #    if "fill" in s or "expand" in s:
+    #        return Gtk.Align.FILL
+    #    return None
 
     def stretchable(self, dim):
         """Report whether this alignment should expand in given dimension.
@@ -1445,11 +1472,11 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         """
         try:
             if dim == YUIDimension.YD_HORIZ:
-                align = self._to_gtk_align(self._halign_spec, "h")
-                return align in (Gtk.Align.CENTER, Gtk.Align.END)
+                align = self._to_gtk_halign()
+                return align in (Gtk.Align.CENTER, Gtk.Align.END) #TODO: verify
             if dim == YUIDimension.YD_VERT:
-                align = self._to_gtk_align(self._valign_spec, "v")
-                return align in (Gtk.Align.CENTER, Gtk.Align.END)
+                align = self._to_gtk_valign()
+                return align in (Gtk.Align.CENTER, Gtk.Align.END) #TODO: verify
         except Exception:
             pass
         return False
@@ -1564,8 +1591,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             return
 
         # convert specs -> Gtk.Align
-        hal = self._to_gtk_align(self._halign_spec, "h")
-        val = self._to_gtk_align(self._valign_spec, "v")
+        hal = self._to_gtk_halign()
+        val = self._to_gtk_valign()
 
         # Apply alignment and expansion hints to child
         try:
