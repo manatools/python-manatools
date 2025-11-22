@@ -6,8 +6,7 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-def test_hello_world(backend_name=None):
-    """Test simple dialog with hello world"""
+def test_Alignment(backend_name=None):
     if backend_name:
         print(f"Setting backend to: {backend_name}")
         os.environ['YUI_BACKEND'] = backend_name
@@ -66,12 +65,12 @@ def test_hello_world(backend_name=None):
 
         
     except Exception as e:
-        print(f"Error testing ComboBox with backend {backend_name}: {e}")
+        print(f"Error testing Alignment with backend {backend_name}: {e}")
         import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        test_hello_world(sys.argv[1])
+        test_Alignment(sys.argv[1])
     else:
-        test_hello_world()
+        test_Alignment()
