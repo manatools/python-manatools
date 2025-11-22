@@ -169,26 +169,29 @@ class YWidgetFactoryCurses:
 
     # Alignment helpers
     def createLeft(self, parent):
-        return YAlignmentCurses(parent, horAlign="Left",  vertAlign=None)
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignBegin,  vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createRight(self, parent):
-        return YAlignmentCurses(parent, horAlign="Right", vertAlign=None)
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignEnd, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createTop(self, parent):
-        return YAlignmentCurses(parent, horAlign=None,   vertAlign="Top")
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignBegin)
 
     def createBottom(self, parent):
-        return YAlignmentCurses(parent, horAlign=None,   vertAlign="Bottom")
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignEnd)
 
     def createHCenter(self, parent):
-        return YAlignmentCurses(parent, horAlign="HCenter", vertAlign=None)
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createVCenter(self, parent):
-        return YAlignmentCurses(parent, horAlign=None,      vertAlign="VCenter")
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignUnchanged,      vertAlign=YAlignmentType.YAlignCenter)
 
     def createHVCenter(self, parent):
-        return YAlignmentCurses(parent, horAlign="HCenter", vertAlign="VCenter")
+        return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignCenter)
 
+    def createAlignment(self, parent, horAlignment: YAlignmentType, vertAlignment: YAlignmentType):
+        """Create a generic YAlignment using YAlignmentType enums (or compatible specs)."""
+        return YAlignmentCurses(parent, horAlign=horAlignment, vertAlign=vertAlignment)
 
 # Curses Widget Implementations
 class YDialogCurses(YSingleChildContainerWidget):
@@ -829,7 +832,7 @@ class YPushButtonCurses(YWidget):
     def _draw(self, window, y, x, width, height):
         try:
             # Center the button label within available width
-            button_text = f" {self._label} "
+            button_text = f"[ {self._label} ]"
             text_x = x + max(0, (width - len(button_text)) // 2)
             
             # Only draw if we have enough space
@@ -1368,7 +1371,7 @@ class YAlignmentCurses(YSingleChildContainerWidget):
     Single-child alignment container for ncurses. It becomes stretchable on the
     requested axes, and positions the child inside its draw area accordingly.
     """
-    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+    def __init__(self, parent=None, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         super().__init__(parent)
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
@@ -1378,16 +1381,18 @@ class YAlignmentCurses(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YAlignment"
 
-    def stretchable(self, dim):
-        if dim == YUIDimension.YD_HORIZ:
-            return str(self._halign_spec).lower() in ("right", "hcenter", "hvcenter")
-        if dim == YUIDimension.YD_VERT:
-            return str(self._valign_spec).lower() in ("vcenter", "hvcenter")
+    def stretchable(self, dim: YUIDimension):
+        ''' Returns the stretchability of the layout box:
+          * The layout box is stretchable if the child is stretchable in
+          * this dimension or if the child widget has a layout weight in
+          * this dimension.
+        '''
+        if self._child:
+            expand = bool(self._child.stretchable(dim))
+            weight = bool(self._child.weight(dim))
+            if expand or weight:
+                return True
         return False
-
-    def setAlignment(self, horAlign=None, vertAlign=None):
-        self._halign_spec = horAlign
-        self._valign_spec = vertAlign
 
     def addChild(self, child):
         try:
@@ -1432,7 +1437,7 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         self._height = max(1, getattr(self._child, "_height", 1) if self._child else 1)
 
     def _child_min_width(self, child, max_width):
-        # Heuristic minimal width similar to YHBoxCurses
+        # Heuristic minimal width similar to YHBoxCurses TODO: verify with widget information instead of hardcoded classes
         try:
             cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
             if cls in ("YLabel", "YPushButton", "YCheckBox"):
@@ -1452,18 +1457,16 @@ class YAlignmentCurses(YSingleChildContainerWidget):
             # width to give to the child: minimal needed (so it can be pushed)
             ch_min_w = self._child_min_width(self._child, width)
             # Horizontal position
-            hs = str(self._halign_spec).lower() if self._halign_spec else "left"
-            if hs in ("right",):
+            if self._halign_spec == YAlignmentType.YAlignEnd:
                 cx = x + max(0, width - ch_min_w)
-            elif hs in ("hcenter", "center", "centre", "hvcenter"):
+            elif self._halign_spec == YAlignmentType.YAlignCenter:
                 cx = x + max(0, (width - ch_min_w) // 2)
             else:
                 cx = x
             # Vertical position (single line widgets mostly)
-            vs = str(self._valign_spec).lower() if self._valign_spec else "top"
-            if vs in ("vcenter", "center", "centre", "hvcenter"):
+            if self._valign_spec == YAlignmentType.YAlignCenter:
                 cy = y + max(0, (height - 1) // 2)
-            elif vs in ("bottom", "end"):
+            elif self._valign_spec == YAlignmentType.YAlignEnd:
                 cy = y + max(0, height - 1)
             else:
                 cy = y
