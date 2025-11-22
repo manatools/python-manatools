@@ -478,6 +478,24 @@ class YVBoxQt(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
+
+            # If the child requests horizontal stretch, set its QSizePolicy to Expanding
+            try:
+                if expand == 1:
+                    sp = widget.sizePolicy()
+                    try:
+                        sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                    except Exception:
+                        try:
+                            sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
+                        except Exception:
+                            pass
+                    widget.setSizePolicy(sp)
+            except Exception:
+                pass
+
+
+
             print(  f"YVBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
@@ -511,6 +529,21 @@ class YHBoxQt(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             expand = 1 if child.stretchable(YUIDimension.YD_HORIZ) else 0
+
+            # If the child requests horizontal stretch, set its QSizePolicy to Expanding
+            try:
+                if expand == 1:
+                    sp = widget.sizePolicy()
+                    try:
+                        sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                    except Exception:
+                        try:
+                            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+                        except Exception:
+                            pass
+                    widget.setSizePolicy(sp)
+            except Exception:
+                pass
             print(  f"YHBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
@@ -920,17 +953,30 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
     def stretchable(self, dim: YUIDimension):
         ''' Returns the stretchability of the layout box:
-          * The layout box is stretchable if the child is stretchable in
-          * this dimension or if the child widget has a layout weight in
-          * this dimension.
+          * The layout box is stretchable if the alignment spec requests expansion
+          * (Right/HCenter/HVCenter for horizontal, VCenter/HVCenter for vertical)
+          * OR if the child itself requests stretchability or has a layout weight.
         '''
-        if self._child:
-            widget = self._child.get_backend_widget()
-            expand = bool(self._child.stretchable(dim))
-            weight = bool(self._child.weight(dim))
-            if expand or weight:
-                return True
+        # Expand if alignment spec requests it
+        try:
+            if dim == YUIDimension.YD_HORIZ:
+                if self._halign_spec in (YAlignmentType.YAlignEnd, YAlignmentType.YAlignCenter):
+                    return True
+            if dim == YUIDimension.YD_VERT:
+                if self._valign_spec in (YAlignmentType.YAlignCenter,):
+                    return True
+        except Exception:
+            pass
 
+        # Otherwise honor child's own stretchability/weight
+        try:
+            if self._child:
+                expand = bool(self._child.stretchable(dim))
+                weight = bool(self._child.weight(dim))
+                if expand or weight:
+                    return True
+        except Exception:
+            pass
         return False
 
     def setAlignment(self, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
@@ -990,6 +1036,31 @@ class YAlignmentQt(YSingleChildContainerWidget):
                     flags |= ha
                 if va:
                     flags |= va
+                # If the child requests horizontal stretch, set its QSizePolicy to Expanding
+                try:
+                    if self._child and self._child.stretchable(YUIDimension.YD_HORIZ):
+                        sp = w.sizePolicy()
+                        try:
+                            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                        except Exception:
+                            try:
+                                sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+                            except Exception:
+                                pass
+                        w.setSizePolicy(sp)
+                    # If child requests vertical stretch, set vertical policy
+                    if self._child and self._child.stretchable(YUIDimension.YD_VERT):
+                        sp = w.sizePolicy()
+                        try:
+                            sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                        except Exception:
+                            try:
+                                sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
+                            except Exception:
+                                pass
+                        w.setSizePolicy(sp)
+                except Exception:
+                    pass
                 self._layout.addWidget(w, 0, 0, flags)
         except Exception:
             pass
