@@ -1371,25 +1371,6 @@ class YSelectionBoxGtk(YSelectionWidget):
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
-import cairo
-
-# patch_alignment_fix.py
-
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
-import cairo
-
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
-import cairo
 
 class YAlignmentGtk(YSingleChildContainerWidget):
     """
@@ -1438,20 +1419,33 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.END
         return None
 
-    def stretchable(self, dim):
-        """Report whether this alignment should expand in given dimension.
+    #def stretchable(self, dim):
+    #    """Report whether this alignment should expand in given dimension.
+    #
+    #    Parents (HBox/VBox) use this to distribute space.
+    #    """
+    #    try:
+    #        if dim == YUIDimension.YD_HORIZ:
+    #            align = self._to_gtk_halign()
+    #            return align in (Gtk.Align.CENTER, Gtk.Align.END) #TODO: verify
+    #        if dim == YUIDimension.YD_VERT:
+    #            align = self._to_gtk_valign()
+    #            return align == Gtk.Align.CENTER #TODO: verify
+    #    except Exception:
+    #        pass
+    #    return False
 
-        Parents (HBox/VBox) use this to distribute space.
-        """
-        try:
-            if dim == YUIDimension.YD_HORIZ:
-                align = self._to_gtk_halign()
-                return align in (Gtk.Align.CENTER, Gtk.Align.END) #TODO: verify
-            if dim == YUIDimension.YD_VERT:
-                align = self._to_gtk_valign()
-                return align in (Gtk.Align.CENTER, Gtk.Align.END) #TODO: verify
-        except Exception:
-            pass
+    def stretchable(self, dim: YUIDimension):
+        ''' Returns the stretchability of the layout box:
+          * The layout box is stretchable if the child is stretchable in
+          * this dimension or if the child widget has a layout weight in
+          * this dimension.
+        '''
+        if self._child:
+            expand = bool(self._child.stretchable(dim))
+            weight = bool(self._child.weight(dim))
+            if expand or weight:
+                return True
         return False
 
     def setBackgroundPixmap(self, filename):
