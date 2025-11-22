@@ -208,26 +208,31 @@ class YWidgetFactoryQt:
         return YComboBoxQt(parent, label, editable)
 
     # Alignment helpers
+    # Alignment helpers
     def createLeft(self, parent):
-        return YAlignmentQt(parent, horAlign="Left",  vertAlign=None)
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignBegin,  vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createRight(self, parent):
-        return YAlignmentQt(parent, horAlign="Right", vertAlign=None)
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignEnd, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createTop(self, parent):
-        return YAlignmentQt(parent, horAlign=None,   vertAlign="Top")
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignBegin)
 
     def createBottom(self, parent):
-        return YAlignmentQt(parent, horAlign=None,   vertAlign="Bottom")
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignUnchanged,   vertAlign=YAlignmentType.YAlignEnd)
 
     def createHCenter(self, parent):
-        return YAlignmentQt(parent, horAlign="HCenter", vertAlign=None)
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignUnchanged)
 
     def createVCenter(self, parent):
-        return YAlignmentQt(parent, horAlign=None,      vertAlign="VCenter")
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignUnchanged,      vertAlign=YAlignmentType.YAlignCenter)
 
     def createHVCenter(self, parent):
-        return YAlignmentQt(parent, horAlign="HCenter", vertAlign="VCenter")
+        return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignCenter, vertAlign=YAlignmentType.YAlignCenter)
+
+    def createAlignment(self, parent, horAlignment: YAlignmentType, vertAlignment: YAlignmentType):
+        """Create a generic YAlignment using YAlignmentType enums (or compatible specs)."""
+        return YAlignmentQt(parent, horAlign=horAlignment, vertAlign=vertAlignment)
 
 # Qt Widget Implementations
 class YDialogQt(YSingleChildContainerWidget):
@@ -880,7 +885,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
     applying Qt.Alignment flags to the child. The container expands along
     axes needed by Right/HCenter/VCenter/HVCenter to allow alignment.
     """
-    def __init__(self, parent=None, horAlign=None, vertAlign=None):
+    def __init__(self, parent=None, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         super().__init__(parent)
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
@@ -890,34 +895,45 @@ class YAlignmentQt(YSingleChildContainerWidget):
     def widgetClass(self):
         return "YAlignment"
 
-    def _to_qt_align(self, spec, axis="h"):
-        if spec is None:
-            return None
-        s = str(getattr(spec, "name", spec)).lower()
-        if axis == "h":
-            if s in ("left", "begin", "start"):
+    def _to_qt_halign(self):
+        """Convert Horizontal YAlignmentType to QtCore.Qt.AlignmentFlag or None."""        
+        if self._halign_spec:
+            if self._halign_spec == YAlignmentType.YAlignBegin:
                 return QtCore.Qt.AlignmentFlag.AlignLeft
-            if s in ("right", "end"):
-                return QtCore.Qt.AlignmentFlag.AlignRight
-            if s in ("hcenter", "center", "centre", "hvcenter"):
+            if self._halign_spec == YAlignmentType.YAlignCenter:
                 return QtCore.Qt.AlignmentFlag.AlignHCenter
-        else:
-            if s in ("top", "begin", "start"):
+            if self._halign_spec == YAlignmentType.YAlignEnd:
+                return QtCore.Qt.AlignmentFlag.AlignRight
+        return None
+    
+    def _to_qt_valign(self):
+        """Convert Vertical YAlignmentType to QtCore.Qt.AlignmentFlag or None."""        
+        if self._valign_spec:
+            if self._valign_spec == YAlignmentType.YAlignBegin:
                 return QtCore.Qt.AlignmentFlag.AlignTop
-            if s in ("bottom", "end"):
-                return QtCore.Qt.AlignmentFlag.AlignBottom
-            if s in ("vcenter", "center", "centre", "hvcenter"):
+            if self._valign_spec == YAlignmentType.YAlignCenter:
                 return QtCore.Qt.AlignmentFlag.AlignVCenter
+            if self._valign_spec == YAlignmentType.YAlignEnd:
+                return QtCore.Qt.AlignmentFlag.AlignBottom
         return None
 
-    def stretchable(self, dim):
-        if dim == YUIDimension.YD_HORIZ:
-            return str(self._halign_spec).lower() in ("right", "hcenter", "hvcenter")
-        if dim == YUIDimension.YD_VERT:
-            return str(self._valign_spec).lower() in ("vcenter", "hvcenter")
+
+    def stretchable(self, dim: YUIDimension):
+        ''' Returns the stretchability of the layout box:
+          * The layout box is stretchable if the child is stretchable in
+          * this dimension or if the child widget has a layout weight in
+          * this dimension.
+        '''
+        if self._child:
+            widget = self._child.get_backend_widget()
+            expand = bool(self._child.stretchable(dim))
+            weight = bool(self._child.weight(dim))
+            if expand or weight:
+                return True
+
         return False
 
-    def setAlignment(self, horAlign=None, vertAlign=None):
+    def setAlignment(self, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._reapply_alignment()
@@ -930,8 +946,8 @@ class YAlignmentQt(YSingleChildContainerWidget):
             if w:
                 self._layout.removeWidget(w)
                 flags = QtCore.Qt.AlignmentFlag(0)
-                ha = self._to_qt_align(self._halign_spec, "h")
-                va = self._to_qt_align(self._valign_spec, "v")
+                ha = self._to_qt_halign()
+                va = self._to_qt_valign()
                 if ha:
                     flags |= ha
                 if va:
@@ -968,8 +984,8 @@ class YAlignmentQt(YSingleChildContainerWidget):
                 except Exception:
                     pass
                 flags = QtCore.Qt.AlignmentFlag(0)
-                ha = self._to_qt_align(self._halign_spec, "h")
-                va = self._to_qt_align(self._valign_spec, "v")
+                ha = self._to_qt_halign()
+                va = self._to_qt_valign()
                 if ha:
                     flags |= ha
                 if va:
@@ -986,11 +1002,11 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
         # Size policy: expand along axes needed for alignment to work
         sp = container.sizePolicy()
-        try:
+        try: 
             sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ)
-                                   else QtWidgets.QSizePolicy.Policy.Preferred)
+                                   else QtWidgets.QSizePolicy.Policy.Fixed)
             sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT)
-                                 else QtWidgets.QSizePolicy.Policy.Preferred)
+                                 else QtWidgets.QSizePolicy.Policy.Fixed)
         except Exception:
             pass
         container.setSizePolicy(sp)
