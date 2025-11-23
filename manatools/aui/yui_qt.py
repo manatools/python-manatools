@@ -387,6 +387,32 @@ class YDialogQt(YSingleChildContainerWidget):
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
     
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the dialog window and propagate to logical child widgets."""
+        try:
+            if getattr(self, "_qwidget", None) is not None:
+                try:
+                    self._qwidget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # propagate logical enabled state to contained YWidget(s)
+        try:
+            if getattr(self, "_child", None):
+                try:
+                    self._child.setEnabled(enabled)
+                except Exception:
+                    pass
+            else:
+                for c in list(getattr(self, "_children", []) or []):
+                    try:
+                        c.setEnabled(enabled)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     def _on_close_event(self, event):
         # Post a cancel event so waitForEvent returns a YCancelEvent when the user
         # closes the window with the window manager 'X' button.
@@ -499,6 +525,25 @@ class YVBoxQt(YWidget):
             print(  f"YVBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the VBox container and propagate to children."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YHBoxQt(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -547,6 +592,25 @@ class YHBoxQt(YWidget):
             print(  f"YHBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the HBox container and propagate to children."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YLabelQt(YWidget):
     def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
         super().__init__(parent)
@@ -572,6 +636,17 @@ class YLabelQt(YWidget):
             font.setBold(True)
             font.setPointSize(font.pointSize() + 2)
             self._backend_widget.setFont(font)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the QLabel backend."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 class YInputFieldQt(YWidget):
     def __init__(self, parent=None, label="", password_mode=False):
@@ -615,7 +690,26 @@ class YInputFieldQt(YWidget):
         
         self._backend_widget = container
         self._entry_widget = entry
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the input field: entry and container."""
+        try:
+            if getattr(self, "_entry_widget", None) is not None:
+                try:
+                    self._entry_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _on_text_changed(self, text):
         self._value = text
 
@@ -659,7 +753,18 @@ class YPushButtonQt(YWidget):
         except Exception:
              pass
         self._backend_widget.clicked.connect(self._on_clicked)
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the QPushButton backend."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _on_clicked(self):
         # Post a YWidgetEvent to the containing dialog (walk parents)
         dlg = self.findDialog()
@@ -701,7 +806,18 @@ class YCheckBoxQt(YWidget):
         self._backend_widget = QtWidgets.QCheckBox(self._label)
         self._backend_widget.setChecked(self._is_checked)
         self._backend_widget.stateChanged.connect(self._on_state_changed)
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the QCheckBox backend."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _on_state_changed(self, state):
         # Update internal state
         # state is QtCore.Qt.CheckState (Unchecked=0, PartiallyChecked=1, Checked=2)
@@ -773,7 +889,26 @@ class YComboBoxQt(YSelectionWidget):
         
         self._backend_widget = container
         self._combo_widget = combo
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the combobox and its container."""
+        try:
+            if getattr(self, "_combo_widget", None) is not None:
+                try:
+                    self._combo_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _on_text_changed(self, text):
         self._value = text
         # Update selected items
@@ -887,7 +1022,26 @@ class YSelectionBoxQt(YSelectionWidget):
         
         self._backend_widget = container
         self._list_widget = list_widget
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the selection box and its list widget; propagate where applicable."""
+        try:
+            if getattr(self, "_list_widget", None) is not None:
+                try:
+                    self._list_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _on_selection_changed(self):
         """Handle selection change in the list widget"""
         if hasattr(self, '_list_widget') and self._list_widget:
@@ -1087,3 +1241,27 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
         if getattr(self, "_child", None):
             self._attach_child_backend()
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the alignment container and propagate to its logical child."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # propagate to logical child
+        try:
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            if child is not None:
+                try:
+                    child.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
