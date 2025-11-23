@@ -197,9 +197,17 @@ class YWidget:
         return parent
 
     def setEnabled(self, enabled=True):
+        '''
+           Enable or disable the widget. i.e. make it accept or reject user input.
+           Derived backend classes must implement _set_backend_enabled to apply 
+           the change to the actual backend widget.
+        '''
         self._enabled = enabled
         if self._backend_widget:
             self._set_backend_enabled(enabled)
+    
+    def setDisabled(self):
+        self.setEnabled(False)
     
     def isEnabled(self):
         return self._enabled
