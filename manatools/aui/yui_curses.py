@@ -276,6 +276,32 @@ class YDialogCurses(YSingleChildContainerWidget):
         # Use the main screen
         self._backend_widget = curses.newwin(0, 0, 0, 0)
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the dialog and propagate to contained widgets."""
+        try:
+            # propagate logical enabled state to entire subtree
+            if getattr(self, "_child", None):
+                try:
+                    self._child.setEnabled(enabled)
+                except Exception:
+                    # fallback: traverse _children if present
+                    pass
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+            # If disabling and dialog had focused widget, clear focus
+            if not enabled:
+                try:
+                    if getattr(self, "_focused_widget", None):
+                        self._focused_widget._focused = False
+                        self._focused_widget = None
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _draw_dialog(self):
         """Draw the entire dialog (called by event loop)"""
         if not hasattr(self, '_backend_widget') or not self._backend_widget:
@@ -533,7 +559,18 @@ class YVBoxCurses(YWidget):
 
     def _create_backend_widget(self):
         self._backend_widget = None
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable VBox and propagate to logical children."""
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         # Calculate total fixed height and number of stretchable children
         fixed_height = 0
@@ -582,6 +619,17 @@ class YHBoxCurses(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable HBox and propagate to logical children."""
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # Returns the stretchability of the layout box:
     #  * The layout box is stretchable if one of the children is stretchable in
@@ -691,7 +739,16 @@ class YLabelCurses(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable label: labels are not focusable; just keep enabled state for drawing."""
+        try:
+            # labels don't accept focus; nothing to change except state used by draw
+            # draw() will consult self._enabled from base class
+            pass
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         try:
             attr = 0
@@ -730,7 +787,32 @@ class YInputFieldCurses(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the input field: affect focusability and focused state."""
+        try:
+            # Save/restore _can_focus when toggling
+            if not hasattr(self, "_saved_can_focus"):
+                self._saved_can_focus = getattr(self, "_can_focus", True)
+            if not enabled:
+                # disable focusable behavior
+                try:
+                    self._saved_can_focus = self._can_focus
+                except Exception:
+                    self._saved_can_focus = False
+                self._can_focus = False
+                # if currently focused, remove focus
+                if getattr(self, "_focused", False):
+                    self._focused = False
+            else:
+                # restore previous focusability
+                try:
+                    self._can_focus = bool(getattr(self, "_saved_can_focus", True))
+                except Exception:
+                    self._can_focus = True
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         try:
             # Draw label
@@ -828,7 +910,28 @@ class YPushButtonCurses(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable push button: update focusability and collapse focus if disabling."""
+        try:
+            if not hasattr(self, "_saved_can_focus"):
+                self._saved_can_focus = getattr(self, "_can_focus", True)
+            if not enabled:
+                try:
+                    self._saved_can_focus = self._can_focus
+                except Exception:
+                    self._saved_can_focus = True
+                self._can_focus = False
+                if getattr(self, "_focused", False):
+                    self._focused = False
+            else:
+                try:
+                    self._can_focus = bool(getattr(self, "_saved_can_focus", True))
+                except Exception:
+                    self._can_focus = True
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         try:
             # Center the button label within available width
@@ -885,7 +988,28 @@ class YCheckBoxCurses(YWidget):
     def _create_backend_widget(self):
         # In curses, there's no actual backend widget, just internal state
         pass
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable checkbox: update focusability and collapse focus if disabling."""
+        try:
+            if not hasattr(self, "_saved_can_focus"):
+                self._saved_can_focus = getattr(self, "_can_focus", True)
+            if not enabled:
+                try:
+                    self._saved_can_focus = self._can_focus
+                except Exception:
+                    self._saved_can_focus = True
+                self._can_focus = False
+                if getattr(self, "_focused", False):
+                    self._focused = False
+            else:
+                try:
+                    self._can_focus = bool(getattr(self, "_saved_can_focus", True))
+                except Exception:
+                    self._can_focus = True
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         """Draw the checkbox with its label"""
         try:
@@ -963,7 +1087,34 @@ class YComboBoxCurses(YSelectionWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = None
-    
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable combobox: affect focusability, expanded state and focused state."""
+        try:
+            if not hasattr(self, "_saved_can_focus"):
+                self._saved_can_focus = getattr(self, "_can_focus", True)
+            if not enabled:
+                try:
+                    self._saved_can_focus = self._can_focus
+                except Exception:
+                    self._saved_can_focus = True
+                self._can_focus = False
+                # collapse expanded dropdown if any
+                try:
+                    if getattr(self, "_expanded", False):
+                        self._expanded = False
+                except Exception:
+                    pass
+                if getattr(self, "_focused", False):
+                    self._focused = False
+            else:
+                try:
+                    self._can_focus = bool(getattr(self, "_saved_can_focus", True))
+                except Exception:
+                    self._can_focus = True
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         # Store position and dimensions for dropdown drawing
         self._combo_y = y
@@ -1252,6 +1403,37 @@ class YSelectionBoxCurses(YSelectionWidget):
         # reset the cached visible rows so future navigation uses the next draw's value
         self._current_visible_rows = None
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable selection box: affect focusability and propagate to row items."""
+        try:
+            if not hasattr(self, "_saved_can_focus"):
+                self._saved_can_focus = getattr(self, "_can_focus", True)
+            if not enabled:
+                try:
+                    self._saved_can_focus = self._can_focus
+                except Exception:
+                    self._saved_can_focus = True
+                self._can_focus = False
+                if getattr(self, "_focused", False):
+                    self._focused = False
+            else:
+                try:
+                    self._can_focus = bool(getattr(self, "_saved_can_focus", True))
+                except Exception:
+                    self._can_focus = True
+            # propagate logical enabled state to contained items (if they are YWidget)
+            try:
+                for it in list(getattr(self, "_items", []) or []):
+                    if hasattr(it, "setEnabled"):
+                        try:
+                            it.setEnabled(enabled)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _draw(self, window, y, x, width, height):
         """Draw label (optional) and visible portion of items."""
         try:
@@ -1435,6 +1617,23 @@ class YAlignmentCurses(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         self._backend_widget = None
         self._height = max(1, getattr(self._child, "_height", 1) if self._child else 1)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable alignment container and propagate to its logical child."""
+        try:
+            # propagate to logical child so it updates its own focusability/state
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            if child is not None and hasattr(child, "setEnabled"):
+                try:
+                    child.setEnabled(enabled)
+                except Exception:
+                    pass
+            # nothing else to do for curses backend (no real widget object)
+        except Exception:
+            pass
 
     def _child_min_width(self, child, max_width):
         # Heuristic minimal width similar to YHBoxCurses TODO: verify with widget information instead of hardcoded classes
