@@ -513,6 +513,32 @@ class YDialogGtk(YSingleChildContainerWidget):
         # returning False/True not used in this simplified handler
         return False
 
+    def setVisible(self, visible):
+        """Set widget visibility."""
+        if self._backend_widget:
+            try:
+                self._backend_widget.set_visible(visible)
+            except Exception:
+                pass
+        super().setVisible(visible)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the dialog window backend."""
+        try:
+            if self._window is not None:
+                try:
+                    self._window.set_sensitive(enabled)
+                except Exception:
+                    # fallback: propagate to child content
+                    try:
+                        child = getattr(self, "_window", None)
+                        if child and hasattr(child, "set_sensitive"):
+                            child.set_sensitive(enabled)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
 
 class YVBoxGtk(YWidget):
     def __init__(self, parent=None):
@@ -570,6 +596,26 @@ class YVBoxGtk(YWidget):
                 except Exception:
                     pass
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the VBox and propagate to children."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # propagate logical enabled state to child widgets so they update their backends
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YHBoxGtk(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -616,6 +662,25 @@ class YHBoxGtk(YWidget):
                 except Exception:
                     pass
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the HBox and propagate to children."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YLabelGtk(YWidget):
     def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
         super().__init__(parent)
@@ -652,6 +717,17 @@ class YLabelGtk(YWidget):
                 self._backend_widget.set_markup(markup)
             except Exception:
                 pass
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the label widget backend."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 class YInputFieldGtk(YWidget):
     def __init__(self, parent=None, label="", password_mode=False):
@@ -721,6 +797,25 @@ class YInputFieldGtk(YWidget):
         except Exception:
             self._value = ""
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the input field (entry and container)."""
+        try:
+            if getattr(self, "_entry_widget", None) is not None:
+                try:
+                    self._entry_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YPushButtonGtk(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
@@ -765,6 +860,17 @@ class YPushButtonGtk(YWidget):
             # silent fallback
             pass
 
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the push button backend."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
 class YCheckBoxGtk(YWidget):
     def __init__(self, parent=None, label="", is_checked=False):
         super().__init__(parent)
@@ -806,6 +912,17 @@ class YCheckBoxGtk(YWidget):
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the check button backend."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 class YComboBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -904,6 +1021,27 @@ class YComboBoxGtk(YSelectionWidget):
                 hbox.append(entry)
 
         self._backend_widget = hbox
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the combobox/backing widget and its entry/dropdown."""
+        try:
+            # prefer to enable the primary control if present
+            ctl = getattr(self, "_combo_widget", None)
+            if ctl is not None:
+                try:
+                    ctl.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _on_fallback_button_clicked(self, btn):
         # naive cycle through items
@@ -1249,6 +1387,34 @@ class YSelectionBoxGtk(YSelectionWidget):
 
         self._backend_widget = vbox
         self._listbox = listbox
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the selection box and its listbox/rows."""
+        try:
+            if getattr(self, "_listbox", None) is not None:
+                try:
+                    self._listbox.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # propagate logical enabled state to child items/widgets
+        try:
+            for c in list(getattr(self, "_rows", []) or []):
+                try:
+                    c.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _row_is_selected(self, r):
         """Robust helper to detect whether a ListBoxRow is selected."""
@@ -1682,5 +1848,32 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     def setVisible(self, visible):
         """Set widget visibility."""
         if self._backend_widget:
-            self._backend_widget.set_visible(visible)
+            try:
+                self._backend_widget.set_visible(visible)
+            except Exception:
+                pass
         super().setVisible(visible)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the alignment container and its child (if any)."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # propagate to logical child so child's backend updates too
+        try:
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            if child is not None:
+                try:
+                    child.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
