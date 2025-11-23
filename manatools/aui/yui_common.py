@@ -136,6 +136,8 @@ class YWidget:
         self._stretchable_vert = False
         self._weight_horiz = 0
         self._weight_vert = 0
+        # NOTE: Notify property should be False for back compatibility, 
+        # but backends has been implemented as True
         self._notify = True
         self._auto_shortcut = False
         self._function_key = 0
