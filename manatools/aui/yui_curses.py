@@ -279,12 +279,12 @@ class YDialogCurses(YSingleChildContainerWidget):
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog and propagate to contained widgets."""
         try:
-            # propagate logical enabled state to entire subtree
+            # propagate logical enabled state to entire subtree using setEnabled on children
+            # so each widget's hook executes and updates its state.
             if getattr(self, "_child", None):
                 try:
                     self._child.setEnabled(enabled)
                 except Exception:
-                    # fallback: traverse _children if present
                     pass
             for c in list(getattr(self, "_children", []) or []):
                 try:
@@ -299,6 +299,11 @@ class YDialogCurses(YSingleChildContainerWidget):
                         self._focused_widget = None
                 except Exception:
                     pass
+            # Force a redraw so disabled/enabled visual state appears immediately
+            try:
+                self._last_draw_time = 0
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -753,10 +758,13 @@ class YLabelCurses(YWidget):
         try:
             attr = 0
             if self._is_heading:
-                attr = curses.A_BOLD
-            
+                attr |= curses.A_BOLD
+            # dim if disabled
+            if not self.isEnabled():
+                attr |= curses.A_DIM
+
             # Truncate text to fit available width
-            display_text = self._text[:width-1]
+            display_text = self._text[:max(0, width-1)]
             window.addstr(y, x, display_text, attr)
         except curses.error:
             pass
@@ -820,20 +828,22 @@ class YInputFieldCurses(YWidget):
                 label_text = self._label
                 if len(label_text) > width // 3:
                     label_text = label_text[:width // 3]
-                window.addstr(y, x, label_text)
+                lbl_attr = curses.A_BOLD if self._is_heading else curses.A_NORMAL
+                if not self.isEnabled():
+                    lbl_attr |= curses.A_DIM
+                window.addstr(y, x, label_text, lbl_attr)
                 x += len(label_text) + 1
                 width -= len(label_text) + 1
-            
-            # Calculate available space for input
+
             if width <= 0:
                 return
-            
+
             # Prepare display value
             if self._password_mode and self._value:
                 display_value = '*' * len(self._value)
             else:
                 display_value = self._value
-            
+
             # Handle scrolling for long values
             if len(display_value) > width:
                 if self._cursor_pos >= width:
@@ -841,27 +851,30 @@ class YInputFieldCurses(YWidget):
                     display_value = display_value[start_pos:start_pos + width]
                 else:
                     display_value = display_value[:width]
-            
+
             # Draw input field background
+            if not self.isEnabled():
+                attr = curses.A_DIM
+            else:
+                attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+
             field_bg = ' ' * width
-            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
             window.addstr(y, x, field_bg, attr)
-            
+
             # Draw text
             if display_value:
                 window.addstr(y, x, display_value, attr)
-            
-            # Show cursor if focused
-            if self._focused:
+
+            # Show cursor if focused and enabled
+            if self._focused and self.isEnabled():
                 cursor_display_pos = min(self._cursor_pos, width - 1)
                 if cursor_display_pos < len(display_value):
                     window.chgat(y, x + cursor_display_pos, 1, curses.A_REVERSE | curses.A_BOLD)
-                    
         except curses.error:
             pass
-    
+
     def _handle_key(self, key):
-        if not self._focused:
+        if not self._focused or not self.isEnabled():
             return False
             
         handled = True
@@ -937,22 +950,24 @@ class YPushButtonCurses(YWidget):
             # Center the button label within available width
             button_text = f"[ {self._label} ]"
             text_x = x + max(0, (width - len(button_text)) // 2)
-            
+
             # Only draw if we have enough space
             if text_x + len(button_text) <= x + width:
-                attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
-                if self._focused:
-                    attr |= curses.A_BOLD
-                
+                if not self.isEnabled():
+                    attr = curses.A_DIM
+                else:
+                    attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+                    if self._focused:
+                        attr |= curses.A_BOLD
+
                 window.addstr(y, text_x, button_text, attr)
         except curses.error:
-            # Ignore drawing errors (out of bounds)
             pass
-    
+
     def _handle_key(self, key):
-        if not self._focused:
+        if not self._focused or not self.isEnabled():
             return False
-            
+
         if key == ord('\n') or key == ord(' '):
             # Button pressed -> post widget event to containing dialog
             dlg = self.findDialog()
@@ -961,7 +976,7 @@ class YPushButtonCurses(YWidget):
                     dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
                 except Exception:
                     pass
-            return True        
+            return True
         return False
 
 class YCheckBoxCurses(YWidget):
@@ -1011,29 +1026,33 @@ class YCheckBoxCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
-        """Draw the checkbox with its label"""
         try:
-            # Draw checkbox symbol: [X] or [ ]
             checkbox_symbol = "[X]" if self._is_checked else "[ ]"
             text = f"{checkbox_symbol} {self._label}"
-            
-            # Truncate if too wide
             if len(text) > width:
-                text = text[:width-3] + "..."
-            
-            # Draw with highlighting if focused
-            if self._focused:
+                text = text[:max(0, width - 3)] + "..."
+
+            if self._focused and self.isEnabled():
                 window.attron(curses.A_REVERSE)
-            
+            elif not self.isEnabled():
+                # indicate disabled with dim attribute
+                window.attron(curses.A_DIM)
+
             window.addstr(y, x, text)
-            
-            if self._focused:
+
+            if self._focused and self.isEnabled():
                 window.attroff(curses.A_REVERSE)
+            elif not self.isEnabled():
+                try:
+                    window.attroff(curses.A_DIM)
+                except Exception:
+                    pass
         except curses.error:
             pass
-    
+
     def _handle_key(self, key):
-        """Handle keyboard input for checkbox (Space to toggle)"""
+        if not self.isEnabled():
+            return False
         # Space or Enter to toggle
         if key in (ord(' '), ord('\n'), curses.KEY_ENTER):
             self._toggle()
@@ -1120,49 +1139,54 @@ class YComboBoxCurses(YSelectionWidget):
         self._combo_y = y
         self._combo_x = x
         self._combo_width = width
-        
+
         try:
             # Calculate available space for combo box
             label_space = len(self._label) + 1 if self._label else 0
             combo_space = width - label_space
-            
-            if combo_space <= 3:  # Need at least space for " ▼ "
+
+            if combo_space <= 3:
                 return
-            
+
             # Draw label
             if self._label:
                 label_text = self._label
                 if len(label_text) > label_space - 1:
                     label_text = label_text[:label_space - 1]
-                window.addstr(y, x, label_text)
+                lbl_attr = curses.A_NORMAL
+                if not self.isEnabled():
+                    lbl_attr |= curses.A_DIM
+                window.addstr(y, x, label_text, lbl_attr)
                 x += len(label_text) + 1
-            
-            # Prepare display value - always show current value
+
+            # Prepare display value
             display_value = self._value if self._value else "Select..."
-            max_display_width = combo_space - 3  # Reserve space for " ▼ "
+            max_display_width = combo_space - 3
             if len(display_value) > max_display_width:
                 display_value = display_value[:max_display_width] + "..."
-            
+
             # Draw combo box background
+            if not self.isEnabled():
+                attr = curses.A_DIM
+            else:
+                attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+
             combo_bg = " " * combo_space
-            attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
             window.addstr(y, x, combo_bg, attr)
-            
-            # Draw combo box content
+
             combo_text = f" {display_value} ▼"
             if len(combo_text) > combo_space:
                 combo_text = combo_text[:combo_space]
-            
+
             window.addstr(y, x, combo_text, attr)
-            
-            # Draw expanded list if active
-            if self._expanded:
+
+            # Draw expanded list if active and enabled
+            if self._expanded and self.isEnabled():
                 self._draw_expanded_list(window)
-            
         except curses.error:
-            # Ignore drawing errors
             pass
 
+    
     def _draw_expanded_list(self, window):
         """Draw the expanded dropdown list at correct position"""
         if not self._expanded or not self._items:
@@ -1222,9 +1246,8 @@ class YComboBoxCurses(YSelectionWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused:
-            return False
-            
+        if not self._focused or not self.isEnabled():
+            return False           
         handled = True
         
         # If currently expanded, give expanded-list handling priority so Enter
@@ -1435,29 +1458,28 @@ class YSelectionBoxCurses(YSelectionWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
-        """Draw label (optional) and visible portion of items."""
         try:
             line = y
             # draw label if present
             if self._label:
                 lbl = self._label
+                lbl_attr = curses.A_BOLD
+                if not self.isEnabled():
+                    lbl_attr |= curses.A_DIM
                 try:
-                    window.addstr(line, x, lbl[:width], curses.A_BOLD)
+                    window.addstr(line, x, lbl[:width], lbl_attr)
                 except curses.error:
                     pass
                 line += 1
 
             visible = self._visible_row_count()
-            # compute how many rows we can actually draw given provided height.
             available_rows = max(0, height - (1 if self._label else 0))
             if self.stretchable(YUIDimension.YD_VERT):
-                # If widget is stretchable vertically, use all available rows (up to number of items)
                 visible = min(len(self._items), available_rows)
             else:
-                # Otherwise prefer configured height but don't exceed available rows or items
                 visible = min(len(self._items), self._visible_row_count(), available_rows)
-            # remember actual visible rows for navigation logic (_ensure_hover_visible)
             self._current_visible_rows = visible
+
             for i in range(visible):
                 item_idx = self._scroll_offset + i
                 if item_idx >= len(self._items):
@@ -1465,38 +1487,33 @@ class YSelectionBoxCurses(YSelectionWidget):
                 item = self._items[item_idx]
                 text = item.label()
                 checkbox = "*" if item in self._selected_items else " "
-                # Display selection marker for multi or single similarly
                 display = f"[{checkbox}] {text}"
-                # truncate
                 if len(display) > width:
                     display = display[:max(0, width - 3)] + "..."
                 attr = curses.A_NORMAL
-                if self._focused and item_idx == self._hover_index:
+                if not self.isEnabled():
+                    attr |= curses.A_DIM
+                if self._focused and item_idx == self._hover_index and self.isEnabled():
                     attr |= curses.A_REVERSE
                 try:
                     window.addstr(line + i, x, display.ljust(width), attr)
                 except curses.error:
                     pass
 
-            # if focused and there are more items than visible, show scrollbar hint
-            if self._focused and len(self._items) > visible and width > 0:
+            if self._focused and len(self._items) > visible and width > 0 and self.isEnabled():
                 try:
-                    # show simple up/down markers at rightmost column
                     if self._scroll_offset > 0:
                         window.addch(y + (1 if self._label else 0), x + width - 1, '^')
                     if (self._scroll_offset + visible) < len(self._items):
                         window.addch(y + (1 if self._label else 0) + visible - 1, x + width - 1, 'v')
                 except curses.error:
                     pass
-            # keep _current_visible_rows until next draw; navigation will use it
         except curses.error:
             pass
 
     def _handle_key(self, key):
-        """Handle navigation and selection keys when focused."""
-        if not self._focused:
+        if not self._focused or not self.isEnabled():
             return False
-
         handled = True
         if key == curses.KEY_UP:
             if self._hover_index > 0:
