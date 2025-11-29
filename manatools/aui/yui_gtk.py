@@ -1882,6 +1882,13 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             pass
 
 class YTreeGtk(YSelectionWidget):
+    """
+    Stable Gtk4 implementation of a tree using Gtk.ListBox + ScrolledWindow.
+
+    - Renders visible nodes (respecting YTreeItem._is_open).
+    - Supports multiselection and recursiveSelection (select/deselect parents -> children).
+    - Preserves stretching: the ScrolledWindow/ListBox expand to fill container.
+    """
     def __init__(self, parent=None, label="", multiselection=False, recursiveselection=False):
         super().__init__(parent)
         self._label = label
@@ -1892,391 +1899,468 @@ class YTreeGtk(YSelectionWidget):
             self._multi = True
         self._immediate = self.notify()
         self._backend_widget = None
-        self._treeview = None
-        self._treestore = None
-        # guard to avoid re-entrancy when changing selection programmatically
+        self._listbox = None
+        # cached rows and mappings
+        self._rows = []               # ordered list of Gtk.ListBoxRow
+        self._row_to_item = {}        # row -> YTreeItem
+        self._item_to_row = {}        # YTreeItem -> row
+        self._visible_items = []      # list of (item, depth)
         self._suppress_selection_handler = False
-        # remember last selected set (by path string) for delta detection
-        self._last_selected_paths = set()
+        self._last_selected_ids = set()
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
 
     def widgetClass(self):
         return "YTree"
 
     def _create_backend_widget(self):
-        """Create Gtk widgets: optional label + TreeView backed by TreeStore."""
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+
         if self._label:
-            lbl = Gtk.Label(label=self._label)
             try:
+                lbl = Gtk.Label(label=self._label)
                 if hasattr(lbl, "set_xalign"):
                     lbl.set_xalign(0.0)
-            except Exception:
-                pass
-            try:
                 vbox.append(lbl)
             except Exception:
-                try:
-                    vbox.add(lbl)
-                except Exception:
-                    pass
-
-        # TreeStore with two columns: display string and python object (YTreeItem)
-        try:
-            # first column: str, second: python object
-            self._treestore = Gtk.TreeStore(str, object)
-        except Exception:
-            # fallback: try object column via GObject.TYPE_PYOBJECT
-            try:
-                self._treestore = Gtk.TreeStore(str, GObject.TYPE_PYOBJECT)
-            except Exception:
-                self._treestore = Gtk.TreeStore(str, object)
-
-        # TreeView
-        tree = Gtk.TreeView(model=self._treestore)
-        # single text column
-        try:
-            renderer = Gtk.CellRendererText()
-            col = Gtk.TreeViewColumn.new_with_attributes("Name", renderer, text=0)
-            tree.append_column(col)
-        except Exception:
-            try:
-                renderer = Gtk.CellRendererText()
-                col = Gtk.TreeViewColumn("Name")
-                col.pack_start(renderer, True)
-                col.add_attribute(renderer, "text", 0)
-                tree.append_column(col)
-            except Exception:
                 pass
 
-        # selection mode
+        # ListBox (flat, shows only visible nodes). Put into ScrolledWindow so it won't grow parent on expand.
+        listbox = Gtk.ListBox()
         try:
-            sel = tree.get_selection()
             mode = Gtk.SelectionMode.MULTIPLE if self._multi else Gtk.SelectionMode.SINGLE
-            sel.set_mode(mode)
-            # connect handler
-            try:
-                sel.connect("changed", self._on_selection_changed)
-            except Exception:
-                # alternative API
-                try:
-                    tree.get_selection().connect("changed", self._on_selection_changed)
-                except Exception:
-                    pass
+            listbox.set_selection_mode(mode)
+            # Let listbox expand in available area
+            listbox.set_vexpand(True)
+            listbox.set_hexpand(True)
         except Exception:
             pass
 
-        # row-activated (double click / Enter)
+        sw = Gtk.ScrolledWindow()
         try:
-            tree.connect("row-activated", self._on_row_activated)
-        except Exception:
-            pass
-
-        # store references
-        try:
-            vbox.append(tree)
+            sw.set_child(listbox)
         except Exception:
             try:
-                vbox.add(tree)
+                sw.add(listbox)
             except Exception:
                 pass
+
+        # Make scrolled window expand to fill container (so tree respects parent stretching)
+        try:
+            sw.set_vexpand(True)
+            sw.set_hexpand(True)
+            vbox.set_vexpand(True)
+            vbox.set_hexpand(True)
+        except Exception:
+            pass
+
+        # connect selection signal; use defensive handler that scans rows
+        try:
+            listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+        except Exception:
+            pass
 
         self._backend_widget = vbox
-        self._treeview = tree
+        self._listbox = listbox
 
-        # If items were already present, populate model
+        try:
+            vbox.append(sw)
+        except Exception:
+            try:
+                vbox.add(sw)
+            except Exception:
+                pass
+
+        # populate if items already exist
         try:
             if getattr(self, "_items", None):
                 self.rebuildTree()
         except Exception:
             pass
 
-    def rebuildTree(self):
-        """Build TreeStore from self._items and apply per-item expanded state."""
-        if self._treestore is None or self._treeview is None:
-            # ensure backend exists
-            self._create_backend_widget()
+    def _make_row(self, item, depth):
+        """Create a ListBoxRow for item with indentation and (optional) toggle button."""
+        row = Gtk.ListBoxRow()
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
-        # clear existing store
+        # indentation spacer
         try:
-            self._treestore.clear()
-        except Exception:
-            # recreate if clear not available
-            try:
-                self._treestore = Gtk.TreeStore(str, object)
-                self._treeview.set_model(self._treestore)
-            except Exception:
-                pass
-
-        def _add_recursive(parent_iter, item):
-            try:
-                label = item.label() if hasattr(item, "label") else str(item)
-            except Exception:
-                label = str(item)
-            try:
-                new_iter = self._treestore.append(parent_iter, [label, item])
-            except Exception:
-                # fallback: append with only label then set object separately
-                new_iter = self._treestore.append(parent_iter, [label, None])
-                try:
-                    self._treestore.set_value(new_iter, 1, item)
-                except Exception:
-                    pass
-
-            # set expanded/collapsed according to item._is_open / isOpen()
-            try:
-                is_open = bool(getattr(item, "_is_open", False))
-            except Exception:
-                try:
-                    is_open = bool(item.isOpen())
-                except Exception:
-                    is_open = False
-
-            # If treeview and path APIs available, expand row
-            try:
-                path = self._treestore.get_path(new_iter)
-                if is_open:
-                    try:
-                        self._treeview.expand_row(path, False)
-                    except Exception:
-                        # some bindings expect path string
-                        try:
-                            self._treeview.expand_row(path.to_string(), False)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-            # recurse children
-            try:
-                childs = []
-                try:
-                    if callable(getattr(item, "children", None)):
-                        childs = item.children()
-                    else:
-                        childs = getattr(item, "_children", []) or []
-                except Exception:
-                    childs = getattr(item, "_children", []) or []
-                for c in childs:
-                    _add_recursive(new_iter, c)
-            except Exception:
-                pass
-
-            return new_iter
-
-        try:
-            for it in list(getattr(self, "_items", []) or []):
-                try:
-                    _add_recursive(None, it)
-                except Exception:
-                    pass
+            indent = Gtk.Box()
+            indent.set_size_request(depth * 12, 1)
+            hbox.append(indent)
         except Exception:
             pass
 
-        # reset last selected paths
-        self._last_selected_paths = set()
-
-    def _iter_to_path_str(self, treeiter):
+        # toggle if item has children
+        has_children = False
         try:
-            path = self._treestore.get_path(treeiter)
-            try:
-                return path.to_string()
-            except Exception:
-                return str(path)
+            childs = []
+            if callable(getattr(item, "children", None)):
+                childs = item.children() or []
+            else:
+                childs = getattr(item, "_children", []) or []
+            has_children = len(childs) > 0
         except Exception:
-            return None
+            has_children = False
 
-    def _collect_descendant_iters(self, treeiter):
-        """Return list of iter for treeiter and all its descendants."""
-        out = []
-        if treeiter is None:
-            return out
-        # depth-first traversal
-        stack = [treeiter]
+        if has_children:
+            try:
+                btn = Gtk.Button(label="▾" if bool(getattr(item, "_is_open", False)) else "▸")
+                try:
+                    btn.set_relief(Gtk.ReliefStyle.NONE)
+                except Exception:
+                    pass
+                btn.set_focus_on_click(False)
+                btn.connect("clicked", lambda b, it=item: self._on_toggle_clicked(it))
+                hbox.append(btn)
+            except Exception:
+                # fallback spacer
+                try:
+                    spacer = Gtk.Box()
+                    spacer.set_size_request(14, 1)
+                    hbox.append(spacer)
+                except Exception:
+                    pass
+        else:
+            try:
+                spacer = Gtk.Box()
+                spacer.set_size_request(14, 1)
+                hbox.append(spacer)
+            except Exception:
+                pass
+
+        # label
+        try:
+            lbl = Gtk.Label(label=item.label() if hasattr(item, "label") else str(item))
+            if hasattr(lbl, "set_xalign"):
+                lbl.set_xalign(0.0)
+            # ensure label expands to take remaining space
+            try:
+                lbl.set_hexpand(True)
+            except Exception:
+                pass
+            hbox.append(lbl)
+        except Exception:
+            pass
+
+        try:
+            row.set_child(hbox)
+        except Exception:
+            try:
+                row.add(hbox)
+            except Exception:
+                pass
+
+        try:
+            row.set_selectable(True)
+        except Exception:
+            pass
+
+        return row
+
+    def _on_toggle_clicked(self, item):
+        """Toggle _is_open and rebuild, preserving selection."""
+        try:
+            cur = bool(getattr(item, "_is_open", False))
+            try:
+                item._is_open = not cur
+            except Exception:
+                try:
+                    item.setOpen(not cur)
+                except Exception:
+                    pass
+            # preserve selection ids
+            try:
+                self._last_selected_ids = set(id(i) for i in self._selected_items)
+            except Exception:
+                self._last_selected_ids = set()
+            self.rebuildTree()
+        except Exception:
+            pass
+
+    def _collect_all_descendants(self, item):
+        """Return set of all descendant items (recursive)."""
+        out = set()
+        stack = []
+        try:
+            for c in getattr(item, "_children", []) or []:
+                stack.append(c)
+        except Exception:
+            pass
         while stack:
             cur = stack.pop()
-            out.append(cur)
+            out.add(cur)
             try:
-                child = self._treestore.iter_children(cur)
-                while child is not None:
-                    stack.append(child)
-                    try:
-                        child = self._treestore.iter_next(child)
-                    except Exception:
-                        # iter_next returns False sometimes
-                        break
+                for ch in getattr(cur, "_children", []) or []:
+                    stack.append(ch)
             except Exception:
                 pass
         return out
 
-    def _on_selection_changed(self, selection):
-        """Sync selection from TreeView to logical _selected_items and handle recursive propagation."""
-        if self._suppress_selection_handler:
-            return
-
+    def rebuildTree(self):
+        """Flatten visible items according to _is_open and populate the ListBox."""
+        if self._backend_widget is None or self._listbox is None:
+            self._create_backend_widget()
         try:
-            # collect currently selected iters (as path strings and iters)
-            sel_paths = []
-            sel_iters = []
-
-            # preferred API: selection.selected_foreach(callback, user_data)
+            # clear listbox rows
             try:
-                def _cb(model, path, treeiter, ud=None):
-                    sel_paths.append(path.to_string() if hasattr(path, "to_string") else str(path))
-                    sel_iters.append(treeiter)
-                selection.selected_foreach(_cb)
-            except Exception:
-                # fallback: try selection.get_selected_rows()
-                try:
-                    rows = selection.get_selected_rows()
-                    for p in rows:
+                for r in list(self._listbox.get_children()):
+                    try:
+                        self._listbox.remove(r)
+                    except Exception:
                         try:
-                            it = self._treestore.get_iter(p)
-                            sel_paths.append(p.to_string() if hasattr(p, "to_string") else str(p))
-                            sel_iters.append(it)
+                            self._listbox.unbind_model()
                         except Exception:
                             pass
+            except Exception:
+                # fallback ignore
+                pass
+
+            self._rows = []
+            self._row_to_item.clear()
+            self._item_to_row.clear()
+            self._visible_items = []
+
+            # Depth-first traversal producing visible nodes only when ancestors are open
+            def _visit(nodes, depth=0):
+                for n in nodes:
+                    self._visible_items.append((n, depth))
+                    try:
+                        is_open = bool(getattr(n, "_is_open", False))
+                    except Exception:
+                        is_open = False
+                    if is_open:
+                        try:
+                            childs = []
+                            if callable(getattr(n, "children", None)):
+                                childs = n.children() or []
+                            else:
+                                childs = getattr(n, "_children", []) or []
+                        except Exception:
+                            childs = getattr(n, "_children", []) or []
+                        if childs:
+                            _visit(childs, depth + 1)
+
+            roots = list(getattr(self, "_items", []) or [])
+            _visit(roots, 0)
+
+            # create rows
+            for item, depth in self._visible_items:
+                try:
+                    row = self._make_row(item, depth)
+                    self._listbox.append(row)
+                    self._rows.append(row)
+                    self._row_to_item[row] = item
+                    self._item_to_row[item] = row
                 except Exception:
-                    # final fallback: nothing
                     pass
 
-            current_set = set(sel_paths)
-            added = current_set - self._last_selected_paths
-            removed = self._last_selected_paths - current_set
-
-            # If recursive + multi: selecting a parent selects descendants; deselecting a parent deselects descendants
-            if self._recursive and self._multi:
-                desired_paths = set(current_set)
-                # for each added path, add all descendant paths
-                for idx, it in enumerate(sel_iters):
+            # restore previous selection (visible rows only)
+            try:
+                if self._last_selected_ids:
+                    self._suppress_selection_handler = True
                     try:
-                        if sel_paths[idx] in added:
-                            for dq in self._collect_descendant_iters(it):
-                                pstr = self._iter_to_path_str(dq)
-                                if pstr:
-                                    desired_paths.add(pstr)
+                        self._listbox.unselect_all()
                     except Exception:
                         pass
-                # for each removed path, remove its descendants from desired set
-                for pstr in list(removed):
-                    try:
-                        # find iter for this path
+                    for row, item in list(self._row_to_item.items()):
                         try:
-                            path_obj = Gtk.TreePath.new_from_string(pstr)
-                        except Exception:
-                            path_obj = None
-                        if path_obj:
-                            try:
-                                rem_iter = self._treestore.get_iter(path_obj)
-                            except Exception:
-                                rem_iter = None
-                        else:
-                            rem_iter = None
-                        if rem_iter is not None:
-                            for dq in self._collect_descendant_iters(rem_iter):
-                                dp = self._iter_to_path_str(dq)
-                                if dp and dp in desired_paths:
-                                    desired_paths.discard(dp)
-                    except Exception:
-                        pass
-
-                # if desired differs from current, apply programmatically
-                if desired_paths != current_set:
-                    try:
-                        self._suppress_selection_handler = True
-                        selection.unselect_all()
-                        for pstr in desired_paths:
-                            try:
-                                path_obj = Gtk.TreePath.new_from_string(pstr)
-                                selection.select_path(path_obj)
-                            except Exception:
+                            if id(item) in self._last_selected_ids:
                                 try:
-                                    selection.select_path(pstr)
+                                    row.set_selected(True)
                                 except Exception:
                                     pass
-                    finally:
-                        self._suppress_selection_handler = False
-                    # rebuild selected lists after modification
-                    sel_paths = []
-                    sel_iters = []
-                    try:
-                        selection.selected_foreach(lambda m, p, it, ud=None: (sel_paths.append(p.to_string() if hasattr(p, "to_string") else str(p)), sel_iters.append(it)))
-                    except Exception:
-                        pass
-
-            # Build logical selected YTreeItem list from sel_iters (or descendants if recursive+single)
-            logical_iters = []
-            if self._recursive and not self._multi:
-                # include selected iters and their descendants
-                for it in sel_iters:
-                    logical_iters.append(it)
-                    try:
-                        for dq in self._collect_descendant_iters(it):
-                            if dq is not it:
-                                logical_iters.append(dq)
-                    except Exception:
-                        pass
-            else:
-                logical_iters = sel_iters
-
-            new_selected = []
-            # clear previous selected flag on all known items
-            try:
-                for it in list(getattr(self, "_items", []) or []):
-                    try:
-                        it.setSelected(False)
-                    except Exception:
-                        pass
+                        except Exception:
+                            pass
+                    self._suppress_selection_handler = False
             except Exception:
-                pass
+                self._suppress_selection_handler = False
 
-            for it in logical_iters:
+            # rebuild logical selected items from rows
+            self._selected_items = []
+            for row in self._rows:
                 try:
-                    itm = self._treestore.get_value(it, 1)
+                    if getattr(row, "get_selected", None):
+                        sel = row.get_selected()
+                    else:
+                        sel = bool(getattr(row, "_selected_flag", False))
+                    if sel:
+                        it = self._row_to_item.get(row, None)
+                        if it is not None:
+                            self._selected_items.append(it)
                 except Exception:
-                    try:
-                        # alternative accessor
-                        itm = self._treestore[it][1]
-                    except Exception:
-                        itm = None
-                if itm is not None:
-                    try:
-                        itm.setSelected(True)
-                    except Exception:
-                        pass
-                    new_selected.append(itm)
+                    pass
 
-            self._selected_items = new_selected
-
-            # store last selected paths
-            self._last_selected_paths = set(sel_paths)
-
-            # notify immediate mode
-            try:
-                if self._immediate and self.notify():
-                    dlg = self.findDialog()
-                    if dlg:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-            except Exception:
-                pass
-
+            self._last_selected_ids = set(id(i) for i in self._selected_items)
         except Exception:
             pass
 
-    def _on_row_activated(self, treeview, path, column):
-        """Row activated (double click / Enter) handler."""
+    def _on_row_selected(self, listbox, row):
+        """Handle selection change; implement recursive selection propagation."""
+        if self._suppress_selection_handler:
+            return
         try:
-            # Post an Activated event to containing dialog
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+            # collect currently selected items (by id)
+            cur_selected_ids = set()
+            selected_rows = []
+            try:
+                # prefer scanning rows API
+                for r in self._rows:
+                    try:
+                        sel = False
+                        if getattr(r, "get_selected", None):
+                            sel = r.get_selected()
+                        else:
+                            sel = bool(getattr(r, "_selected_flag", False))
+                        if sel:
+                            selected_rows.append(r)
+                            it = self._row_to_item.get(r, None)
+                            if it is not None:
+                                cur_selected_ids.add(id(it))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            added = cur_selected_ids - self._last_selected_ids
+            removed = self._last_selected_ids - cur_selected_ids
+
+            # Recursive + multi: selecting parent selects all descendants; deselecting parent deselects descendants
+            if self._recursive and self._multi:
+                desired_ids = set(cur_selected_ids)
+                # handle added -> add descendants
+                for r in list(selected_rows):
+                    try:
+                        it = self._row_to_item.get(r, None)
+                        if it is None:
+                            continue
+                        if id(it) in added:
+                            for d in self._collect_all_descendants(it):
+                                desired_ids.add(id(d))
+                    except Exception:
+                        pass
+                # handle removed -> remove descendants
+                for rid in list(removed):
+                    try:
+                        # find item object by id among previous items (we can search self._items tree)
+                        def _find_by_id(target_id, nodes):
+                            for n in nodes:
+                                if id(n) == target_id:
+                                    return n
+                                try:
+                                    chs = []
+                                    if callable(getattr(n, "children", None)):
+                                        chs = n.children() or []
+                                    else:
+                                        chs = getattr(n, "_children", []) or []
+                                except Exception:
+                                    chs = getattr(n, "_children", []) or []
+                                res = _find_by_id(target_id, chs)
+                                if res:
+                                    return res
+                            return None
+                        obj = _find_by_id(rid, list(getattr(self, "_items", []) or []))
+                        if obj is not None:
+                            for d in self._collect_all_descendants(obj):
+                                if id(d) in desired_ids:
+                                    desired_ids.discard(id(d))
+                    except Exception:
+                        pass
+
+                # apply desired_ids to visible rows
+                if desired_ids != cur_selected_ids:
+                    try:
+                        self._suppress_selection_handler = True
+                        try:
+                            self._listbox.unselect_all()
+                        except Exception:
+                            pass
+                        for row, it in list(self._row_to_item.items()):
+                            try:
+                                if id(it) in desired_ids:
+                                    try:
+                                        row.set_selected(True)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    finally:
+                        self._suppress_selection_handler = False
+
+                    # recompute selection sets after applying
+                    cur_selected_ids = set()
+                    try:
+                        for r in self._rows:
+                            try:
+                                sel = False
+                                if getattr(r, "get_selected", None):
+                                    sel = r.get_selected()
+                                else:
+                                    sel = bool(getattr(r, "_selected_flag", False))
+                                if sel:
+                                    it = self._row_to_item.get(r, None)
+                                    if it is not None:
+                                        cur_selected_ids.add(id(it))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+            # Build logical selection list and set YItem selected flags
+            new_selected = []
+            try:
+                # clear previous selection flags on all items
+                def _clear_flags(nodes):
+                    for n in nodes:
+                        try:
+                            n.setSelected(False)
+                        except Exception:
+                            pass
+                        try:
+                            childs = []
+                            if callable(getattr(n, "children", None)):
+                                childs = n.children() or []
+                            else:
+                                childs = getattr(n, "_children", []) or []
+                        except Exception:
+                            childs = getattr(n, "_children", []) or []
+                        if childs:
+                            _clear_flags(childs)
+                _clear_flags(list(getattr(self, "_items", []) or []))
+            except Exception:
+                pass
+
+            for r in self._rows:
+                try:
+                    sel = False
+                    if getattr(r, "get_selected", None):
+                        sel = r.get_selected()
+                    else:
+                        sel = bool(getattr(r, "_selected_flag", False))
+                    if sel:
+                        it = self._row_to_item.get(r, None)
+                        if it is not None:
+                            try:
+                                it.setSelected(True)
+                            except Exception:
+                                pass
+                            new_selected.append(it)
+                except Exception:
+                    pass
+
+            self._selected_items = new_selected
+            self._last_selected_ids = set(id(i) for i in self._selected_items)
+
+            if self._immediate and self.notify():
+                dlg = self.findDialog()
+                if dlg:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
         except Exception:
             pass
 
     def currentItem(self):
-        """Return first selected logical item or None."""
         try:
-            sel = self._selected_items
-            return sel[0] if sel else None
+            return self._selected_items[0] if self._selected_items else None
         except Exception:
             return None
 
@@ -2287,7 +2371,6 @@ class YTreeGtk(YSelectionWidget):
         return list(self._selected_items)
 
     def activate(self):
-        """Simulate activation of current item."""
         try:
             itm = self.currentItem()
             if itm is None:
@@ -2317,7 +2400,6 @@ class YTreeGtk(YSelectionWidget):
                     pass
         except Exception:
             pass
-        # propagate logical enabled state to items (if they are YWidgets)
         try:
             for it in list(getattr(self, "_items", []) or []):
                 try:
