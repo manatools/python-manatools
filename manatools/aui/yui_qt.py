@@ -1354,6 +1354,14 @@ class YTreeQt(YSelectionWidget):
             else:
                 parent_qitem.addChild(qitem)
 
+            # set expanded state according to the logical item's _is_open flag
+            try:
+                is_open = bool(getattr(item, "_is_open", False))
+                # setExpanded ensures the node shows as expanded/collapsed
+                qitem.setExpanded(is_open)
+            except Exception:
+                pass
+
             # recurse on children if available
             try:
                 children = getattr(item, "children", None)
@@ -1380,12 +1388,7 @@ class YTreeQt(YSelectionWidget):
                 _add_recursive(None, it)
             except Exception:
                 pass
-
-        # expand top-level by default to show items (mirror libyui reasonable behavior)
-        try:
-            self._tree_widget.expandAll()
-        except Exception:
-            pass
+        # do not call expandAll(); expansion is controlled per-item by _is_open
 
     def currentItem(self):
         """Return the logical YTreeItem corresponding to the current/focused QTreeWidgetItem."""
