@@ -233,6 +233,11 @@ class YWidgetFactoryQt:
     def createAlignment(self, parent, horAlignment: YAlignmentType, vertAlignment: YAlignmentType):
         """Create a generic YAlignment using YAlignmentType enums (or compatible specs)."""
         return YAlignmentQt(parent, horAlign=horAlignment, vertAlign=vertAlignment)
+    
+    def createTree(self, parent, label, multiselection=False, recursiveselection = False):
+        """Create a Tree widget."""
+        return YTreeQt(parent, label, multiselection, recursiveselection)
+
 
 # Qt Widget Implementations
 class YDialogQt(YSingleChildContainerWidget):
@@ -1261,6 +1266,228 @@ class YAlignmentQt(YSingleChildContainerWidget):
             if child is not None:
                 try:
                     child.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+class YTreeQt(YSelectionWidget):
+    """
+    Qt backend for YTree (based on YTree.h semantics).
+
+    - Uses QTreeWidget to display hierarchical items stored in self._items.
+    - Supports multiSelection and immediateMode.
+    - Rebuild tree from internal items with rebuildTree().
+    - currentItem() returns the YTreeItem wrapper for the focused/selected QTreeWidgetItem.
+    - activate() simulates user activation of the current item (posts an Activated event).
+    """
+    def __init__(self, parent=None, label="", multiSelection=False, recursiveSelection=False):
+        super().__init__(parent)
+        self._label = label
+        self._multi = bool(multiSelection)
+        self._recursive = bool(recursiveSelection)
+        self._immediate = False
+        self._backend_widget = None
+        self._tree_widget = None
+        # mappings between QTreeWidgetItem and logical YTreeItem (python objects in self._items)
+        self._qitem_to_item = {}
+        self._item_to_qitem = {}
+
+    def widgetClass(self):
+        return "YTree"
+
+    def _create_backend_widget(self):
+        container = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        if self._label:
+            lbl = QtWidgets.QLabel(self._label)
+            layout.addWidget(lbl)
+
+        tree = QtWidgets.QTreeWidget()
+        tree.setHeaderHidden(True)
+        mode = QtWidgets.QAbstractItemView.MultiSelection if self._multi else QtWidgets.QAbstractItemView.SingleSelection
+        tree.setSelectionMode(mode)
+        tree.itemSelectionChanged.connect(self._on_selection_changed)
+        tree.itemActivated.connect(self._on_item_activated)
+
+        layout.addWidget(tree)
+        self._backend_widget = container
+        self._tree_widget = tree
+
+        # populate if items already present
+        try:
+            self.rebuildTree()
+        except Exception:
+            pass
+
+    def rebuildTree(self):
+        """Rebuild the QTreeWidget from self._items (calls helper recursively)."""
+        if self._tree_widget is None:
+            # ensure backend exists
+            self._create_backend_widget()
+        # clear existing
+        self._qitem_to_item.clear()
+        self._item_to_qitem.clear()
+        self._tree_widget.clear()
+
+        def _add_recursive(parent_qitem, item):
+            # item expected to provide label() and possibly children() iterable
+            text = ""
+            try:
+                text = item.label()
+            except Exception:
+                try:
+                    text = str(item)
+                except Exception:
+                    text = ""
+            qitem = QtWidgets.QTreeWidgetItem([text])
+            # preserve mapping
+            self._qitem_to_item[qitem] = item
+            self._item_to_qitem[item] = qitem
+            # attach to parent or top-level
+            if parent_qitem is None:
+                self._tree_widget.addTopLevelItem(qitem)
+            else:
+                parent_qitem.addChild(qitem)
+
+            # recurse on children if available
+            try:
+                children = getattr(item, "children", None)
+                if callable(children):
+                    childs = children()
+                else:
+                    childs = children or []
+            except Exception:
+                childs = []
+            # many YTreeItem implementations may expose _children or similar; try common patterns
+            if not childs:
+                try:
+                    childs = getattr(item, "_children", []) or []
+                except Exception:
+                    childs = []
+
+            for c in childs:
+                _add_recursive(qitem, c)
+
+            return qitem
+
+        for it in list(getattr(self, "_items", []) or []):
+            try:
+                _add_recursive(None, it)
+            except Exception:
+                pass
+
+        # expand top-level by default to show items (mirror libyui reasonable behavior)
+        try:
+            self._tree_widget.expandAll()
+        except Exception:
+            pass
+
+    def currentItem(self):
+        """Return the logical YTreeItem corresponding to the current/focused QTreeWidgetItem."""
+        if not self._tree_widget:
+            return None
+        try:
+            qcur = self._tree_widget.currentItem()
+            if qcur is None:
+                # fallback to first selected item if current not set
+                sel = self._tree_widget.selectedItems()
+                qcur = sel[0] if sel else None
+            if qcur is None:
+                return None
+            return self._qitem_to_item.get(qcur, None)
+        except Exception:
+            return None
+
+    def activate(self):
+        """Simulate activation of the current item (post Activated event)."""
+        item = self.currentItem()
+        if item is None:
+            return False
+        try:
+            dlg = self.findDialog()
+            if dlg is not None and self.notify():
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+            return True
+        except Exception:
+            return False
+
+    def immediateMode(self):
+        return bool(self._immediate)
+
+    def setImmediateMode(self, on=True):
+        self._immediate = bool(on)
+
+    # selection change handler
+    def _on_selection_changed(self):
+        # if immediate mode, post selection-changed event immediately
+        try:
+            if self._immediate and self.notify():
+                dlg = self.findDialog()
+                if dlg is not None and self.notify():
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        except Exception:
+            pass
+
+    # item activated (double click / Enter)
+    def _on_item_activated(self, qitem, column):
+        try:
+            # map to logical item
+            item = self._qitem_to_item.get(qitem, None)
+            if item is None:
+                return
+            # post activated event
+            dlg = self.findDialog()
+            if dlg is not None and self.notify():
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        except Exception:
+            pass
+
+    def addItem(self, item):
+        '''Add a YItem redefinition from YSelectionWidget to manage YTreeItems.'''
+        if isinstance(item, str):
+            item = YTreeItem(item)            
+            self._items.append(item)
+        else:
+            super().addItem(item)
+
+    # property API hooks (minimal implementation)
+    def setProperty(self, propertyName, val):
+        try:
+            if propertyName == "immediateMode":
+                self.setImmediateMode(bool(val))
+                return True
+        except Exception:
+            pass
+        return False
+
+    def getProperty(self, propertyName):
+        try:
+            if propertyName == "immediateMode":
+                return self.immediateMode()
+        except Exception:
+            pass
+        return None
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the tree widget and propagate to logical items/widgets."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # logical propagation to child YWidgets (if any)
+        try:
+            for c in list(getattr(self, "_items", []) or []):
+                try:
+                    if hasattr(c, "setEnabled"):
+                        c.setEnabled(enabled)
                 except Exception:
                     pass
         except Exception:
