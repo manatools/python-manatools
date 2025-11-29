@@ -2323,35 +2323,80 @@ class YTreeGtk(YSelectionWidget):
         # last-resort flag
         return bool(getattr(r, "_selected_flag", False))
 
+    def _gather_selected_rows(self):
+        """Return list of selected ListBoxRow objects (visible rows)."""
+        rows = []
+        try:
+            # prefer listbox API if available
+            if self._listbox is not None and hasattr(self._listbox, "get_selected_rows"):
+                try:
+                    sel = self._listbox.get_selected_rows() or []
+                    # If API returns Gtk.ListBoxRow-like objects, include them; otherwise fallback
+                    for s in sel:
+                        if s is None:
+                            continue
+                        # if path-like, ignore (we rely on visible rows)
+                        if isinstance(s, type(self._rows[0])) if self._rows else False:
+                            rows.append(s)
+                    if rows:
+                        return rows
+                except Exception:
+                    pass
+            # fallback: scan our cached rows
+            for r in list(self._rows or []):
+                try:
+                    if self._row_is_selected(r):
+                        rows.append(r)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return rows
+
+    def _apply_desired_ids_to_rows(self, desired_ids):
+        """Set visible rows selected state to match desired_ids (ids of items)."""
+        if self._listbox is None:
+            return
+        try:
+            self._suppress_selection_handler = True
+        except Exception:
+            pass
+        try:
+            try:
+                self._listbox.unselect_all()
+            except Exception:
+                # continue even if unsupported
+                pass
+            for row, it in list(self._row_to_item.items()):
+                try:
+                    target = id(it) in desired_ids
+                    try:
+                        row.set_selected(bool(target))
+                    except Exception:
+                        try:
+                            setattr(row, "_selected_flag", bool(target))
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                self._suppress_selection_handler = False
+            except Exception:
+                pass
+
     def _on_row_selected(self, listbox, row):
         """Handle selection change; update logical selected items reliably.
 
         When recursive selection is enabled and multi-selection is on,
         selecting/deselecting a parent will also select/deselect all its descendants.
         """
+        # ignore if programmatic change in progress
         if self._suppress_selection_handler:
             return
+
         try:
-            # collect currently selected rows using cached rows list (stable)
-            selected_rows = []
-            try:
-                for r in list(self._rows or []):
-                    try:
-                        if self._row_is_selected(r):
-                            selected_rows.append(r)
-                    except Exception:
-                        pass
-            except Exception:
-                # fallback: iterate children of the listbox if available
-                try:
-                    for r in list(self._listbox.get_children() or []):
-                        try:
-                            if self._row_is_selected(r):
-                                selected_rows.append(r)
-                        except Exception:
-                            pass
-                except Exception:
-                    selected_rows = []
+            selected_rows = self._gather_selected_rows()
 
             # map rows -> items
             cur_selected_items = []
@@ -2363,115 +2408,80 @@ class YTreeGtk(YSelectionWidget):
                 except Exception:
                     pass
 
-            # compute added/removed if recursive behavior needs delta handling
             prev_ids = set(self._last_selected_ids or [])
             cur_ids = set(id(i) for i in cur_selected_items)
             added = cur_ids - prev_ids
             removed = prev_ids - cur_ids
 
-            # If recursive+multi, propagate selection/deselection to descendants immediately
+            # If recursive+multi, compute desired ids by adding descendants of added and removing descendants of removed.
+            desired_ids = set(cur_ids)
             if self._recursive and self._multi and (added or removed):
                 try:
-                    # helper: find item objects from ids (search the current visible list first)
-                    id_to_item = { id(it): it for it in (list(getattr(self, "_items", []) or []) + cur_selected_items) }
-                    # ensure we also include items referenced by row_to_item (visible items)
-                    for it in self._row_to_item.values():
-                        id_to_item[id(it)] = it
-
-                    # Collect items added/removed as objects
-                    added_items = [id_to_item.get(a) for a in added if id_to_item.get(a) is not None]
-                    # For removed items we may not have them in id_to_item; search tree
-                    def _find_by_id(target_id, nodes):
-                        for n in nodes:
-                            if id(n) == target_id:
-                                return n
-                            try:
-                                chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
-                            except Exception:
-                                chs = getattr(n, "_children", []) or []
-                            res = _find_by_id(target_id, chs)
-                            if res:
-                                return res
-                        return None
-                    removed_items = []
-                    for rid in removed:
-                        obj = id_to_item.get(rid)
+                    # add descendants of newly added items
+                    for a in list(added):
+                        # find object
+                        obj = None
+                        for it in cur_selected_items:
+                            if id(it) == a:
+                                obj = it
+                                break
                         if obj is None:
-                            obj = _find_by_id(rid, list(getattr(self, "_items", []) or []))
+                            # try to find in whole tree
+                            def _find_by_id(tid, nodes):
+                                for n in nodes:
+                                    if id(n) == tid:
+                                        return n
+                                    try:
+                                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                                    except Exception:
+                                        chs = getattr(n, "_children", []) or []
+                                    r = _find_by_id(tid, chs)
+                                    if r:
+                                        return r
+                                return None
+                            obj = _find_by_id(a, list(getattr(self, "_items", []) or []))
                         if obj is not None:
-                            removed_items.append(obj)
-
-                    # Start with desired_ids = currently selected
-                    desired_ids = set(cur_ids)
-
-                    # For each newly added item, select all descendants (and their rows if visible)
-                    for ait in added_items:
-                        try:
-                            for d in self._collect_all_descendants(ait):
+                            for d in self._collect_all_descendants(obj):
                                 desired_ids.add(id(d))
-                                # select visible row if present
-                                r = self._item_to_row.get(d)
-                                if r is not None:
+
+                    # remove descendants of removed items
+                    for r_id in list(removed):
+                        try:
+                            obj = None
+                            # try find in tree
+                            def _find_by_id2(tid, nodes):
+                                for n in nodes:
+                                    if id(n) == tid:
+                                        return n
                                     try:
-                                        r.set_selected(True)
+                                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
                                     except Exception:
-                                        try:
-                                            setattr(r, "_selected_flag", True)
-                                        except Exception:
-                                            pass
+                                        chs = getattr(n, "_children", []) or []
+                                    rr = _find_by_id2(tid, chs)
+                                    if rr:
+                                        return rr
+                                return None
+                            obj = _find_by_id2(r_id, list(getattr(self, "_items", []) or []))
+                            if obj is not None:
+                                for d in self._collect_all_descendants(obj):
+                                    if id(d) in desired_ids:
+                                        desired_ids.discard(id(d))
                         except Exception:
                             pass
 
-                    # For each removed item, deselect all descendants
-                    for rit in removed_items:
-                        try:
-                            for d in self._collect_all_descendants(rit):
-                                if id(d) in desired_ids:
-                                    desired_ids.discard(id(d))
-                                r = self._item_to_row.get(d)
-                                if r is not None:
-                                    try:
-                                        r.set_selected(False)
-                                    except Exception:
-                                        try:
-                                            setattr(r, "_selected_flag", False)
-                                        except Exception:
-                                            pass
-                        except Exception:
-                            pass
+                except Exception:
+                    pass
 
-                    # Ensure desired selection applied on visible rows (some descendants may be visible)
-                    try:
-                        self._suppress_selection_handler = True
-                        try:
-                            # Also ensure the rows corresponding to currently selected items remain selected
-                            for rr, it in list(self._row_to_item.items()):
-                                try:
-                                    if id(it) in desired_ids:
-                                        try:
-                                            rr.set_selected(True)
-                                        except Exception:
-                                            try:
-                                                setattr(rr, "_selected_flag", True)
-                                            except Exception:
-                                                pass
-                                    else:
-                                        try:
-                                            rr.set_selected(False)
-                                        except Exception:
-                                            try:
-                                                setattr(rr, "_selected_flag", False)
-                                            except Exception:
-                                                pass
-                                except Exception:
-                                    pass
-                        finally:
-                            self._suppress_selection_handler = False
-                    except Exception:
-                        pass
+                # Apply desired selection to visible rows
+                try:
+                    self._apply_desired_ids_to_rows(desired_ids)
+                except Exception:
+                    pass
 
-                    # Recompute cur_selected_items from final visible selection
-                    new_selected = []
+                # Recompute cur_selected_items including non-visible descendants
+                new_selected = []
+                try:
+                    # visible rows
                     for r in list(self._rows or []):
                         try:
                             if self._row_is_selected(r):
@@ -2480,35 +2490,31 @@ class YTreeGtk(YSelectionWidget):
                                     new_selected.append(it)
                         except Exception:
                             pass
-                    # Also include non-visible descendants selected logically (those without rows)
-                    # by scanning desired_ids and adding corresponding items that may be non-visible
+                    # include non-visible nodes that are requested by desired_ids
+                    def _collect_all_nodes(nodes):
+                        out = []
+                        for n in nodes:
+                            out.append(n)
+                            try:
+                                chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                            except Exception:
+                                chs = getattr(n, "_children", []) or []
+                            if chs:
+                                out.extend(_collect_all_nodes(chs))
+                        return out
                     for root in list(getattr(self, "_items", []) or []):
-                        def _collect_all_nodes(nodes):
-                            out = []
-                            for n in nodes:
-                                out.append(n)
-                                try:
-                                    chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
-                                except Exception:
-                                    chs = getattr(n, "_children", []) or []
-                                if chs:
-                                    out.extend(_collect_all_nodes(chs))
-                            return out
-                        all_nodes = _collect_all_nodes([root])
-                        for n in all_nodes:
+                        for n in _collect_all_nodes([root]):
                             try:
                                 if id(n) in desired_ids and n not in new_selected:
-                                    # add non-visible descendant
-                                    if n not in new_selected:
-                                        new_selected.append(n)
+                                    new_selected.append(n)
                             except Exception:
                                 pass
-
                     cur_selected_items = new_selected
+                    cur_ids = set(id(i) for i in cur_selected_items)
                 except Exception:
                     pass
 
-            # update YTreeItem selected flags: clear all then set for current
+            # Update logical selection flags
             try:
                 def _clear_flags(nodes):
                     for n in nodes:
