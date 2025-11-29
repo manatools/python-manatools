@@ -1931,8 +1931,8 @@ class YTreeGtk(YSelectionWidget):
             mode = Gtk.SelectionMode.MULTIPLE if self._multi else Gtk.SelectionMode.SINGLE
             listbox.set_selection_mode(mode)
             # Let listbox expand in available area
-            listbox.set_vexpand(True)
-            listbox.set_hexpand(True)
+            listbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            listbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
         except Exception:
             pass
 
@@ -1947,10 +1947,10 @@ class YTreeGtk(YSelectionWidget):
 
         # Make scrolled window expand to fill container (so tree respects parent stretching)
         try:
-            sw.set_vexpand(True)
-            sw.set_hexpand(True)
-            vbox.set_vexpand(True)
-            vbox.set_hexpand(True)
+            sw.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            sw.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
         except Exception:
             pass
 
