@@ -1274,8 +1274,6 @@ class YAlignmentQt(YSingleChildContainerWidget):
 class YTreeQt(YSelectionWidget):
     """
     Qt backend for YTree (based on YTree.h semantics).
-
-    - Uses QTreeWidget to display hierarchical items stored in self._items.
     - Supports multiSelection and immediateMode.
     - Rebuild tree from internal items with rebuildTree().
     - currentItem() returns the YTreeItem wrapper for the focused/selected QTreeWidgetItem.
@@ -1297,6 +1295,8 @@ class YTreeQt(YSelectionWidget):
         self._item_to_qitem = {}
         # guard to avoid recursion when programmatically changing selection
         self._suppress_selection_handler = False
+        # remember last selected QTreeWidgetItem set to detect added/removed selections
+        self._last_selected_qitems = set()
 
     def widgetClass(self):
         return "YTree"
@@ -1462,18 +1462,31 @@ class YTreeQt(YSelectionWidget):
                 return
 
             sel_qitems = list(self._tree_widget.selectedItems())
+            current_set = set(sel_qitems)
 
             # If recursive selection is enabled and multi-selection is allowed,
-            # ensure children of selected parents become selected too.
+            # adjust selection so that selecting a parent selects all descendants
+            # and deselecting a parent deselects all descendants.
             if self._recursive and self._multi:
-                # compute desired set = selected qitems + all their descendants
-                desired_set = set()
-                for q in sel_qitems:
+                added = current_set - self._last_selected_qitems
+                removed = self._last_selected_qitems - current_set
+
+                # start desired_set from current_set
+                desired_set = set(current_set)
+
+                # For every newly added item, ensure its descendants are selected
+                for q in list(added):
                     for dq in self._collect_descendant_qitems(q):
                         desired_set.add(dq)
 
-                # if current selection differs, update QTreeWidget selection programmatically
-                current_set = set(sel_qitems)
+                # For every removed item, ensure its descendants are deselected
+                for q in list(removed):
+                    for dq in self._collect_descendant_qitems(q):
+                        if dq in desired_set:
+                            desired_set.discard(dq)
+
+                # If desired_set differs from what's currently selected in the widget,
+                # apply the change programmatically.
                 if desired_set != current_set:
                     try:
                         self._suppress_selection_handler = True
@@ -1485,14 +1498,14 @@ class YTreeQt(YSelectionWidget):
                                 pass
                     finally:
                         self._suppress_selection_handler = False
-                    # refresh sel_qitems to the new expanded selection
+                    # refresh sel_qitems and current_set after modification
                     sel_qitems = list(self._tree_widget.selectedItems())
+                    current_set = set(sel_qitems)
 
-            # For recursive selection but single-selection mode: keep UI selection as-is but
-            # include descendants in logical selection list (best-effort).
+            # Build logical_qitems: if recursive + single select, include descendants in logical list;
+            # otherwise logical_qitems mirrors current UI selection.
             logical_qitems = []
             if self._recursive and not self._multi:
-                # include selected items and their descendants in logical list
                 for q in sel_qitems:
                     logical_qitems.append(q)
                     for dq in self._collect_descendant_qitems(q):
@@ -1526,6 +1539,12 @@ class YTreeQt(YSelectionWidget):
                 pass
 
             self._selected_items = new_selected
+
+            # remember last selected QTreeWidgetItem set for next invocation
+            try:
+                self._last_selected_qitems = set(self._tree_widget.selectedItems())
+            except Exception:
+                self._last_selected_qitems = set()
 
             # immediate mode: notify container/dialog
             try:
