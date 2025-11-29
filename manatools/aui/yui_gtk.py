@@ -2010,7 +2010,15 @@ class YTreeGtk(YSelectionWidget):
                     btn.set_relief(Gtk.ReliefStyle.NONE)
                 except Exception:
                     pass
-                btn.set_focus_on_click(False)
+                # prevent the toggle button from taking focus / causing selection side-effects
+                try:
+                    btn.set_focus_on_click(False)
+                except Exception:
+                    pass
+                try:
+                    btn.set_can_focus(False)
+                except Exception:
+                    pass
                 btn.connect("clicked", lambda b, it=item: self._on_toggle_clicked(it))
                 hbox.append(btn)
             except Exception:
@@ -2061,14 +2069,11 @@ class YTreeGtk(YSelectionWidget):
     def _on_toggle_clicked(self, item):
         """Toggle _is_open and rebuild, preserving selection."""
         try:
-            cur = bool(getattr(item, "_is_open", False))
+            cur = item.isOpen()
             try:
-                item._is_open = not cur
+                item.setOpen(not cur)
             except Exception:
-                try:
-                    item.setOpen(not cur)
-                except Exception:
-                    pass
+                pass
             # preserve selection ids
             try:
                 self._last_selected_ids = set(id(i) for i in self._selected_items)
@@ -2102,18 +2107,31 @@ class YTreeGtk(YSelectionWidget):
         if self._backend_widget is None or self._listbox is None:
             self._create_backend_widget()
         try:
-            # clear listbox rows
+            # clear listbox rows robustly: repeatedly remove first child until none remain
             try:
-                for r in list(self._listbox.get_children()):
+                while True:
+                    first = None
                     try:
-                        self._listbox.remove(r)
+                        first = self._listbox.get_first_child()
+                    except Exception:
+                        # some bindings may return None / raise; try children()
+                        try:
+                            chs = self._listbox.get_children()
+                            first = chs[0] if chs else None
+                        except Exception:
+                            first = None
+                    if not first:
+                        break
+                    try:
+                        self._listbox.remove(first)
                     except Exception:
                         try:
+                            # fallback API
                             self._listbox.unbind_model()
+                            break
                         except Exception:
-                            pass
+                            break
             except Exception:
-                # fallback ignore
                 pass
 
             self._rows = []
