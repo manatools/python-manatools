@@ -1280,13 +1280,14 @@ class YTreeQt(YSelectionWidget):
     - Rebuild tree from internal items with rebuildTree().
     - currentItem() returns the YTreeItem wrapper for the focused/selected QTreeWidgetItem.
     - activate() simulates user activation of the current item (posts an Activated event).
+    - recursiveSelection if it should select children recursively
     """
     def __init__(self, parent=None, label="", multiSelection=False, recursiveSelection=False):
         super().__init__(parent)
         self._label = label
         self._multi = bool(multiSelection)
         self._recursive = bool(recursiveSelection)
-        self._immediate = False
+        self._immediate = self.notify()
         self._backend_widget = None
         self._tree_widget = None
         # mappings between QTreeWidgetItem and logical YTreeItem (python objects in self._items)
@@ -1418,17 +1419,49 @@ class YTreeQt(YSelectionWidget):
     def immediateMode(self):
         return bool(self._immediate)
 
-    def setImmediateMode(self, on=True):
-        self._immediate = bool(on)
+    def setImmediateMode(self, on:bool=True):
+        self._immediate = on
+        self.steNotify(on)
 
     # selection change handler
     def _on_selection_changed(self):
-        # if immediate mode, post selection-changed event immediately
+        """Update logical selection list and emit selection-changed event when needed."""
         try:
-            if self._immediate and self.notify():
-                dlg = self.findDialog()
-                if dlg is not None and self.notify():
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            # map QTreeWidget selected QTreeWidgetItem -> logical YTreeItem
+            sel_qitems = self._tree_widget.selectedItems() if self._tree_widget is not None else []
+            new_selected = []
+            for qitem in sel_qitems:
+                itm = self._qitem_to_item.get(qitem, None)
+                if itm is not None:
+                    new_selected.append(itm)
+
+            # Update internal selected items list (logical selection used by base class)
+            try:
+                # clear previous selection flags for all known items
+                for it in list(getattr(self, "_items", []) or []):
+                    try:
+                        it.setSelected(False)
+                    except Exception:
+                        pass
+                # set selection flag for newly selected items
+                for it in new_selected:
+                    try:
+                        it.setSelected(True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            self._selected_items = new_selected
+
+            # immediate mode: notify container/dialog
+            try:
+                if self._immediate and self.notify():
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+            except Exception:
+                pass
         except Exception:
             pass
 
