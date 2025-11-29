@@ -2019,7 +2019,72 @@ class YTreeGtk(YSelectionWidget):
                     btn.set_can_focus(False)
                 except Exception:
                     pass
-                btn.connect("clicked", lambda b, it=item: self._on_toggle_clicked(it))
+                # make button visually flat (no border/background) so it looks like a tree expander
+                try:
+                    btn.add_css_class("flat")
+                except Exception:
+                    # fallback: try another common class name
+                    try:
+                        btn.add_css_class("link")
+                    except Exception:
+                        pass
+
+                # Use a GestureClick on the button to reliably receive a single-click action
+                # and avoid the occasional need for double clicks caused by focus/selection interplay.
+                try:
+                    gesture = Gtk.GestureClick()
+                    # accept any button; if set_button exists restrict to primary
+                    try:
+                        gesture.set_button(0)
+                    except Exception:
+                        pass
+                    # pressed handler will toggle immediately
+                    def _on_pressed(gesture_obj, n_press, x, y, target_item=item):
+                        # run toggle synchronously and suppress selection handler while rebuilding
+                        try:
+                            self._suppress_selection_handler = True
+                        except Exception:
+                            pass
+                        try:
+                            # toggle using public API if available
+                            try:
+                                cur = target_item.isOpen()
+                                target_item.setOpen(not cur)
+                            except Exception:
+                                try:
+                                    cur = bool(getattr(target_item, "_is_open", False))
+                                    target_item._is_open = not cur
+                                except Exception:
+                                    pass
+                            # preserve selection and rebuild
+                            try:
+                                self._last_selected_ids = set(id(i) for i in getattr(self, "_selected_items", []) or [])
+                            except Exception:
+                                self._last_selected_ids = set()
+                            try:
+                                self.rebuildTree()
+                            except Exception:
+                                pass
+                        finally:
+                            try:
+                                self._suppress_selection_handler = False
+                            except Exception:
+                                pass
+
+                    gesture.connect("pressed", _on_pressed)
+                    try:
+                        btn.add_controller(gesture)
+                    except Exception:
+                        try:
+                            btn.add_controller(gesture)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Fallback to clicked if GestureClick not available
+                    try:
+                        btn.connect("clicked", lambda b, it=item: self._on_toggle_clicked(it))
+                    except Exception:
+                        pass
                 hbox.append(btn)
             except Exception:
                 # fallback spacer
@@ -2069,17 +2134,35 @@ class YTreeGtk(YSelectionWidget):
     def _on_toggle_clicked(self, item):
         """Toggle _is_open and rebuild, preserving selection."""
         try:
-            cur = item.isOpen()
+            # Ensure a single-click toggle: suppress selection events during the operation
             try:
-                item.setOpen(not cur)
+                self._suppress_selection_handler = True
             except Exception:
                 pass
-            # preserve selection ids
             try:
-                self._last_selected_ids = set(id(i) for i in self._selected_items)
-            except Exception:
-                self._last_selected_ids = set()
-            self.rebuildTree()
+                try:
+                    cur = item.isOpen()
+                    item.setOpen(not cur)
+                except Exception:
+                    try:
+                        cur = bool(getattr(item, "_is_open", False))
+                        item._is_open = not cur
+                    except Exception:
+                        pass
+                # preserve selection ids and rebuild the visible rows
+                try:
+                    self._last_selected_ids = set(id(i) for i in getattr(self, "_selected_items", []) or [])
+                except Exception:
+                    self._last_selected_ids = set()
+                try:
+                    self.rebuildTree()
+                except Exception:
+                    pass
+            finally:
+                try:
+                    self._suppress_selection_handler = False
+                except Exception:
+                    pass
         except Exception:
             pass
 
