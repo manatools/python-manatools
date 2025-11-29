@@ -2296,121 +2296,150 @@ class YTreeGtk(YSelectionWidget):
         except Exception:
             pass
 
+    def _row_is_selected(self, r):
+        """Robust helper to detect whether a ListBoxRow is selected."""
+        try:
+            # preferred API
+            sel = getattr(r, "get_selected", None)
+            if callable(sel):
+                return bool(sel())
+        except Exception:
+            pass
+        try:
+            props = getattr(r, "props", None)
+            if props and hasattr(props, "selected"):
+                return bool(getattr(props, "selected"))
+        except Exception:
+            pass
+        # fallback: check whether the listbox reports this row as selected (some bindings)
+        try:
+            if self._listbox is not None and hasattr(self._listbox, "get_selected_rows"):
+                rows = self._listbox.get_selected_rows() or []
+                for rr in rows:
+                    if rr is r:
+                        return True
+        except Exception:
+            pass
+        # last-resort flag
+        return bool(getattr(r, "_selected_flag", False))
+
     def _on_row_selected(self, listbox, row):
-        """Handle selection change; implement recursive selection propagation."""
+        """Handle selection change; update logical selected items reliably."""
         if self._suppress_selection_handler:
             return
         try:
-            # collect currently selected items (by id)
-            cur_selected_ids = set()
+            # collect currently selected rows using cached rows list (stable)
             selected_rows = []
             try:
-                # prefer scanning rows API
-                for r in self._rows:
+                for r in list(self._rows or []):
                     try:
-                        sel = False
-                        if getattr(r, "get_selected", None):
-                            sel = r.get_selected()
-                        else:
-                            sel = bool(getattr(r, "_selected_flag", False))
-                        if sel:
+                        if self._row_is_selected(r):
                             selected_rows.append(r)
-                            it = self._row_to_item.get(r, None)
-                            if it is not None:
-                                cur_selected_ids.add(id(it))
                     except Exception:
                         pass
             except Exception:
-                pass
-
-            added = cur_selected_ids - self._last_selected_ids
-            removed = self._last_selected_ids - cur_selected_ids
-
-            # Recursive + multi: selecting parent selects all descendants; deselecting parent deselects descendants
-            if self._recursive and self._multi:
-                desired_ids = set(cur_selected_ids)
-                # handle added -> add descendants
-                for r in list(selected_rows):
-                    try:
-                        it = self._row_to_item.get(r, None)
-                        if it is None:
-                            continue
-                        if id(it) in added:
-                            for d in self._collect_all_descendants(it):
-                                desired_ids.add(id(d))
-                    except Exception:
-                        pass
-                # handle removed -> remove descendants
-                for rid in list(removed):
-                    try:
-                        # find item object by id among previous items (we can search self._items tree)
-                        def _find_by_id(target_id, nodes):
-                            for n in nodes:
-                                if id(n) == target_id:
-                                    return n
-                                try:
-                                    chs = []
-                                    if callable(getattr(n, "children", None)):
-                                        chs = n.children() or []
-                                    else:
-                                        chs = getattr(n, "_children", []) or []
-                                except Exception:
-                                    chs = getattr(n, "_children", []) or []
-                                res = _find_by_id(target_id, chs)
-                                if res:
-                                    return res
-                            return None
-                        obj = _find_by_id(rid, list(getattr(self, "_items", []) or []))
-                        if obj is not None:
-                            for d in self._collect_all_descendants(obj):
-                                if id(d) in desired_ids:
-                                    desired_ids.discard(id(d))
-                    except Exception:
-                        pass
-
-                # apply desired_ids to visible rows
-                if desired_ids != cur_selected_ids:
-                    try:
-                        self._suppress_selection_handler = True
+                # fallback: iterate children of the listbox if available
+                try:
+                    for r in list(self._listbox.get_children() or []):
                         try:
-                            self._listbox.unselect_all()
+                            if self._row_is_selected(r):
+                                selected_rows.append(r)
                         except Exception:
                             pass
-                        for row, it in list(self._row_to_item.items()):
-                            try:
-                                if id(it) in desired_ids:
+                except Exception:
+                    selected_rows = []
+
+            # map rows -> items
+            cur_selected_items = []
+            for r in selected_rows:
+                try:
+                    it = self._row_to_item.get(r, None)
+                    if it is not None:
+                        cur_selected_items.append(it)
+                except Exception:
+                    pass
+
+            # compute added/removed if recursive behavior needs delta handling
+            prev_ids = set(self._last_selected_ids or [])
+            cur_ids = set(id(i) for i in cur_selected_items)
+            added = cur_ids - prev_ids
+            removed = prev_ids - cur_ids
+
+            # Recursive + multi: expand logical selection to include descendants for added,
+            # and remove descendants for removed.
+            if self._recursive and self._multi and (added or removed):
+                try:
+                    desired_ids = set(cur_ids)
+                    # add descendants of newly added items
+                    for it in list(cur_selected_items):
+                        try:
+                            if id(it) in added:
+                                for d in self._collect_all_descendants(it):
+                                    desired_ids.add(id(d))
+                        except Exception:
+                            pass
+                    # remove descendants of removed items
+                    for rid in list(removed):
+                        try:
+                            # find object by id in whole tree
+                            def _find_by_id(target_id, nodes):
+                                for n in nodes:
+                                    if id(n) == target_id:
+                                        return n
                                     try:
-                                        row.set_selected(True)
+                                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
                                     except Exception:
-                                        pass
+                                        chs = getattr(n, "_children", []) or []
+                                    res = _find_by_id(target_id, chs)
+                                    if res:
+                                        return res
+                                return None
+                            obj = _find_by_id(rid, list(getattr(self, "_items", []) or []))
+                            if obj is not None:
+                                for d in self._collect_all_descendants(obj):
+                                    if id(d) in desired_ids:
+                                        desired_ids.discard(id(d))
+                        except Exception:
+                            pass
+
+                    # apply desired_ids to visible rows (only visible rows can be selected)
+                    if desired_ids != cur_ids:
+                        try:
+                            self._suppress_selection_handler = True
+                            try:
+                                self._listbox.unselect_all()
                             except Exception:
                                 pass
-                    finally:
-                        self._suppress_selection_handler = False
+                            for rr, it in list(self._row_to_item.items()):
+                                try:
+                                    if id(it) in desired_ids:
+                                        try:
+                                            rr.set_selected(True)
+                                        except Exception:
+                                            try:
+                                                setattr(rr, "_selected_flag", True)
+                                            except Exception:
+                                                pass
+                                except Exception:
+                                    pass
+                        finally:
+                            self._suppress_selection_handler = False
 
-                    # recompute selection sets after applying
-                    cur_selected_ids = set()
-                    try:
-                        for r in self._rows:
+                        # rebuild cur_selected_items from applied selection
+                        cur_selected_items = []
+                        for r in list(self._rows or []):
                             try:
-                                sel = False
-                                if getattr(r, "get_selected", None):
-                                    sel = r.get_selected()
-                                else:
-                                    sel = bool(getattr(r, "_selected_flag", False))
-                                if sel:
+                                if self._row_is_selected(r):
                                     it = self._row_to_item.get(r, None)
                                     if it is not None:
-                                        cur_selected_ids.add(id(it))
+                                        cur_selected_items.append(it)
                             except Exception:
                                 pass
-                    except Exception:
-                        pass
+                except Exception:
+                    pass
 
-            # Build logical selection list and set YItem selected flags
-            new_selected = []
+            # update YTreeItem selected flags: clear all then set for current
             try:
-                # clear previous selection flags on all items
                 def _clear_flags(nodes):
                     for n in nodes:
                         try:
@@ -2418,44 +2447,33 @@ class YTreeGtk(YSelectionWidget):
                         except Exception:
                             pass
                         try:
-                            childs = []
-                            if callable(getattr(n, "children", None)):
-                                childs = n.children() or []
-                            else:
-                                childs = getattr(n, "_children", []) or []
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
                         except Exception:
-                            childs = getattr(n, "_children", []) or []
-                        if childs:
-                            _clear_flags(childs)
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            _clear_flags(chs)
                 _clear_flags(list(getattr(self, "_items", []) or []))
             except Exception:
                 pass
 
-            for r in self._rows:
+            for it in cur_selected_items:
                 try:
-                    sel = False
-                    if getattr(r, "get_selected", None):
-                        sel = r.get_selected()
-                    else:
-                        sel = bool(getattr(r, "_selected_flag", False))
-                    if sel:
-                        it = self._row_to_item.get(r, None)
-                        if it is not None:
-                            try:
-                                it.setSelected(True)
-                            except Exception:
-                                pass
-                            new_selected.append(it)
+                    it.setSelected(True)
                 except Exception:
                     pass
 
-            self._selected_items = new_selected
+            # store logical selection
+            self._selected_items = list(cur_selected_items)
             self._last_selected_ids = set(id(i) for i in self._selected_items)
 
+            # notify immediate mode
             if self._immediate and self.notify():
-                dlg = self.findDialog()
-                if dlg:
-                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                try:
+                    dlg = self.findDialog()
+                    if dlg:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                except Exception:
+                    pass
         except Exception:
             pass
 
