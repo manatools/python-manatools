@@ -1419,6 +1419,10 @@ class YTreeQt(YSelectionWidget):
         except Exception:
             return False
 
+    def hasMultiSelection(self):
+        """Return True if the tree allows selecting multiple items at once."""
+        return bool(self._multi)
+
     def immediateMode(self):
         return bool(self._immediate)
 
