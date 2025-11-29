@@ -4,6 +4,7 @@ Common base classes and definitions shared across all backends
 
 from enum import Enum
 import uuid
+from typing import Optional
 
 # Enums
 class YUIDimension(Enum):
@@ -389,11 +390,15 @@ class YItem:
         self._data = new_data
 
 class YTreeItem(YItem):
-    def __init__(self, label, is_open=False, icon_name=""):
+    def __init__(self, label: str, parent: Optional["YTreeItem"] = None, is_open: bool = False, icon_name: str = ""):
+        ''' YTreeItem represents an item in a tree structure.
+            It can have child items and can be expanded or collapsed.'''
         super().__init__(label, False, icon_name)
         self._children = []
         self._is_open = is_open
-        self._parent_item = None
+        self._parent_item = parent
+        if parent:
+            parent.addChild(self)
     
     def hasChildren(self):
         return len(self._children) > 0
