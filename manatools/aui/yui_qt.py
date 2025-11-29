@@ -1287,12 +1287,16 @@ class YTreeQt(YSelectionWidget):
         self._label = label
         self._multi = bool(multiSelection)
         self._recursive = bool(recursiveSelection)
+        if self._recursive:
+            self._multi = True  # recursive selection implies multi-selection
         self._immediate = self.notify()
         self._backend_widget = None
         self._tree_widget = None
         # mappings between QTreeWidgetItem and logical YTreeItem (python objects in self._items)
         self._qitem_to_item = {}
         self._item_to_qitem = {}
+        # guard to avoid recursion when programmatically changing selection
+        self._suppress_selection_handler = False
 
     def widgetClass(self):
         return "YTree"
@@ -1430,14 +1434,76 @@ class YTreeQt(YSelectionWidget):
         self._immediate = on
         self.steNotify(on)
 
+    def _collect_descendant_qitems(self, qitem):
+        """Return a list of qitem and all descendant QTreeWidgetItem objects."""
+        out = []
+        if qitem is None:
+            return out
+        stack = [qitem]
+        while stack:
+            cur = stack.pop()
+            out.append(cur)
+            try:
+                for i in range(cur.childCount()):
+                    stack.append(cur.child(i))
+            except Exception:
+                pass
+        return out
+
     # selection change handler
     def _on_selection_changed(self):
         """Update logical selection list and emit selection-changed event when needed."""
+        # Defensive guard: when we change selection programmatically we don't want to re-enter here.
+        if self._suppress_selection_handler:
+            return
+
         try:
-            # map QTreeWidget selected QTreeWidgetItem -> logical YTreeItem
-            sel_qitems = self._tree_widget.selectedItems() if self._tree_widget is not None else []
+            if not self._tree_widget:
+                return
+
+            sel_qitems = list(self._tree_widget.selectedItems())
+
+            # If recursive selection is enabled and multi-selection is allowed,
+            # ensure children of selected parents become selected too.
+            if self._recursive and self._multi:
+                # compute desired set = selected qitems + all their descendants
+                desired_set = set()
+                for q in sel_qitems:
+                    for dq in self._collect_descendant_qitems(q):
+                        desired_set.add(dq)
+
+                # if current selection differs, update QTreeWidget selection programmatically
+                current_set = set(sel_qitems)
+                if desired_set != current_set:
+                    try:
+                        self._suppress_selection_handler = True
+                        self._tree_widget.clearSelection()
+                        for q in desired_set:
+                            try:
+                                q.setSelected(True)
+                            except Exception:
+                                pass
+                    finally:
+                        self._suppress_selection_handler = False
+                    # refresh sel_qitems to the new expanded selection
+                    sel_qitems = list(self._tree_widget.selectedItems())
+
+            # For recursive selection but single-selection mode: keep UI selection as-is but
+            # include descendants in logical selection list (best-effort).
+            logical_qitems = []
+            if self._recursive and not self._multi:
+                # include selected items and their descendants in logical list
+                for q in sel_qitems:
+                    logical_qitems.append(q)
+                    for dq in self._collect_descendant_qitems(q):
+                        if dq is not q:
+                            logical_qitems.append(dq)
+            else:
+                logical_qitems = sel_qitems
+
+            # Map qitems -> logical YTreeItem objects
             new_selected = []
-            for qitem in sel_qitems:
+            for qitem in logical_qitems:
                 itm = self._qitem_to_item.get(qitem, None)
                 if itm is not None:
                     new_selected.append(itm)
