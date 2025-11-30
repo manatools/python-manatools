@@ -212,6 +212,9 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._last_draw_time = 0
         self._draw_interval = 0.1  # seconds
         self._event_result = None
+        # Debounce for resize handling (avoid flicker)
+        self._resize_pending_until = 0.0
+        self._last_term_size = (0, 0)  # (h, w)
         YDialogCurses._open_dialogs.append(self)
     
     def widgetClass(self):
@@ -473,70 +476,88 @@ class YDialogCurses(YSingleChildContainerWidget):
         if timeout_millisec and timeout_millisec > 0:
             deadline = time.time() + (timeout_millisec / 1000.0)
 
-        # Main nested loop: iterate until event posted or timeout
         while self._is_open and self._event_result is None:
             try:
-                # Draw only if needed (throttle redraws)
-                current_time = time.time()
-                if current_time - self._last_draw_time >= self._draw_interval:
+                now = time.time()
+
+                # Apply pending resize once debounce expires
+                if self._resize_pending_until and now >= self._resize_pending_until:
+                    try:
+                        ui._stdscr.clear()
+                        ui._stdscr.refresh()
+                        new_h, new_w = ui._stdscr.getmaxyx()
+                        try:
+                            curses.resizeterm(new_h, new_w)
+                        except Exception:
+                            pass
+                        # Recreate backend window (full-screen)
+                        self._backend_widget = curses.newwin(new_h, new_w, 0, 0)
+                        self._last_term_size = (new_h, new_w)
+                    except Exception:
+                        pass
+                    # Clear pending flag and force immediate redraw
+                    self._resize_pending_until = 0.0
+                    self._last_draw_time = 0
+
+                # Draw at most every _draw_interval; forced redraw uses last_draw_time = 0
+                if (now - self._last_draw_time) >= self._draw_interval:
                     self._draw_dialog()
-                    self._last_draw_time = current_time
+                    self._last_draw_time = now
 
                 # Non-blocking input
                 ui._stdscr.nodelay(True)
                 key = ui._stdscr.getch()
 
                 if key == -1:
-                    # no input; check timeout
                     if deadline and time.time() >= deadline:
                         self._event_result = YTimeoutEvent()
                         break
                     time.sleep(0.01)
                     continue
 
-                # Handle global keys
+                # Global keys
                 if key == curses.KEY_F10 or key == ord('q') or key == ord('Q'):
-                    # Post cancel event
                     self._post_event(YCancelEvent())
                     break
                 elif key == curses.KEY_RESIZE:
-                    # Handle terminal resize - force redraw
+                    # Debounce resize; do not redraw immediately to avoid flicker
+                    try:
+                        new_h, new_w = ui._stdscr.getmaxyx()
+                        self._last_term_size = (new_h, new_w)
+                    except Exception:
+                        pass
+                    # Wait 150ms after the last resize event before applying
+                    self._resize_pending_until = time.time() + 0.15
+                    continue
+
+                # Focus navigation
+                if key == ord('\t'):
+                    self._cycle_focus(forward=True)
+                    self._last_draw_time = 0
+                    continue
+                elif key == curses.KEY_BTAB:
+                    self._cycle_focus(forward=False)
                     self._last_draw_time = 0
                     continue
 
-                # Handle tab navigation
-                if key == ord('\t'):
-                    self._cycle_focus(forward=True)
-                    self._last_draw_time = 0  # Force redraw
-                    continue
-                elif key == curses.KEY_BTAB:  # Shift+Tab
-                    self._cycle_focus(forward=False)
-                    self._last_draw_time = 0  # Force redraw
-                    continue
-
-                # Send key event to focused widget
+                # Dispatch key to focused widget
                 if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
                     handled = self._focused_widget._handle_key(key)
                     if handled:
-                        self._last_draw_time = 0  # Force redraw
+                        self._last_draw_time = 0
 
             except KeyboardInterrupt:
-                # treat as cancel
                 self._post_event(YCancelEvent())
                 break
-            except Exception as e:
-                # Don't crash on curses errors
-                # keep running unless fatal
-                time.sleep(0.1)
+            except Exception:
+                time.sleep(0.05)
 
-        # If dialog was closed without explicit event, produce CancelEvent
         if self._event_result is None:
             if not self._is_open:
                 self._event_result = YCancelEvent()
             elif deadline and time.time() >= deadline:
                 self._event_result = YTimeoutEvent()
 
-        # cleanup if dialog closed
         if not self._is_open:
             try:
                 self.destroy()
@@ -2122,7 +2143,7 @@ class YTreeCurses(YSelectionWidget):
 
             # record last draw height for navigation/ensure logic
             self._height = available_area
-            window.addstr(2, 80, f"(available {available_area}, height {self._height}, wh {height})", curses.A_DIM)
+#            window.addstr(2, 80, f"(available {available_area}, height {self._height}, wh {height})", curses.A_DIM)
             # rebuild visible items (safe cheap operation)
             self._flatten_visible()
             total = len(self._visible_items)
