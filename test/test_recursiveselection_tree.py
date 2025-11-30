@@ -27,6 +27,8 @@ def test_tree(backend_name=None):
                 
         ui = YUI_ui()
         factory = ui.widgetFactory()
+        title = ui.application().applicationTitle()
+        ui.application().setApplicationTitle("Tree Widget (recursive selection) Application")
         
         # Create dialog focused on ComboBox testing
         dialog = factory.createMainDialog()
@@ -39,7 +41,7 @@ def test_tree(backend_name=None):
         # Test ComboBox with initial selection
         factory.createLabel(vbox, "")
         hbox = factory.createHBox(vbox)
-        tree = factory.createTree(hbox, "Select:", multiselection=False, recursiveselection=True)
+        tree = factory.createTree(hbox, "Select:", recursiveselection=True)
         
         for i in range(5):            
             item = yui.YTreeItem(f"Item {i+1}", is_open=(i==0))
@@ -51,7 +53,7 @@ def test_tree(backend_name=None):
 
             tree.addItem(item)
 
-        selected = factory.createLabel(vbox, "")
+        selected = factory.createLabel(vbox, "Selected:")
         hbox = factory.createHBox(vbox)
         ok_button = factory.createPushButton(hbox, "OK")
         cancel_button = factory.createPushButton(hbox, "Cancel")
@@ -78,20 +80,25 @@ def test_tree(backend_name=None):
                         elif tree.selectedItem() is not None:
                             selected.setText(f"Selected: '{tree.selectedItem().label()}'")
                         else:
-                            selected.setText("Selected: None")
+                            selected.setText(f"Selected: None")
                     elif reason == yui.YEventReason.Activated:
                         if tree.selectedItem() is not None:
                             selected.setText(f"Activated: '{tree.selectedItem().label()}'") 
+                        else:
+                            selected.setText(f"Activated: None")
                 elif wdg == ok_button:
                     selected.setText(f"OK clicked.")
         
         # Show final result
-        print(f"\nFinal Tree value: '{tree.selectedItem().label()}'")
+        if tree.selectedItem() is not None:
+            print(f"\nFinal Tree value: '{tree.selectedItem().label()}'")
         
     except Exception as e:
         print(f"Error testing Tree with backend {backend_name}: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        ui.application().setApplicationTitle(title)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
