@@ -2577,14 +2577,16 @@ class YTreeGtk(YSelectionWidget):
         except Exception:
             return False
 
+    def hasMultiSelection(self):
+        """Return True if the tree allows selecting multiple items at once."""
+        return bool(self._multi)
+
     def immediateMode(self):
         return bool(self._immediate)
 
-    def setImmediateMode(self, on=True):
-        self._immediate = bool(on)
-
-    def hasMultiSelection(self):
-        return bool(self._multi)
+    def setImmediateMode(self, on:bool=True):
+        self._immediate = on
+        self.setNotify(on)
 
     def _set_backend_enabled(self, enabled):
         try:
