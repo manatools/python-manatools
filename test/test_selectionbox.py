@@ -27,9 +27,10 @@ def test_selectionbox(backend_name=None):
         
         ui = YUI_ui()
         factory = ui.widgetFactory()
-       
+        ui.application().setIconBasePath("/home/angelo/src/manatools/dnfdragora/share/images/")
 
 ###############
+        ui.application().setApplicationIcon("dnfdragora.png")
         dialog = factory.createPopupDialog()
         mainVbox = factory.createVBox( dialog )
         hbox = factory.createHBox( mainVbox )
@@ -43,13 +44,20 @@ def test_selectionbox(backend_name=None):
         selBox.addItem( "Calzone" )
 
         vbox = factory.createVBox( hbox )
-        notifyCheckBox = factory.createCheckBox( vbox, "Notify on change", selBox.notify() )
+        align = factory.createTop(vbox)
+        notifyCheckBox = factory.createCheckBox( align, "Notify on change", selBox.notify() )
         notifyCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         multiSelectionCheckBox = factory.createCheckBox( vbox, "Multi-selection", selBox.multiSelection() )
         multiSelectionCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
+        align = factory.createBottom( vbox )
+        disableSelectionBox = factory.createCheckBox( align, "disable selection box", not selBox.isEnabled() )
+        disableSelectionBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
+        disableValue = factory.createCheckBox( vbox, "disable value button", False )
+        disableValue.setStretchable( yui.YUIDimension.YD_HORIZ, True )
 
         hbox = factory.createHBox( mainVbox )
         valueButton = factory.createPushButton( hbox, "Value" ) 
+        disableValue.setValue(not valueButton.isEnabled())
         label = factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
         label.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         valueField  = factory.createLabel(hbox, "<SelectionBox value unknown>")
@@ -57,10 +65,12 @@ def test_selectionbox(backend_name=None):
 
         #factory.createVSpacing( vbox, 0.3 )
 
-        #rightAlignment = factory.createRight( vbox ) TODO
         hbox = factory.createHBox( mainVbox )
-        closeButton    = factory.createPushButton( hbox, "Close" )
-        factory.createLabel(hbox, "   ") # spacer
+        #factory.createLabel(hbox, "   ") # spacer
+        leftAlignment = factory.createLeft( hbox )
+        left = factory.createPushButton( leftAlignment, "Left" )
+        rightAlignment = factory.createRight( hbox )
+        closeButton    = factory.createPushButton( rightAlignment, "Close" )
 
         #
         # Event loop
@@ -80,6 +90,8 @@ def test_selectionbox(backend_name=None):
               if wdg == closeButton:
                 dialog.destroy()
                 break
+              elif wdg == left:
+                valueField.setText(left.label())
               elif (wdg == valueButton):                
                 if selBox.multiSelection():
                     labels = [item.label() for item in selBox.selectedItems()]
@@ -87,10 +99,15 @@ def test_selectionbox(backend_name=None):
                 else:
                     item = selBox.selectedItem()
                     valueField.setText( item.label() if item else "<none>" )
+                ui.application().setApplicationTitle("Test App")       
               elif (wdg == notifyCheckBox):
                 selBox.setNotify( notifyCheckBox.value() )          
               elif (wdg == multiSelectionCheckBox):   
                 selBox.setMultiSelection( multiSelectionCheckBox.value() )
+              elif (wdg == disableSelectionBox):   
+                selBox.setEnabled( not disableSelectionBox.value() )
+              elif (wdg == disableValue):   
+                valueButton.setEnabled( not disableValue.value() )
               elif (wdg == selBox):		# selBox will only send events with setNotify() TODO
                 if selBox.multiSelection():
                     labels = [item.label() for item in selBox.selectedItems()]
