@@ -602,83 +602,115 @@ class YVBoxCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
-        # Calculate total fixed height and number of stretchable children
-        fixed_height = 0
-        stretchable_indices = []
+        # Compute per-child minimum heights and identify stretchable children and their weights
+        num_children = len(self._children)
+        if num_children == 0 or height <= 0 or width <= 0:
+            return
+
+        # One-line spacing between children
+        spacing = max(0, num_children - 1)
+
         child_min_heights = []
+        stretchable_indices = []
+        stretchable_weights = []
+        fixed_height_total = 0
+
         for i, child in enumerate(self._children):
-            min_height = getattr(child, '_height', 1)
-            child_min_heights.append(min_height)
-            if child.stretchable(YUIDimension.YD_VERT):
+            # Use child's _height as its minimal required rows
+            child_min = max(1, getattr(child, "_height", 1))
+            child_min_heights.append(child_min)
+
+            is_stretch = bool(child.stretchable(YUIDimension.YD_VERT))
+            if is_stretch:
                 stretchable_indices.append(i)
+                # Get vertical weight if any; default 1 for stretchables
+                try:
+                    w = child.weight(YUIDimension.YD_VERT)
+                    w = int(w) if w is not None else 1
+                except Exception:
+                    w = 1
+                if w <= 0:
+                    w = 1
+                stretchable_weights.append(w)
             else:
-                fixed_height += min_height
+                fixed_height_total += child_min
 
-        spacing = max(0, len(self._children) - 1)
-        # Available height to distribute among stretchable children
-        available_height = max(0, height - fixed_height - spacing)
+        # Height available beyond fixed-height children and spacing
+        available_for_stretch = max(0, height - fixed_height_total - spacing)
 
-        # Compute minimal total required by stretchables (each may declare a minimal _height)
-        total_min_for_stretchables = sum(child_min_heights[i] for i in stretchable_indices) if stretchable_indices else 0
-
-        child_heights = [0] * len(self._children)
+        # Initialize all child allocated heights to their minima
+        allocated_heights = list(child_min_heights)
 
         if stretchable_indices:
-            if available_height >= total_min_for_stretchables:
-                # Give each stretchable its min first, then distribute remaining equally
-                remaining = available_height - total_min_for_stretchables
-                per_extra = remaining // len(stretchable_indices)
-                extra_rem = remaining % len(stretchable_indices)
-                for k, idx in enumerate(stretchable_indices):
-                    base = child_min_heights[idx]
-                    child_heights[idx] = base + per_extra + (1 if k < extra_rem else 0)
-            else:
-                # Not enough space to honor all mins: distribute proportionally but at least 1
-                per = available_height // len(stretchable_indices) if len(stretchable_indices) else 0
-                rem = available_height % len(stretchable_indices) if len(stretchable_indices) else 0
-                for k, idx in enumerate(stretchable_indices):
-                    child_heights[idx] = max(1, per + (1 if k < rem else 0))
-        # assign fixed heights
-        for i, child in enumerate(self._children):
-            if not child.stretchable(YUIDimension.YD_VERT):
-                child_heights[i] = child_min_heights[i]
+            total_weight = sum(stretchable_weights)
+            if total_weight <= 0:
+                total_weight = len(stretchable_indices)
 
-        # If due rounding the sum of allocated heights + spacing differs from available height,
-        # adjust the last stretchable (or last child) to fit exactly.
-        total_alloc = sum(child_heights) + spacing
+            # Distribute available height among stretchables proportionally to their weights
+            # Start from each child's minimum height, then add proportional extra rows
+            remaining = available_for_stretch
+            if remaining > 0:
+                # First pass: proportional integer division
+                extras = [0] * len(stretchable_indices)
+                base_units = 0
+                for k, idx in enumerate(stretchable_indices):
+                    # Proportional extra for this child
+                    extra = (remaining * stretchable_weights[k]) // total_weight
+                    extras[k] = extra
+                    base_units += extra
+                # Second pass: distribute leftover rows due to integer division
+                leftover = remaining - base_units
+                for k in range(len(stretchable_indices)):
+                    if leftover <= 0:
+                        break
+                    extras[k] += 1
+                    leftover -= 1
+                # Apply extras to allocated heights
+                for k, idx in enumerate(stretchable_indices):
+                    allocated_heights[idx] = child_min_heights[idx] + extras[k]
+
+        # After allocation, ensure the sum fits exactly into the container height including spacing
+        total_alloc = sum(allocated_heights) + spacing
         if total_alloc < height:
+            # Add missing rows to the last stretchable child (or the last child if none)
             extra = height - total_alloc
-            # give extra to last stretchable if any, else to last child
             if stretchable_indices:
-                child_heights[stretchable_indices[-1]] += extra
-            elif child_heights:
-                child_heights[-1] += extra
-        elif total_alloc > height:
-            diff = total_alloc - height
-            # try to reduce last stretchable first
-            if stretchable_indices:
-                idx = stretchable_indices[-1]
-                child_heights[idx] = max(1, child_heights[idx] - diff)
+                last_idx = stretchable_indices[-1]
             else:
-                # reduce last child
-                child_heights[-1] = max(1, child_heights[-1] - diff)
+                last_idx = num_children - 1
+            allocated_heights[last_idx] += extra
+        elif total_alloc > height:
+            # Reduce rows from the last stretchable child first; else reduce last child
+            diff = total_alloc - height
+            if stretchable_indices:
+                last_idx = stretchable_indices[-1]
+            else:
+                last_idx = num_children - 1
+            allocated_heights[last_idx] = max(1, allocated_heights[last_idx] - diff)
 
-        # Draw children
+        # Draw children using their allocated heights, respecting the container rectangle
         current_y = y
-        for idx, child in enumerate(self._children):
-            if not hasattr(child, '_draw'):
+        for i, child in enumerate(self._children):
+            # Stop if no vertical space left
+            ch = allocated_heights[i]
+            if ch <= 0:
                 continue
-            ch = child_heights[idx] if idx < len(child_heights) else getattr(child, "_height", 1)
             if current_y + ch > y + height:
-                # no more space
+                ch = max(0, (y + height) - current_y)
+            if ch <= 0:
                 break
+
             try:
-                child._draw(window, current_y, x, width, ch)
+                if hasattr(child, "_draw"):
+                    child._draw(window, current_y, x, width, ch)
             except Exception:
                 pass
+
             current_y += ch
-            if idx < len(self._children) - 1:
-                current_y += 1  # spacing
+
+            # Add one-line spacing between children if space remains
+            if i < num_children - 1 and current_y < (y + height):
+                current_y += 1
 
 class YHBoxCurses(YWidget):
     def __init__(self, parent=None):
@@ -2163,8 +2195,8 @@ class YTreeCurses(YSelectionWidget):
                 self._hover_index = total - 1
             if self._scroll_offset > self._hover_index:
                 self._scroll_offset = self._hover_index
-            if self._scroll_offset + available <= self._hover_index:
-                self._scroll_offset = max(0, self._hover_index - available + 1)
+            if self._scroll_offset + available_area <= self._hover_index:
+                self._scroll_offset = max(0, self._hover_index - available_area + 1)
 
             # draw visible slice using 'available_area' rows (the rows actually provided by parent)
             draw_rows = min(available_area, total - self._scroll_offset)
