@@ -1432,7 +1432,7 @@ class YTreeQt(YSelectionWidget):
 
     def setImmediateMode(self, on:bool=True):
         self._immediate = on
-        self.steNotify(on)
+        self.setNotify(on)
 
     def _collect_descendant_qitems(self, qitem):
         """Return a list of qitem and all descendant QTreeWidgetItem objects."""
