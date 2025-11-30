@@ -2085,12 +2085,14 @@ class YTreeCurses(YSelectionWidget):
             # Respect the requested minimum height, but allow using all available rows.
             # Note: height is passed as the available area by the parent layout available more 
             # than the minimum height of this widget.
-            available_area = self._min_height + height
+            available_area = max(self._height, height - (1 if self._label else 0))
             available = max(self._min_height, available_area)
+#            available_area = self._min_height + height
+#            available = max(self._min_height, available_area)
 
             # record last draw height for navigation/ensure logic
             self._height = available_area
-
+            window.addstr(2, 80, f"(available {available_area}, height {self._height}, wh {height})", curses.A_DIM)
             # rebuild visible items (safe cheap operation)
             self._flatten_visible()
             total = len(self._visible_items)
