@@ -1750,6 +1750,7 @@ class YTreeCurses(YSelectionWidget):
         self._recursive = bool(recursiveselection)
         if self._recursive:
             self._multi = True
+        self._immediate = self.notify()
         # Minimal height requested by this widget (layout should try to honor this).
         # Must be at least 6 as requested.
         self._min_height = 6
@@ -1768,6 +1769,17 @@ class YTreeCurses(YSelectionWidget):
 
     def widgetClass(self):
         return "YTree"
+
+    def hasMultiSelection(self):
+        """Return True if the tree allows selecting multiple items at once."""
+        return bool(self._multi)
+
+    def immediateMode(self):
+        return bool(self._immediate)
+
+    def setImmediateMode(self, on:bool=True):
+        self._immediate = on
+        self.setNotify(on)
 
     def _create_backend_widget(self):
         self._height = max(self._height, self._min_height)
@@ -2013,7 +2025,10 @@ class YTreeCurses(YSelectionWidget):
                             try:
                                 it.setSelected(False)
                             except Exception:
-                                pass
+                                try:
+                                    setattr(it, "_selected", False)
+                                except Exception:
+                                    pass
                     else:
                         try:
                             self._selected_items.remove(item)
@@ -2022,7 +2037,10 @@ class YTreeCurses(YSelectionWidget):
                         try:
                             item.setSelected(False)
                         except Exception:
-                            pass
+                            try:
+                                setattr(item, "_selected", False)
+                            except Exception:
+                                pass
                 else:
                     # select item and possibly descendants
                     if self._recursive:
@@ -2033,13 +2051,19 @@ class YTreeCurses(YSelectionWidget):
                                 try:
                                     it.setSelected(True)
                                 except Exception:
-                                    pass
+                                    try:
+                                        setattr(it, "_selected", True)
+                                    except Exception:
+                                        pass
                     else:
                         self._selected_items.append(item)
                         try:
                             item.setSelected(True)
                         except Exception:
-                            pass
+                            try:
+                                setattr(item, "_selected", True)
+                            except Exception:
+                                pass
             else:
                 # single selection: clear all others and set this one
                 try:
@@ -2047,14 +2071,20 @@ class YTreeCurses(YSelectionWidget):
                         try:
                             it.setSelected(False)
                         except Exception:
-                            pass
+                            try:
+                                setattr(it, "_selected", False)
+                            except Exception:
+                                pass
                 except Exception:
                     pass
                 self._selected_items = [item]
                 try:
                     item.setSelected(True)
                 except Exception:
-                    pass
+                    try:
+                        setattr(item, "_selected", True)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -2200,7 +2230,13 @@ class YTreeCurses(YSelectionWidget):
 
     def currentItem(self):
         try:
-            return self._selected_items[0] if self._selected_items else None
+            # Prefer explicit selected_items; if empty return hovered visible item (useful after selection)
+            if self._selected_items:
+                return self._selected_items[0]
+            # fallback: return hovered visible item if any
+            if 0 <= self._hover_index < len(getattr(self, "_visible_items", [])):
+                return self._visible_items[self._hover_index][0]
+            return None
         except Exception:
             return None
 
@@ -2220,14 +2256,26 @@ class YTreeCurses(YSelectionWidget):
                             try:
                                 it.setSelected(False)
                             except Exception:
-                                pass
+                                try:
+                                    setattr(it, "_selected", False)
+                                except Exception:
+                                    pass
                         item.setSelected(True)
-                        self._selected_items = [item]
                     except Exception:
-                        pass
+                        try:
+                            setattr(item, "_selected", True)
+                        except Exception:
+                            pass
+                    self._selected_items = [item]
                 else:
                     if item not in self._selected_items:
-                        item.setSelected(True)
+                        try:
+                            item.setSelected(True)
+                        except Exception:
+                            try:
+                                setattr(item, "_selected", True)
+                            except Exception:
+                                pass
                         self._selected_items.append(item)
                     if self._recursive:
                         for d in self._collect_all_descendants(item):
@@ -2235,24 +2283,39 @@ class YTreeCurses(YSelectionWidget):
                                 try:
                                     d.setSelected(True)
                                 except Exception:
-                                    pass
+                                    try:
+                                        setattr(d, "_selected", True)
+                                    except Exception:
+                                        pass
                                 self._selected_items.append(d)
             else:
                 # deselect
                 if item in self._selected_items:
-                    self._selected_items.remove(item)
+                    try:
+                        self._selected_items.remove(item)
+                    except Exception:
+                        pass
                 try:
                     item.setSelected(False)
                 except Exception:
-                    pass
+                    try:
+                        setattr(item, "_selected", False)
+                    except Exception:
+                        pass
                 if self._recursive:
                     for d in self._collect_all_descendants(item):
                         if d in self._selected_items:
-                            self._selected_items.remove(d)
+                            try:
+                                self._selected_items.remove(d)
+                            except Exception:
+                                pass
                         try:
                             d.setSelected(False)
                         except Exception:
-                            pass
+                            try:
+                                setattr(d, "_selected", False)
+                            except Exception:
+                                pass
             # update last ids
             try:
                 self._last_selected_ids = set(id(i) for i in self._selected_items)
