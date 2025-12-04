@@ -196,6 +196,10 @@ class YWidgetFactoryCurses:
     def createTree(self, parent, label, multiselection=False, recursiveselection = False):
         """Create a Tree widget."""
         return YTreeCurses(parent, label, multiselection, recursiveselection)    
+ 
+    def createFrame(self, parent, label: str=""):
+        """Create a Frame widget."""
+        return YFrameCurses(parent, label)
 
 # Curses Widget Implementations
 class YDialogCurses(YSingleChildContainerWidget):
@@ -2337,5 +2341,188 @@ class YTreeCurses(YSelectionWidget):
                 self._last_selected_ids = set(id(i) for i in self._selected_items)
             except Exception:
                 self._last_selected_ids = set()
+        except Exception:
+            pass
+
+class YFrameCurses(YSingleChildContainerWidget):
+    """
+    NCurses implementation of YFrame.
+    - Draws a framed box with a title.
+    - Hosts a single child inside the frame with inner margins so the child's
+      own label does not overlap the frame title.
+    - Reports stretchability based on its child.
+    """
+    def __init__(self, parent=None, label=""):
+        super().__init__(parent)
+        self._label = label or ""
+        self._backend_widget = None
+        # preferred minimal height: include one extra row for frame border
+        self._height = max(1, getattr(self, "_height", 1))
+        # inner top padding to separate frame title from child's label
+        self._inner_top_padding = 1
+
+    def widgetClass(self):
+        return "YFrame"
+
+    def label(self):
+        return self._label
+
+    def setLabel(self, new_label):
+        try:
+            self._label = str(new_label)
+        except Exception:
+            self._label = new_label
+
+    def stretchable(self, dim):
+        """Frame is stretchable if its child is stretchable or has a weight."""
+        try:
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            if child is None:
+                return False
+            try:
+                if bool(child.stretchable(dim)):
+                    return True
+            except Exception:
+                pass
+            try:
+                if bool(child.weight(dim)):
+                    return True
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return False
+
+    def _create_backend_widget(self):
+        # curses backend does not create a separate widget object for frames;
+        # drawing is performed in _draw by the parent container.
+        self._backend_widget = None
+
+    def _set_backend_enabled(self, enabled):
+        """Propagate enabled state to the child."""
+        try:
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            if child is not None and hasattr(child, "setEnabled"):
+                try:
+                    child.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def addChild(self, child):
+        try:
+            super().addChild(child)
+        except Exception:
+            self._child = child
+        # ensure traversal lists contain the child
+        try:
+            if not hasattr(self, "_children") or self._children is None:
+                self._children = []
+            if child not in self._children:
+                self._children.append(child)
+            try:
+                child._parent = self
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def setChild(self, child):
+        try:
+            super().setChild(child)
+        except Exception:
+            self._child = child
+        try:
+            self._children = [child]
+            try:
+                child._parent = self
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _draw(self, window, y, x, width, height):
+        """Draw frame border and title, then draw child inside inner area with margins."""
+        try:
+            if width <= 0 or height <= 0:
+                return
+
+            # Choose box characters (prefer ACS if available)
+            try:
+                hline = curses.ACS_HLINE
+                vline = curses.ACS_VLINE
+                tl = curses.ACS_ULCORNER
+                tr = curses.ACS_URCORNER
+                bl = curses.ACS_LLCORNER
+                br = curses.ACS_LRCORNER
+            except Exception:
+                hline = ord('-')
+                vline = ord('|')
+                tl = ord('+')
+                tr = ord('+')
+                bl = ord('+')
+                br = ord('+')
+
+            # Draw corners and edges
+            try:
+                window.addch(y, x, tl)
+                window.addch(y, x + width - 1, tr)
+                window.addch(y + height - 1, x, bl)
+                window.addch(y + height - 1, x + width - 1, br)
+                for cx in range(x + 1, x + width - 1):
+                    window.addch(y, cx, hline)
+                    window.addch(y + height - 1, cx, hline)
+                for cy in range(y + 1, y + height - 1):
+                    window.addch(cy, x, vline)
+                    window.addch(cy, x + width - 1, vline)
+            except curses.error:
+                # best-effort: ignore drawing errors when area is too small
+                pass
+
+            # Draw title centered on top border (leave at least one space from corners)
+            if self._label:
+                try:
+                    title = f" {self._label} "
+                    max_title_len = max(0, width - 4)
+                    if len(title) > max_title_len:
+                        title = title[:max(0, max_title_len - 3)] + "..."
+                    start_x = x + max(1, (width - len(title)) // 2)
+                    # overwrite part of top border with title text
+                    window.addstr(y, start_x, title, curses.A_BOLD)
+                except curses.error:
+                    pass
+
+            # Compute inner content rectangle (leave 1-char border), apply top padding
+            inner_x = x + 1
+            inner_y = y + 1
+            inner_w = max(0, width - 2)
+            inner_h = max(0, height - 2)
+
+            # Apply inner top padding so child's label doesn't touch the frame title
+            pad_top = min(self._inner_top_padding, max(0, inner_h))
+            content_y = inner_y + pad_top
+            content_h = max(0, inner_h - pad_top)
+
+            # If there's no child or no space, nothing else to draw
+            child = getattr(self, "_child", None)
+            if child is None:
+                return
+            if content_w := inner_w:
+                # Ensure we don't pass negative sizes
+                try:
+                    if content_h <= 0 or content_w <= 0:
+                        return
+                    # Delegate drawing to child using the inner content area
+                    if hasattr(child, "_draw"):
+                        child._draw(window, content_y, inner_x, content_w, content_h)
+                except Exception:
+                    pass
         except Exception:
             pass
