@@ -201,6 +201,42 @@ class YWidgetFactoryCurses:
         """Create a Frame widget."""
         return YFrameCurses(parent, label)
 
+
+def _curses_recursive_min_height(widget):
+    """Compute minimal height for a widget, recursively considering container children."""
+    if widget is None:
+        return 1
+    try:
+        cls = widget.widgetClass() if hasattr(widget, "widgetClass") else ""
+    except Exception:
+        cls = ""
+    try:
+        if cls == "YVBox":
+            chs = list(getattr(widget, "_children", []) or [])
+            spacing = max(0, len(chs) - 1)
+            total = 0
+            for c in chs:
+                total += _curses_recursive_min_height(c)
+            return max(1, total + spacing)
+        elif cls == "YHBox":
+            chs = list(getattr(widget, "_children", []) or [])
+            tallest = 1
+            for c in chs:
+                tallest = max(tallest, _curses_recursive_min_height(c))
+            return max(1, tallest)
+        elif cls == "YAlignment":
+            child = getattr(widget, "_child", None)
+            return max(1, _curses_recursive_min_height(child))
+        elif cls == "YFrame":
+            child = getattr(widget, "_child", None)
+            inner_top = max(0, getattr(widget, "_inner_top_padding", 1))
+            inner_min = _curses_recursive_min_height(child)
+            return max(3, 2 + inner_top + inner_min)  # borders(2) + padding + inner
+        else:
+            return max(1, getattr(widget, "_height", 1))
+    except Exception:
+        return max(1, getattr(widget, "_height", 1))
+
 # Curses Widget Implementations
 class YDialogCurses(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -619,14 +655,13 @@ class YVBoxCurses(YWidget):
         fixed_height_total = 0
 
         for i, child in enumerate(self._children):
-            # child._height is the preferred minimum (may include its own label rows)
-            child_min = max(1, getattr(child, "_height", 1))
+            # Use recursive min height for containers and frames
+            child_min = max(1, _curses_recursive_min_height(child))
             child_min_heights.append(child_min)
 
             is_stretch = bool(child.stretchable(YUIDimension.YD_VERT))
             if is_stretch:
                 stretchable_indices.append(i)
-                # default vertical weight = 1
                 try:
                     w = child.weight(YUIDimension.YD_VERT)
                     w = int(w) if w is not None else 1
@@ -710,10 +745,7 @@ class YHBoxCurses(YWidget):
             if not self._children:
                 self._height = 1
                 return
-            child_mins = []
-            for c in self._children:
-                child_mins.append(max(1, getattr(c, "_height", 1)))
-            self._height = max(1, max(child_mins))
+            self._height = max(1, max(_curses_recursive_min_height(c) for c in self._children))
         except Exception:
             self._height = 1
 
@@ -2407,15 +2439,11 @@ class YFrameCurses(YSingleChildContainerWidget):
         return "YFrame"
 
     def _update_min_height(self):
-        """Recompute minimal height: at least 3 rows or child_min + borders + padding."""
+        """Recompute minimal height: at least 3 rows or child layout min + borders + padding."""
         try:
             child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
-            child_min = max(1, getattr(child, "_height", 1)) if child is not None else 1
-            # 2 borders + inner top padding + at least 1 inner row
-            self._height = max(3, 2 + self._inner_top_padding + child_min)
+            inner_min = _curses_recursive_min_height(child) if child is not None else 1
+            self._height = max(3, 2 + self._inner_top_padding + inner_min)
         except Exception:
             self._height = max(self._height, 3)
 
@@ -2514,9 +2542,10 @@ class YFrameCurses(YSingleChildContainerWidget):
         try:
             if width <= 0 or height <= 0:
                 return
-            # If height is too small to render a bordered frame, fallback gracefully
+            # Ensure minimal height based on child layout before drawing
+            self._update_min_height()
+            # Graceful fallback for very small areas
             if height < 3 or width < 4:
-                # Draw a truncated title line if possible and return
                 try:
                     if self._label and height >= 1 and width > 2:
                         title = f" {self._label} "
@@ -2570,30 +2599,29 @@ class YFrameCurses(YSingleChildContainerWidget):
                 except curses.error:
                     pass
 
-            # Compute inner content rectangle (leave 1-char border), apply top padding
+            # Compute inner content rectangle
             inner_x = x + 1
             inner_y = y + 1
             inner_w = max(0, width - 2)
             inner_h = max(0, height - 2)
 
-            # Apply inner top padding so child's label doesn't touch the frame title
             pad_top = min(self._inner_top_padding, max(0, inner_h))
             content_y = inner_y + pad_top
             content_h = max(0, inner_h - pad_top)
 
-            # If there's no child or no space, nothing else to draw
             child = getattr(self, "_child", None)
             if child is None:
                 return
-            if content_w := inner_w:
-                # Ensure we don't pass negative sizes
-                try:
-                    if content_h <= 0 or content_w <= 0:
-                        return
-                    # Delegate drawing to child using the inner content area
-                    if hasattr(child, "_draw"):
-                        child._draw(window, content_y, inner_x, content_w, content_h)
-                except Exception:
-                    pass
+
+            # Clamp content height to at least the child layout minimal height
+            needed = _curses_recursive_min_height(child)
+            # Do not exceed available area; this only influences the draw area passed down
+            content_h = min(max(content_h, needed), inner_h)
+
+            if content_h <= 0 or inner_w <= 0:
+                return
+            if hasattr(child, "_draw"):
+                child._draw(window, content_y, inner_x, inner_w, content_h)
         except Exception:
             pass
+
