@@ -11,7 +11,8 @@ Missing Widgets comparing libyui:
     [X] YComboBox
     [X] YSelectionBox
     [X] YMultiSelectionBox
-    [ ] YTree
+    [X] YTree
+    [X] YFrame
     [ ] YTable
     [ ] YProgressBar
     [ ] YRichText
@@ -24,7 +25,7 @@ Missing Widgets comparing libyui:
     [ ] YReplacePoint
     [ ] YRadioButton, YRadioButtonGroup
 
-To check how to manage YEvents [X] and YItems [ ].
+To check how to manage YEvents [X] and YItems [ ] (verify selection attirbute).
 
 Nice to have: improvements outside YUI API
     [ ] window title
