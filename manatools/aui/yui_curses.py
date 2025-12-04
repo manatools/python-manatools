@@ -695,13 +695,53 @@ class YVBoxCurses(YWidget):
 class YHBoxCurses(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._height = 1  # HBox always takes one line
+        # Minimum height will be computed from children
+        self._height = 1
     
     def widgetClass(self):
         return "YHBox"
     
     def _create_backend_widget(self):
         self._backend_widget = None
+
+    def _recompute_min_height(self):
+        """Compute minimal height for this horizontal box as the tallest child's minimum."""
+        try:
+            if not self._children:
+                self._height = 1
+                return
+            child_mins = []
+            for c in self._children:
+                child_mins.append(max(1, getattr(c, "_height", 1)))
+            self._height = max(1, max(child_mins))
+        except Exception:
+            self._height = 1
+
+    def addChild(self, child):
+        """Ensure internal children list and recompute minimal height."""
+        try:
+            super().addChild(child)
+        except Exception:
+            try:
+                if not hasattr(self, "_children") or self._children is None:
+                    self._children = []
+                self._children.append(child)
+                child._parent = self
+            except Exception:
+                pass
+        self._recompute_min_height()
+
+    def setChild(self, child):
+        """Not typical for HBox, but keep parity with containers."""
+        try:
+            super().setChild(child)
+        except Exception:
+            try:
+                self._children = [child]
+                child._parent = self
+            except Exception:
+                pass
+        self._recompute_min_height()
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable HBox and propagate to logical children."""
@@ -749,6 +789,8 @@ class YHBoxCurses(YWidget):
         return max(1, min(10, max_width))  # safe default
 
     def _draw(self, window, y, x, width, height):
+        # Ensure minimal height reflects children so the parent allocated enough rows
+        self._recompute_min_height()
         num_children = len(self._children)
         if num_children == 0 or width <= 0 or height <= 0:
             return
@@ -792,7 +834,7 @@ class YHBoxCurses(YWidget):
             if child.stretchable(YUIDimension.YD_VERT):
                 ch = height
             else:
-                ch = min(height, getattr(child, "_height", height))
+                ch = min(height, max(1, getattr(child, "_height", 1)))
             if hasattr(child, "_draw"):
                 child._draw(window, y, cx, w, ch)
             cx += w
@@ -2356,13 +2398,26 @@ class YFrameCurses(YSingleChildContainerWidget):
         super().__init__(parent)
         self._label = label or ""
         self._backend_widget = None
-        # preferred minimal height: include one extra row for frame border
-        self._height = max(1, getattr(self, "_height", 1))
+        # Preferred minimal height is computed from child (see _update_min_height)
+        self._height = 3
         # inner top padding to separate frame title from child's label
         self._inner_top_padding = 1
 
     def widgetClass(self):
         return "YFrame"
+
+    def _update_min_height(self):
+        """Recompute minimal height: at least 3 rows or child_min + borders + padding."""
+        try:
+            child = getattr(self, "_child", None)
+            if child is None:
+                chs = getattr(self, "_children", None) or []
+                child = chs[0] if chs else None
+            child_min = max(1, getattr(child, "_height", 1)) if child is not None else 1
+            # 2 borders + inner top padding + at least 1 inner row
+            self._height = max(3, 2 + self._inner_top_padding + child_min)
+        except Exception:
+            self._height = max(self._height, 3)
 
     def label(self):
         return self._label
@@ -2400,6 +2455,8 @@ class YFrameCurses(YSingleChildContainerWidget):
         # curses backend does not create a separate widget object for frames;
         # drawing is performed in _draw by the parent container.
         self._backend_widget = None
+        # Update minimal height based on the child
+        self._update_min_height()
 
     def _set_backend_enabled(self, enabled):
         """Propagate enabled state to the child."""
@@ -2433,6 +2490,8 @@ class YFrameCurses(YSingleChildContainerWidget):
                 pass
         except Exception:
             pass
+        # Update minimal height based on the child
+        self._update_min_height()
 
     def setChild(self, child):
         try:
@@ -2447,13 +2506,25 @@ class YFrameCurses(YSingleChildContainerWidget):
                 pass
         except Exception:
             pass
+        # Update minimal height based on the child
+        self._update_min_height()
 
     def _draw(self, window, y, x, width, height):
         """Draw frame border and title, then draw child inside inner area with margins."""
         try:
             if width <= 0 or height <= 0:
                 return
-
+            # If height is too small to render a bordered frame, fallback gracefully
+            if height < 3 or width < 4:
+                # Draw a truncated title line if possible and return
+                try:
+                    if self._label and height >= 1 and width > 2:
+                        title = f" {self._label} "
+                        title = title[:max(0, width - 2)]
+                        window.addstr(y, x, title, curses.A_BOLD)
+                except curses.error:
+                    pass
+                return
             # Choose box characters (prefer ACS if available)
             try:
                 hline = curses.ACS_HLINE
