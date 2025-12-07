@@ -8,37 +8,8 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
-import importlib
 from .yui_common import *
-
-# Import backend symbols only into this shim module.
-def _import_gtk_backend_symbols():
-    mod = None
-    try:
-        # Package-relative import
-        mod = importlib.import_module(".backends.gtk", __package__)
-    except Exception:
-        try:
-            # Absolute fallback
-            mod = importlib.import_module("manatools.aui.backends.gtk")
-        except Exception:
-            mod = None
-    if not mod:
-        return
-    names = getattr(mod, "__all__", None)
-    if names:
-        for name in names:
-            try:
-                globals()[name] = getattr(mod, name)
-            except Exception:
-                pass
-    else:
-        # Fallback: import non-private names
-        for name, obj in mod.__dict__.items():
-            if not name.startswith("_"):
-                globals()[name] = obj
-
-_import_gtk_backend_symbols()
+from .backends.gtk import *
 
 class YUIGtk:
     def __init__(self):
