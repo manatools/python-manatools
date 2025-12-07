@@ -1,0 +1,311 @@
+# vim: set fileencoding=utf-8 :
+# vim: set et ts=4 sw=4:
+'''
+Python manatools.aui.backends.gtk contains all GTK backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.gtk
+'''
+
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Gdk', '4.0')
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
+import cairo
+import threading
+import os
+from ...yui_common import *
+
+class YDialogGtk(YSingleChildContainerWidget):
+    _open_dialogs = []
+    
+    def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
+        super().__init__()
+        self._dialog_type = dialog_type
+        self._color_mode = color_mode
+        self._is_open = False
+        self._window = None
+        self._event_result = None
+        self._glib_loop = None
+        YDialogGtk._open_dialogs.append(self)
+    
+    def widgetClass(self):
+        return "YDialog"
+    
+    @staticmethod
+    def currentDialog(doThrow=True):
+        open_dialog = YDialogGtk._open_dialogs[-1] if YDialogGtk._open_dialogs else None
+        if not open_dialog and doThrow:
+            raise YUINoDialogException("No dialog is currently open")
+        return open_dialog
+
+    @staticmethod
+    def topmostDialog(doThrow=True):
+        ''' same as currentDialog '''
+        return YDialogGtk.currentDialog(doThrow=doThrow)
+    
+    def isTopmostDialog(self):
+        '''Return whether this dialog is the topmost open dialog.'''
+        return YDialogGtk._open_dialogs[-1] == self if YDialogGtk._open_dialogs else False
+
+    def open(self):
+        # Finalize and show the dialog in a non-blocking way.
+        if not self._is_open:
+            if not self._window:
+                self._create_backend_widget()
+            # in Gtk4, show_all is not recommended; use present() or show
+            try:
+                self._window.present()
+            except Exception:
+                try:
+                    self._window.show()
+                except Exception:
+                    pass
+            self._is_open = True
+    
+    def isOpen(self):
+        return self._is_open
+    
+    def destroy(self, doThrow=True):
+        if self._window:
+            try:
+                self._window.destroy()
+            except Exception:
+                try:
+                    self._window.close()
+                except Exception:
+                    pass
+            self._window = None
+        self._is_open = False
+        if self in YDialogGtk._open_dialogs:
+            YDialogGtk._open_dialogs.remove(self)
+        
+        # Stop GLib main loop if no dialogs left (nested loops only)
+        if not YDialogGtk._open_dialogs:
+            try:
+                if self._glib_loop and self._glib_loop.is_running():
+                    self._glib_loop.quit()
+            except Exception:
+                pass
+        return True
+
+    def _post_event(self, event):
+        """Internal: post an event to this dialog and quit local GLib.MainLoop if running."""
+        self._event_result = event
+        if self._glib_loop is not None and self._glib_loop.is_running():
+            try:
+                self._glib_loop.quit()
+            except Exception:
+                pass
+
+    def waitForEvent(self, timeout_millisec=0):
+        """
+        Run a GLib.MainLoop until an event is posted or timeout occurs.
+        Returns a YEvent (YWidgetEvent, YTimeoutEvent, ...).
+        """
+        # Ensure dialog is finalized/open (finalize if caller didn't call open()).
+        if not self.isOpen():
+            self.open()            
+
+        # Let GTK/GLib process pending events (show/layout) before entering nested loop.
+        # Gtk.events_pending()/Gtk.main_iteration() do not exist in GTK4; use MainContext iteration.
+        try:
+            ctx = GLib.MainContext.default()
+            while ctx.pending():
+                ctx.iteration(False)
+        except Exception:
+            # be defensive if API differs on some bindings
+            pass
+
+        self._event_result = None
+        self._glib_loop = GLib.MainLoop()
+ 
+        def on_timeout():
+            # post timeout event and quit loop
+            self._event_result = YTimeoutEvent()
+            try:
+                if self._glib_loop.is_running():
+                    self._glib_loop.quit()
+            except Exception:
+                pass
+            return False  # don't repeat
+
+        self._timeout_id = None
+        if timeout_millisec and timeout_millisec > 0:
+            self._timeout_id = GLib.timeout_add(timeout_millisec, on_timeout)
+
+        # run nested loop
+        self._glib_loop.run()
+
+        # cleanup
+        if self._timeout_id:
+            try:
+                GLib.source_remove(self._timeout_id)
+            except Exception:
+                pass
+            self._timeout_id = None
+        self._glib_loop = None
+        return self._event_result if self._event_result is not None else YEvent()
+
+    @classmethod
+    def deleteTopmostDialog(cls, doThrow=True):
+        if cls._open_dialogs:
+            dialog = cls._open_dialogs[-1]
+            return dialog.destroy(doThrow)
+        return False
+    
+    @classmethod
+    def currentDialog(cls, doThrow=True):
+        if not cls._open_dialogs:
+            if doThrow:
+                raise YUINoDialogException("No dialog open")
+            return None
+        return cls._open_dialogs[-1]
+    
+    def _create_backend_widget(self):
+        # Determine window title from YApplicationGtk instance stored on the YUI backend
+        title = "Manatools YUI GTK Dialog"
+        try:
+            from . import yui as yui_mod
+            appobj = None
+            # YUI._backend may hold the backend instance (YUIGtk)
+            backend = getattr(yui_mod.YUI, "_backend", None)
+            if backend and hasattr(backend, "application"):
+                appobj = backend.application()
+            # fallback: YUI._instance might be set and expose application/yApp
+            if not appobj:
+                inst = getattr(yui_mod.YUI, "_instance", None)
+                if inst and hasattr(inst, "application"):
+                    appobj = inst.application()
+            if appobj and hasattr(appobj, "applicationTitle"):
+                atitle = appobj.applicationTitle()
+                if atitle:
+                    title = atitle
+            # try to obtain resolved pixbuf from application and store for window icon
+            _resolved_pixbuf = None
+            try:
+                _resolved_pixbuf = getattr(appobj, "_gtk_icon_pixbuf", None)
+            except Exception:
+                _resolved_pixbuf = None
+        except Exception:
+            pass
+
+        # Create Gtk4 Window
+        self._window = Gtk.Window(title=title)
+        # set window icon if available
+        try:
+            if _resolved_pixbuf is not None:
+                try:
+                    self._window.set_icon(_resolved_pixbuf)
+                except Exception:
+                    try:
+                        # fallback to name if pixbuf not accepted
+                        icname = getattr(appobj, "applicationIcon", lambda : None)()
+                        if icname:
+                            self._window.set_icon_name(icname)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    # try setting icon name if application provided it
+                    icname = getattr(appobj, "applicationIcon", lambda : None)()
+                    if icname:
+                        self._window.set_icon_name(icname)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            self._window.set_default_size(600, 400)
+        except Exception:
+            pass
+
+        # Content container with margins (window.set_child used in Gtk4)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        content.set_margin_start(10)
+        content.set_margin_end(10)
+        content.set_margin_top(10)
+        content.set_margin_bottom(10)
+
+        if self._child:
+            child_widget = self._child.get_backend_widget()
+            # ensure child is shown properly
+            try:
+                content.append(child_widget)
+            except Exception:
+                try:
+                    content.add(child_widget)
+                except Exception:
+                    pass
+
+        try:
+            self._window.set_child(content)
+        except Exception:
+            # fallback for older bindings
+            try:
+                self._window.add(content)
+            except Exception:
+                pass
+
+        self._backend_widget = self._window
+        # Connect destroy/close handlers
+        try:
+            # Gtk4: use 'close-request' if available, otherwise 'destroy'
+            if hasattr(self._window, "connect"):
+                try:
+                    self._window.connect("close-request", self._on_delete_event)
+                except Exception:
+                    try:
+                        self._window.connect("destroy", self._on_destroy)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    
+    def _on_destroy(self, widget):
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
+    def _on_delete_event(self, *args):
+        # close-request handler in Gtk4: post cancel event and destroy
+        try:
+            self._post_event(YCancelEvent())
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        # returning False/True not used in this simplified handler
+        return False
+
+    def setVisible(self, visible):
+        """Set widget visibility."""
+        if self._backend_widget:
+            try:
+                self._backend_widget.set_visible(visible)
+            except Exception:
+                pass
+        super().setVisible(visible)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the dialog window backend."""
+        try:
+            if self._window is not None:
+                try:
+                    self._window.set_sensitive(enabled)
+                except Exception:
+                    # fallback: propagate to child content
+                    try:
+                        child = getattr(self, "_window", None)
+                        if child and hasattr(child, "set_sensitive"):
+                            child.set_sensitive(enabled)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
