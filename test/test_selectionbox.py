@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 def test_selectionbox(backend_name=None):
-    """Test ComboBox widget specifically"""
+    """Test Selection Box widget specifically"""
     if backend_name:
         print(f"Setting backend to: {backend_name}")
         os.environ['YUI_BACKEND'] = backend_name
@@ -27,21 +27,20 @@ def test_selectionbox(backend_name=None):
         
         ui = YUI_ui()
         factory = ui.widgetFactory()
-        ui.application().setIconBasePath("/home/angelo/src/manatools/dnfdragora/share/images/")
+        #ui.application().setIconBasePath("PATH_TO_TEST")
 
 ###############
-        ui.application().setApplicationIcon("dnfdragora.png")
+        ui.application().setApplicationIcon("dnfdragora")
         dialog = factory.createPopupDialog()
         mainVbox = factory.createVBox( dialog )
         hbox = factory.createHBox( mainVbox )
-        selBox = factory.createSelectionBox( hbox, "Choose your pizza" )
-
-        selBox.addItem( "Pizza Margherita" )
-        selBox.addItem( "Pizza Capricciosa" )
-        selBox.addItem( "Pizza Funghi" )
-        selBox.addItem( "Pizza Prosciutto" )
-        selBox.addItem( "Pizza Quattro Stagioni" )
-        selBox.addItem( "Calzone" )
+        selBox = factory.createSelectionBox( hbox, "Choose your pasta" )
+        selBox.addItem( "Spaghetti Carbonara" )
+        selBox.addItem( "Penne Arrabbiata" )
+        selBox.addItem( "Fettuccine" )
+        selBox.addItem( "Lasagna" )
+        selBox.addItem( "Ravioli" )
+        selBox.addItem( "Trofie al pesto" ) # Ligurian specialty
 
         vbox = factory.createVBox( hbox )
         align = factory.createTop(vbox)

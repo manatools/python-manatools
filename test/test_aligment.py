@@ -15,6 +15,7 @@ def test_Alignment(backend_name=None):
     
     try:
         from manatools.aui.yui import YUI, YUI_ui
+        import manatools.aui.yui_common as yui
         
         # Force re-detection
         YUI._instance = None
@@ -34,6 +35,11 @@ def test_Alignment(backend_name=None):
         left = factory.createPushButton( leftAlignment, "Left" )
         rightAlignment = factory.createRight( hbox )
         factory.createPushButton( rightAlignment, "Right" )
+
+        hbox = factory.createHBox( vbox )
+        rightAlignment = factory.createRight( hbox )
+        btn = factory.createPushButton( rightAlignment, ">Right<" )
+        btn.setStretchable( yui.YUIDimension.YD_HORIZ, True )
 
         factory.createLabel(vbox, "Testing aligment Top and Bottom into HBox")
         hbox = factory.createHBox( vbox )
