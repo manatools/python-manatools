@@ -3,39 +3,10 @@ Qt backend implementation for YUI
 """
 
 import sys
-import importlib
 from PySide6 import QtWidgets, QtCore, QtGui
 import os
 from .yui_common import *
-
-# Import backend symbols only into this shim module.
-def _import_qt_backend_symbols():
-    mod = None
-    try:
-        # Package-relative import
-        mod = importlib.import_module(".backends.qt", __package__)
-    except Exception:
-        try:
-            # Absolute fallback
-            mod = importlib.import_module("manatools.aui.backends.qt")
-        except Exception:
-            mod = None
-    if not mod:
-        return
-    names = getattr(mod, "__all__", None)
-    if names:
-        for name in names:
-            try:
-                globals()[name] = getattr(mod, name)
-            except Exception:
-                pass
-    else:
-        # Fallback: import non-private names
-        for name, obj in mod.__dict__.items():
-            if not name.startswith("_"):
-                globals()[name] = obj
-
-_import_qt_backend_symbols()
+from .backends.qt import *
 
 class YUIQt:
     def __init__(self):
