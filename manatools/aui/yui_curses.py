@@ -7,37 +7,8 @@ import curses.ascii
 import sys
 import os
 import time
-import importlib
 from .yui_common import *
-
-# Import backend symbols only into this shim module.
-def _import_curses_backend_symbols():
-    mod = None
-    try:
-        # Package-relative import
-        mod = importlib.import_module(".backends.curses", __package__)
-    except Exception:
-        try:
-            # Absolute fallback
-            mod = importlib.import_module("manatools.aui.backends.curses")
-        except Exception:
-            mod = None
-    if not mod:
-        return
-    names = getattr(mod, "__all__", None)
-    if names:
-        for name in names:
-            try:
-                globals()[name] = getattr(mod, name)
-            except Exception:
-                pass
-    else:
-        # Fallback: import non-private names
-        for name, obj in mod.__dict__.items():
-            if not name.startswith("_"):
-                globals()[name] = obj
-
-_import_curses_backend_symbols()
+from .backends.curses import *
 
 class YUICurses:
     def __init__(self):
