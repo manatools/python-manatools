@@ -33,6 +33,12 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         # minimal height (will be computed from child)
         self._height = 3
         self._inner_top_padding = 1
+        # allow focusing the frame title/checkbox and track focus state
+        try:
+            self._can_focus = True
+        except Exception:
+            pass
+        self._focused = False
 
     def widgetClass(self):
         return "YCheckBoxFrame"
@@ -125,6 +131,11 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         # no persistent backend object for curses
         self._backend_widget = None
         self._update_min_height()
+        # ensure children enablement matches checkbox initial state
+        try:
+            self._apply_children_enablement(self._checked)
+        except Exception:
+            pass
 
     def _apply_children_enablement(self, isChecked: bool):
         try:
@@ -160,7 +171,24 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
     def _set_backend_enabled(self, enabled: bool):
         try:
             # logical propagation
-            self._apply_children_enablement(self._checked if self._auto_enable else enabled)
+            # If auto_enable is enabled, child's enabled state follows checkbox.
+            # Otherwise follow explicit enabled flag.
+            if self._auto_enable:
+                self._apply_children_enablement(self._checked)
+            else:
+                # propagate explicit enabled/disabled to logical children
+                child = getattr(self, "_child", None)
+                if child is None:
+                    for c in (getattr(self, "_children", None) or []):
+                        try:
+                            c.setEnabled(enabled)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        child.setEnabled(enabled)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -181,6 +209,10 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         self._update_min_height()
+        try:
+            self._apply_children_enablement(self._checked)
+        except Exception:
+            pass
 
     def setChild(self, child):
         try:
@@ -196,6 +228,10 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         self._update_min_height()
+        try:
+            self._apply_children_enablement(self._checked)
+        except Exception:
+            pass
 
     def _on_toggle_request(self):
         """Toggle value (helper for key handling if needed)."""
@@ -203,6 +239,27 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
             self.setValue(not self._checked)
         except Exception:
             pass
+
+    def _handle_key(self, key):
+        """Handle keyboard toggling when this frame is focused."""
+        try:
+            if key in (ord(' '), 10, 13, curses.KEY_ENTER):
+                # toggle checkbox
+                try:
+                    self.setValue(not self._checked)
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _set_focus(self, focused: bool):
+        """Called by container when focus moves; track focus for drawing."""
+        try:
+            self._focused = bool(focused)
+        except Exception:
+            self._focused = False
 
     def _draw(self, window, y, x, width, height):
         """
@@ -219,7 +276,20 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
                     chk = "x" if self._checked else " "
                     title = f"[{chk}] {self._label}" if self._label else f"[{chk}]"
                     title = title[:max(0, width)]
-                    window.addstr(y, x, title, curses.A_BOLD)
+                    # highlight when focused, dim when disabled
+                    attr = curses.A_BOLD
+                    try:
+                        if getattr(self, "isEnabled", None):
+                            enabled = bool(self.isEnabled())
+                        else:
+                            enabled = True
+                    except Exception:
+                        enabled = True
+                    if not enabled:
+                        attr |= curses.A_DIM
+                    if getattr(self, "_focused", False):
+                        attr |= curses.A_REVERSE
+                    window.addstr(y, x, title, attr)
                 except curses.error:
                     pass
                 return
@@ -263,7 +333,20 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
                 if len(title_body) > max_title_len:
                     title_body = title_body[:max(0, max_title_len - 3)] + "..."
                 start_x = x + max(1, (width - len(title_body)) // 2)
-                window.addstr(y, start_x, title_body, curses.A_BOLD)
+                # choose attributes depending on focus/enable state
+                attr = curses.A_BOLD
+                try:
+                    if getattr(self, "isEnabled", None):
+                        enabled = bool(self.isEnabled())
+                    else:
+                        enabled = True
+                except Exception:
+                    enabled = True
+                if not enabled:
+                    attr |= curses.A_DIM
+                if getattr(self, "_focused", False):
+                    attr |= curses.A_REVERSE
+                window.addstr(y, start_x, title_body, attr)
             except curses.error:
                 pass
 
