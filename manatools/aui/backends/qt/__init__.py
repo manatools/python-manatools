@@ -10,6 +10,7 @@ from .comboboxqt import YComboBoxQt
 from .frameqt import YFrameQt
 from .inputfieldqt import YInputFieldQt
 from .selectionboxqt import YSelectionBoxQt
+from .checkboxframeqt import YCheckBoxFrameQt
 
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "YCheckBoxQt",
     "YComboBoxQt",
     "YAlignmentQt",
+    "YCheckBoxFrameQt",
     # ...
 ]

@@ -241,4 +241,7 @@ class YWidgetFactoryQt:
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameQt(parent, label)
-
+    
+    def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
+        """Create a CheckBox Frame widget."""
+        return YCheckBoxFrameQt(parent, label, checked)
