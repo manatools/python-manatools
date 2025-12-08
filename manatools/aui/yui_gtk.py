@@ -254,3 +254,6 @@ class YWidgetFactoryGtk:
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
 
+    def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
+        """Create a CheckBox Frame widget."""
+        return YCheckBoxFrameGtk(parent, label, checked)

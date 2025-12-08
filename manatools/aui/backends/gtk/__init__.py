@@ -10,6 +10,7 @@ from .comboboxgtk import YComboBoxGtk
 from .framegtk import YFrameGtk
 from .inputfieldgtk import YInputFieldGtk
 from .selectionboxgtk import YSelectionBoxGtk
+from .checkboxframegtk import YCheckBoxFrameGtk 
 
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "YCheckBoxGtk",
     "YComboBoxGtk",
     "YAlignmentGtk",
+    "YCheckBoxFrameGtk",
     # ...
 ]
