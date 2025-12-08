@@ -10,6 +10,7 @@ from .comboboxcurses import YComboBoxCurses
 from .framecurses import YFrameCurses
 from .inputfieldcurses import YInputFieldCurses
 from .selectionboxcurses import YSelectionBoxCurses
+from .checkboxframecurses import YCheckBoxFrameCurses
 
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "YCheckBoxCurses",
     "YComboBoxCurses",
     "YAlignmentCurses",
+    "YCheckBoxFrameCurses",
     # ...
 ]

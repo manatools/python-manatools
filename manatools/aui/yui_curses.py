@@ -202,5 +202,6 @@ class YWidgetFactoryCurses:
         """Create a Frame widget."""
         return YFrameCurses(parent, label)
 
-
-
+    def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
+        """Create a CheckBox Frame widget."""
+        return YCheckBoxFrameCurses(parent, label, checked)
