@@ -52,6 +52,7 @@ class YPushButtonQt(YWidget):
                     pass
         except Exception:
              pass
+        self._backend_widget.setEnabled(bool(self._enabled))
         self._backend_widget.clicked.connect(self._on_clicked)
 
     def _set_backend_enabled(self, enabled):
