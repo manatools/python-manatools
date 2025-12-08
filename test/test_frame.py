@@ -43,7 +43,7 @@ def test_selectionbox(backend_name=None):
         selBox.addItem( "Ravioli" )
         selBox.addItem( "Trofie al pesto" ) # Ligurian specialty
 
-        frame1 = factory.createFrame( hbox , "SelectionBox Options")
+        frame1 = factory.createCheckBoxFrame( hbox , "SelectionBox Options")
         vbox = factory.createVBox( frame1 )
         align = factory.createTop(vbox)
         notifyCheckBox = factory.createCheckBox( align, "Notify on change", selBox.notify() )
