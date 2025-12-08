@@ -36,9 +36,13 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
     def setLabel(self, new_label):
         try:
             self._label = str(new_label)
-            if self._checkbox is not None:
+            if getattr(self, "_checkbox", None) is not None:
                 try:
-                    self._checkbox.setText(self._label)
+                    # QGroupBox uses setTitle; keep compatibility if _checkbox is a QCheckBox
+                    if hasattr(self._checkbox, "setTitle"):
+                        self._checkbox.setTitle(self._label)
+                    else:
+                        self._checkbox.setText(self._label)
                 except Exception:
                     pass
         except Exception:
@@ -49,9 +53,16 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._checked = bool(isChecked)
             if self._checkbox is not None:
                 try:
-                    self._checkbox.blockSignals(True)
-                    self._checkbox.setChecked(self._checked)
-                    self._checkbox.blockSignals(False)
+                    # QGroupBox supports setChecked when checkable
+                    if hasattr(self._checkbox, "setChecked"):
+                        self._checkbox.blockSignals(True)
+                        self._checkbox.setChecked(self._checked)
+                        self._checkbox.blockSignals(False)
+                    else:
+                        # fallback for plain checkbox widget
+                        self._checkbox.blockSignals(True)
+                        self._checkbox.setChecked(self._checked)
+                        self._checkbox.blockSignals(False)
                 except Exception:
                     pass
             # propagate enablement based on new value
@@ -62,7 +73,11 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
     def value(self):
         try:
             if self._checkbox is not None:
-                return bool(self._checkbox.isChecked())
+                # QGroupBox isChecked exists when checkable; otherwise fallback
+                if hasattr(self._checkbox, "isChecked"):
+                    return bool(self._checkbox.isChecked())
+                if hasattr(self._checkbox, "isChecked"):
+                    return bool(self._checkbox.isChecked())
         except Exception:
             pass
         return bool(self._checked)
@@ -89,29 +104,35 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             pass
 
     def _create_backend_widget(self):
-        """Create widget: top-level checkbox + content area for single child."""
+        """Create widget: use QGroupBox checkable (theme-aware) so the checkbox is in the title."""
         try:
-            container = QtWidgets.QWidget()
-            vlayout = QtWidgets.QVBoxLayout(container)
-            vlayout.setContentsMargins(6, 6, 6, 6)
-            vlayout.setSpacing(4)
-
-            cb = QtWidgets.QCheckBox(self._label)
-            cb.setChecked(self._checked)
-            vlayout.addWidget(cb, 0, QtCore.Qt.AlignTop)
+            # Use QGroupBox to present a themed frame with a checkable title area.
+            grp = QtWidgets.QGroupBox()
+            grp.setTitle(self._label)
+            grp.setCheckable(True)
+            grp.setChecked(self._checked)
+            layout = QtWidgets.QVBoxLayout(grp)
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(4)
 
             content = QtWidgets.QWidget()
             content_layout = QtWidgets.QVBoxLayout(content)
             content_layout.setContentsMargins(0, 0, 0, 0)
             content_layout.setSpacing(4)
-            vlayout.addWidget(content)
+            layout.addWidget(content)
 
-            self._backend_widget = container
-            self._checkbox = cb
+            self._backend_widget = grp
+            # keep attribute name _checkbox for compatibility, but it's a QGroupBox now
+            self._checkbox = grp
             self._content_widget = content
             self._content_layout = content_layout
 
-            cb.toggled.connect(self._on_checkbox_toggled)
+            # connect group toggled signal
+            try:
+                grp.toggled.connect(self._on_checkbox_toggled)
+            except Exception:
+                # older bindings or non-checkable objects may not have toggled
+                pass
 
             # attach existing child if present
             try:
