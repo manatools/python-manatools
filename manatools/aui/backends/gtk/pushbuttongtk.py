@@ -50,6 +50,7 @@ class YPushButtonGtk(YWidget):
         except Exception:
             pass
         try:
+            self._backend_widget.set_sensitive(self._enabled)
             self._backend_widget.connect("clicked", self._on_clicked)
         except Exception:
             pass
