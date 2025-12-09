@@ -70,10 +70,7 @@ class YFrameGtk(YSingleChildContainerWidget):
         The frame is stretchable when its child is stretchable or has a layout weight.
         """
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is None:
                 return False
             try:
@@ -97,10 +94,7 @@ class YFrameGtk(YSingleChildContainerWidget):
                 return
             if self._content_box is None:
                 return
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is None:
                 return
             try:
@@ -161,37 +155,9 @@ class YFrameGtk(YSingleChildContainerWidget):
 
     def addChild(self, child):
         """Add logical child and attach backend if possible."""
-        try:
-            super().addChild(child)
-        except Exception:
-            # best-effort fallback
-            try:
-                self._child = child
-                child._parent = self
-            except Exception:
-                pass
-        # attach to backend if ready
-        try:
-            if getattr(self, "_backend_widget", None) is not None:
-                self._attach_child_backend()
-        except Exception:
-            pass
-
-    def setChild(self, child):
-        """Set single logical child and attach backend if possible."""
-        try:
-            super().setChild(child)
-        except Exception:
-            try:
-                self._child = child
-                child._parent = self
-            except Exception:
-                pass
-        try:
-            if getattr(self, "_backend_widget", None) is not None:
-                self._attach_child_backend()
-        except Exception:
-            pass
+        super().addChild(child)
+        # best-effort fallback
+        self._attach_child_backend()
 
     def _create_backend_widget(self):
         """
@@ -229,7 +195,7 @@ class YFrameGtk(YSingleChildContainerWidget):
                 self._content_box = content
                 # attach existing child if any
                 try:
-                    if getattr(self, "_child", None):
+                    if self.hasChildren():
                         self._attach_child_backend()
                 except Exception:
                     pass
@@ -252,7 +218,7 @@ class YFrameGtk(YSingleChildContainerWidget):
                 self._label_widget = lbl
                 self._backend_widget = container
                 self._content_box = content
-                if getattr(self, "_child", None):
+                if self.hasChildren():
                     try:
                         self._attach_child_backend()
                     except Exception:
@@ -277,10 +243,7 @@ class YFrameGtk(YSingleChildContainerWidget):
             pass
         # propagate to logical child
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is not None:
                 try:
                     child.setEnabled(enabled)

@@ -229,9 +229,10 @@ class YDialogGtk(YSingleChildContainerWidget):
         content.set_margin_end(10)
         content.set_margin_top(10)
         content.set_margin_bottom(10)
-
-        if self._child:
-            child_widget = self._child.get_backend_widget()
+        
+        child = self.child()
+        if child:
+            child_widget = child.get_backend_widget()
             # ensure child is shown properly
             try:
                 content.append(child_widget)

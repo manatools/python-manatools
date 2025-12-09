@@ -89,9 +89,9 @@ class YAlignmentGtk(YSingleChildContainerWidget):
           * this dimension or if the child widget has a layout weight in
           * this dimension.
         '''
-        if self._child:
-            expand = bool(self._child.stretchable(dim))
-            weight = bool(self._child.weight(dim))
+        if self.child():
+            expand = bool(self.child().stretchable(dim))
+            weight = bool(self.child().weight(dim))
             if expand or weight:
                 return True
         return False
@@ -140,19 +140,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
 
     def addChild(self, child):
         """Keep base behavior and ensure we attempt to attach child's backend."""
-        try:
-            super().addChild(child)
-        except Exception:
-            self._child = child
-        self._child_attached = False
-        self._schedule_attach_child()
-
-    def setChild(self, child):
-        """Keep base behavior and ensure we attempt to attach child's backend."""
-        try:
-            super().setChild(child)
-        except Exception:
-            self._child = child
+        super().addChild(child)
         self._child_attached = False
         self._schedule_attach_child()
 
@@ -182,14 +170,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             self._create_backend_widget()
             return
 
-        # choose child reference (support _child or _children storage)
-        child = getattr(self, "_child", None)
-        if child is None:
-            try:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
-            except Exception:
-                child = None
+        # choose child reference
+        child = self.child()
         if child is None:
             return
 
@@ -348,14 +330,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             pass
         # propagate to logical child so child's backend updates too
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is not None:
-                try:
-                    child.setEnabled(enabled)
-                except Exception:
-                    pass
+                child.setEnabled(enabled)
         except Exception:
             pass

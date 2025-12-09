@@ -202,7 +202,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
 
             # attach existing child if any
             try:
-                if getattr(self, "_child", None):
+                if self.hasChildren():
                     self._attach_child_backend()
             except Exception:
                 pass
@@ -240,10 +240,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
         except Exception:
             pass
 
-        child = getattr(self, "_child", None)
-        if child is None:
-            chs = getattr(self, "_children", None) or []
-            child = chs[0] if chs else None
+        child = self.child()
         if child is None:
             return
 
@@ -307,58 +304,24 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
             state = bool(isChecked)
             if self._invert_auto:
                 state = not state
-            child = getattr(self, "_child", None)
-            if child is None:
-                for c in (getattr(self, "_children", None) or []):
-                    try:
-                        c.setEnabled(state)
-                    except Exception:
-                        pass
-                return
-            try:
+            child = self.child()
+            if child is not None:
                 child.setEnabled(state)
-            except Exception:
-                try:
-                    w = child.get_backend_widget()
-                    if w is not None:
-                        try:
-                            w.set_sensitive(state)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+            #try:
+            #    w = child.get_backend_widget()
+            #    if w is not None:
+            #        try:
+            #            w.set_sensitive(state)
+            #        except Exception:
+            #            pass
+            #except Exception:
+            #    pass
         except Exception:
             pass
 
     def addChild(self, child):
-        try:
-            super().addChild(child)
-        except Exception:
-            try:
-                self._child = child
-                child._parent = self
-            except Exception:
-                pass
-        try:
-            if getattr(self, "_backend_widget", None):
-                self._attach_child_backend()
-        except Exception:
-            pass
-
-    def setChild(self, child):
-        try:
-            super().setChild(child)
-        except Exception:
-            try:
-                self._child = child
-                child._parent = self
-            except Exception:
-                pass
-        try:
-            if getattr(self, "_backend_widget", None):
-                self._attach_child_backend()
-        except Exception:
-            pass
+        super().addChild(child)
+        self._attach_child_backend()
 
     def _set_backend_enabled(self, enabled: bool):
         try:
@@ -371,18 +334,9 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
             pass
         # propagate to logical children
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                for c in (getattr(self, "_children", None) or []):
-                    try:
-                        c.setEnabled(enabled)
-                    except Exception:
-                        pass
-                return
-            try:
+            child = self.child()
+            if child is not None:
                 child.setEnabled(enabled)
-            except Exception:
-                pass
         except Exception:
             pass
 
