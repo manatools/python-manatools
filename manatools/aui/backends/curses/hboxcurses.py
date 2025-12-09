@@ -54,18 +54,6 @@ class YHBoxCurses(YWidget):
                 pass
         self._recompute_min_height()
 
-    def setChild(self, child):
-        """Not typical for HBox, but keep parity with containers."""
-        try:
-            super().setChild(child)
-        except Exception:
-            try:
-                self._children = [child]
-                child._parent = self
-            except Exception:
-                pass
-        self._recompute_min_height()
-
     def _set_backend_enabled(self, enabled):
         """Enable/disable HBox and propagate to logical children."""
         try:
