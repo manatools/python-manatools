@@ -310,7 +310,7 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
             content_y = inner_y + pad_top
             content_h = max(0, inner_h - pad_top)
 
-            child = getattr(self, "_child", None)
+            child = self.child()
             if child is None:
                 return
 
