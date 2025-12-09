@@ -41,7 +41,7 @@ class YFrameCurses(YSingleChildContainerWidget):
     def _update_min_height(self):
         """Recompute minimal height: at least 3 rows or child layout min + borders + padding."""
         try:
-            child = getattr(self, "_child", None)
+            child = self.child()
             inner_min = _curses_recursive_min_height(child) if child is not None else 1
             self._height = max(3, 2 + self._inner_top_padding + inner_min)
         except Exception:
@@ -59,10 +59,7 @@ class YFrameCurses(YSingleChildContainerWidget):
     def stretchable(self, dim):
         """Frame is stretchable if its child is stretchable or has a weight."""
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is None:
                 return False
             try:
@@ -89,10 +86,7 @@ class YFrameCurses(YSingleChildContainerWidget):
     def _set_backend_enabled(self, enabled):
         """Propagate enabled state to the child."""
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is not None and hasattr(child, "setEnabled"):
                 try:
                     child.setEnabled(enabled)
@@ -102,38 +96,7 @@ class YFrameCurses(YSingleChildContainerWidget):
             pass
 
     def addChild(self, child):
-        try:
-            super().addChild(child)
-        except Exception:
-            self._child = child
-        # ensure traversal lists contain the child
-        try:
-            if not hasattr(self, "_children") or self._children is None:
-                self._children = []
-            if child not in self._children:
-                self._children.append(child)
-            try:
-                child._parent = self
-            except Exception:
-                pass
-        except Exception:
-            pass
-        # Update minimal height based on the child
-        self._update_min_height()
-
-    def setChild(self, child):
-        try:
-            super().setChild(child)
-        except Exception:
-            self._child = child
-        try:
-            self._children = [child]
-            try:
-                child._parent = self
-            except Exception:
-                pass
-        except Exception:
-            pass
+        super().addChild(child)        
         # Update minimal height based on the child
         self._update_min_height()
 
@@ -209,7 +172,7 @@ class YFrameCurses(YSingleChildContainerWidget):
             content_y = inner_y + pad_top
             content_h = max(0, inner_h - pad_top)
 
-            child = getattr(self, "_child", None)
+            child = self.child()
             if child is None:
                 return
 

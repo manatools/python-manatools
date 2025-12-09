@@ -97,11 +97,8 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
 
     def stretchable(self, dim):
         """Frame is stretchable if its child is."""
-        try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+        try:            
+            child = self.child()
             if child is None:
                 return False
             try:
@@ -121,7 +118,7 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
     def _update_min_height(self):
         """Recompute minimal height: borders + padding + child's minimal layout."""
         try:
-            child = getattr(self, "_child", None)
+            child = self.child()
             inner_min = _curses_recursive_min_height(child) if child is not None else 1
             self._height = max(3, 2 + self._inner_top_padding + inner_min)
         except Exception:
@@ -144,13 +141,8 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
             state = bool(isChecked)
             if self._invert_auto:
                 state = not state
-            child = getattr(self, "_child", None)
+            child = self.child()
             if child is None:
-                for c in (getattr(self, "_children", None) or []):
-                    try:
-                        c.setEnabled(state)
-                    except Exception:
-                        pass
                 return
             try:
                 child.setEnabled(state)
@@ -177,56 +169,14 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
                 self._apply_children_enablement(self._checked)
             else:
                 # propagate explicit enabled/disabled to logical children
-                child = getattr(self, "_child", None)
-                if child is None:
-                    for c in (getattr(self, "_children", None) or []):
-                        try:
-                            c.setEnabled(enabled)
-                        except Exception:
-                            pass
-                else:
-                    try:
-                        child.setEnabled(enabled)
-                    except Exception:
-                        pass
+                child = self.child()
+                if child is not None:
+                    child.setEnabled(enabled)
         except Exception:
             pass
 
     def addChild(self, child):
-        try:
-            super().addChild(child)
-        except Exception:
-            self._child = child
-        try:
-            if not hasattr(self, "_children") or self._children is None:
-                self._children = []
-            if child not in self._children:
-                self._children.append(child)
-            try:
-                child._parent = self
-            except Exception:
-                pass
-        except Exception:
-            pass
-        self._update_min_height()
-        try:
-            self._apply_children_enablement(self._checked)
-        except Exception:
-            pass
-
-    def setChild(self, child):
-        try:
-            super().setChild(child)
-        except Exception:
-            self._child = child
-        try:
-            self._children = [child]
-            try:
-                child._parent = self
-            except Exception:
-                pass
-        except Exception:
-            pass
+        super().addChild(child)        
         self._update_min_height()
         try:
             self._apply_children_enablement(self._checked)

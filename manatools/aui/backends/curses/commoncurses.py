@@ -42,10 +42,10 @@ def _curses_recursive_min_height(widget):
                 tallest = max(tallest, _curses_recursive_min_height(c))
             return max(1, tallest)
         elif cls == "YAlignment":
-            child = getattr(widget, "_child", None)
+            child = widget.child()
             return max(1, _curses_recursive_min_height(child))
-        elif cls == "YFrame":
-            child = getattr(widget, "_child", None)
+        elif cls == "YFrame" or cls == "YCheckBoxFrame":
+            child = widget.child()
             inner_top = max(0, getattr(widget, "_inner_top_padding", 1))
             inner_min = _curses_recursive_min_height(child)
             return max(3, 2 + inner_top + inner_min)  # borders(2) + padding + inner

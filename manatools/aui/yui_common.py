@@ -206,8 +206,7 @@ class YWidget:
            the change to the actual backend widget.
         '''
         self._enabled = enabled
-        if self._backend_widget:
-            self._set_backend_enabled(enabled)
+        self._set_backend_enabled(enabled)
     
     def setDisabled(self):
         self.setEnabled(False)
@@ -272,13 +271,17 @@ class YWidget:
 class YSingleChildContainerWidget(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._child = None
     
+    def child(self):
+        '''
+        Returns the only child of this single-child container, or None if no child is set.       
+        '''
+        return self.firstChild()
+
     def addChild(self, child):
-        if self._child is not None:
-            self.removeChild(self._child)
-        self._child = child
-        child._parent = self
+        if self.hasChildren():
+            raise YUIInvalidWidgetException("YSingleChildContainerWidget can only have one child")
+        super().addChild(child)
 
 class YSelectionWidget(YWidget):
     def __init__(self, parent=None):

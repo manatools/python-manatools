@@ -106,16 +106,10 @@ class YDialogCurses(YSingleChildContainerWidget):
         try:
             # propagate logical enabled state to entire subtree using setEnabled on children
             # so each widget's hook executes and updates its state.
-            if getattr(self, "_child", None):
-                try:
-                    self._child.setEnabled(enabled)
-                except Exception:
-                    pass
-            for c in list(getattr(self, "_children", []) or []):
-                try:
-                    c.setEnabled(enabled)
-                except Exception:
-                    pass
+            child = self.child()
+            if child is not None:
+                child.setEnabled(enabled)
+            
             # If disabling and dialog had focused widget, clear focus
             if not enabled:
                 try:
@@ -181,7 +175,7 @@ class YDialogCurses(YSingleChildContainerWidget):
             content_x = 2
             
             # Draw child content
-            if self._child:
+            if self.hasChildren():
                 self._draw_child_content(content_y, content_x, content_width, content_height)
             
             # Draw footer with instructions
@@ -208,12 +202,13 @@ class YDialogCurses(YSingleChildContainerWidget):
 
     def _draw_child_content(self, start_y, start_x, max_width, max_height):
         """Draw the child widget content respecting container hierarchy"""
-        if not self._child:
+        if not self.hasChildren():
             return
             
         # Draw only the root child - it will handle drawing its own children
-        if hasattr(self._child, '_draw'):
-            self._child._draw(self._backend_widget, start_y, start_x, max_width, max_height)            
+        child = self.child()
+        if hasattr(child, '_draw'):
+            child._draw(self._backend_widget, start_y, start_x, max_width, max_height)            
         
 
     def _cycle_focus(self, forward=True):
@@ -262,8 +257,8 @@ class YDialogCurses(YSingleChildContainerWidget):
             for child in widget._children:
                 find_in_widget(child)
         
-        if self._child:
-            find_in_widget(self._child)
+        if self.hasChildren():
+            find_in_widget(self.child())
         
         return focusable
 
