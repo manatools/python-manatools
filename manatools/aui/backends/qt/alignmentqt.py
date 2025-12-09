@@ -70,9 +70,9 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
         # Otherwise honor child's own stretchability/weight
         try:
-            if self._child:
-                expand = bool(self._child.stretchable(dim))
-                weight = bool(self._child.weight(dim))
+            if self.child():
+                expand = bool(self.child().stretchable(dim))
+                weight = bool(self.child().weight(dim))
                 if expand or weight:
                     return True
         except Exception:
@@ -85,10 +85,10 @@ class YAlignmentQt(YSingleChildContainerWidget):
         self._reapply_alignment()
 
     def _reapply_alignment(self):
-        if not (self._layout and self._child):
+        if not (self._layout and self.child()):
             return
         try:
-            w = self._child.get_backend_widget()
+            w = self.child().get_backend_widget()
             if w:
                 self._layout.removeWidget(w)
                 flags = QtCore.Qt.AlignmentFlag(0)
@@ -103,26 +103,15 @@ class YAlignmentQt(YSingleChildContainerWidget):
             pass
 
     def addChild(self, child):
-        try:
-            super().addChild(child)
-        except Exception:
-            self._child = child
-        if self._backend_widget:
-            self._attach_child_backend()
+        super().addChild(child)
+        self._attach_child_backend()
 
-    def setChild(self, child):
-        try:
-            super().setChild(child)
-        except Exception:
-            self._child = child
-        if self._backend_widget:
-            self._attach_child_backend()
 
     def _attach_child_backend(self):
-        if not (self._backend_widget and self._layout and self._child):
+        if not (self._backend_widget and self._layout and self.child()):
             return
         try:
-            w = self._child.get_backend_widget()
+            w = self.child().get_backend_widget()
             if w:
                 # clear previous
                 try:
@@ -138,7 +127,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
                     flags |= va
                 # If the child requests horizontal stretch, set its QSizePolicy to Expanding
                 try:
-                    if self._child and self._child.stretchable(YUIDimension.YD_HORIZ):
+                    if self.child() and self.child().stretchable(YUIDimension.YD_HORIZ):
                         sp = w.sizePolicy()
                         try:
                             sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
@@ -149,7 +138,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
                                 pass
                         w.setSizePolicy(sp)
                     # If child requests vertical stretch, set vertical policy
-                    if self._child and self._child.stretchable(YUIDimension.YD_VERT):
+                    if self.child() and self.child().stretchable(YUIDimension.YD_VERT):
                         sp = w.sizePolicy()
                         try:
                             sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
@@ -185,7 +174,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
         self._backend_widget = container
         self._layout = grid
 
-        if getattr(self, "_child", None):
+        if self.hasChildren():
             self._attach_child_backend()
 
     def _set_backend_enabled(self, enabled):
@@ -200,10 +189,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
             pass
         # propagate to logical child
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is not None:
                 try:
                     child.setEnabled(enabled)

@@ -158,9 +158,9 @@ class YDialogQt(YSingleChildContainerWidget):
         central_widget = QtWidgets.QWidget()
         self._qwidget.setCentralWidget(central_widget)
         
-        if self._child:
+        if self.child():
             layout = QtWidgets.QVBoxLayout(central_widget)
-            layout.addWidget(self._child.get_backend_widget())
+            layout.addWidget(self.child().get_backend_widget())
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
@@ -177,17 +177,11 @@ class YDialogQt(YSingleChildContainerWidget):
             pass
         # propagate logical enabled state to contained YWidget(s)
         try:
-            if getattr(self, "_child", None):
+            if self.child():
                 try:
-                    self._child.setEnabled(enabled)
+                    self.child().setEnabled(enabled)
                 except Exception:
                     pass
-            else:
-                for c in list(getattr(self, "_children", []) or []):
-                    try:
-                        c.setEnabled(enabled)
-                    except Exception:
-                        pass
         except Exception:
             pass
 

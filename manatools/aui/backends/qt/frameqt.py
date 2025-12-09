@@ -27,10 +27,7 @@ class YFrameQt(YSingleChildContainerWidget):
         """
         try:
             # prefer explicit single child
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is None:
                 return False
             try:
@@ -64,10 +61,10 @@ class YFrameQt(YSingleChildContainerWidget):
 
     def _attach_child_backend(self):
         """Attach existing child backend widget to the groupbox layout."""
-        if not (self._backend_widget and self._group_layout and getattr(self, "_child", None)):
+        if not (self._backend_widget and self._group_layout and self.child()):
             return
         try:
-            w = self._child.get_backend_widget()
+            w = self.child().get_backend_widget()
             if w:
                 # clear any existing widgets in layout (defensive)
                 try:
@@ -83,30 +80,8 @@ class YFrameQt(YSingleChildContainerWidget):
 
     def addChild(self, child):
         """Override to attach backend child when available."""
-        try:
-            super().addChild(child)
-        except Exception:
-            # best-effort fallback
-            self._child = child
-            child._parent = self
-        # if backend exists, attach new child's backend
-        if getattr(self, "_backend_widget", None):
-            try:
-                self._attach_child_backend()
-            except Exception:
-                pass
-
-    def setChild(self, child):
-        try:
-            super().setChild(child)
-        except Exception:
-            self._child = child
-            child._parent = self
-        if getattr(self, "_backend_widget", None):
-            try:
-                self._attach_child_backend()
-            except Exception:
-                pass
+        super().addChild(child)
+        self._attach_child_backend()
 
     def _create_backend_widget(self):
         """Create the QGroupBox + layout and attach child if present."""
@@ -119,9 +94,9 @@ class YFrameQt(YSingleChildContainerWidget):
             self._group_layout = layout
 
             # attach child widget if already set
-            if getattr(self, "_child", None):
+            if self.child():
                 try:
-                    w = self._child.get_backend_widget()
+                    w = self.child().get_backend_widget()
                     if w:
                         layout.addWidget(w)
                 except Exception:
@@ -135,9 +110,9 @@ class YFrameQt(YSingleChildContainerWidget):
                 layout.setSpacing(4)
                 self._backend_widget = container
                 self._group_layout = layout
-                if getattr(self, "_child", None):
+                if self.child():
                     try:
-                        w = self._child.get_backend_widget()
+                        w = self.child().get_backend_widget()
                         if w:
                             layout.addWidget(w)
                     except Exception:
@@ -158,10 +133,7 @@ class YFrameQt(YSingleChildContainerWidget):
             pass
         # propagate to logical child
         try:
-            child = getattr(self, "_child", None)
-            if child is None:
-                chs = getattr(self, "_children", None) or []
-                child = chs[0] if chs else None
+            child = self.child()
             if child is not None:
                 try:
                     child.setEnabled(enabled)
