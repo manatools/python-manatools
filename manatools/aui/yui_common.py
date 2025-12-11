@@ -180,6 +180,8 @@ class YWidget:
         if child not in self._children:
             self._children.append(child)
             child._parent = self
+            if self.isEnabled() is False:
+                child._enabled = False
     
     def removeChild(self, child):
         if child in self._children:
