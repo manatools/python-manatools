@@ -44,6 +44,7 @@ class YCheckBoxQt(YWidget):
         self._backend_widget = QtWidgets.QCheckBox(self._label)
         self._backend_widget.setChecked(self._is_checked)
         self._backend_widget.stateChanged.connect(self._on_state_changed)
+        self._backend_widget.setEnabled(bool(self._enabled))
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QCheckBox backend."""

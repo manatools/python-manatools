@@ -92,6 +92,7 @@ class YFrameQt(YSingleChildContainerWidget):
             layout.setSpacing(4)
             self._backend_widget = grp
             self._group_layout = layout
+            self._backend_widget.setEnabled(bool(self._enabled))
 
             # attach child widget if already set
             if self.child():

@@ -62,7 +62,7 @@ class YTreeQt(YSelectionWidget):
         layout.addWidget(tree)
         self._backend_widget = container
         self._tree_widget = tree
-
+        self._backend_widget.setEnabled(bool(self._enabled))
         # populate if items already present
         try:
             self.rebuildTree()

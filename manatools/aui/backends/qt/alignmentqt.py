@@ -173,6 +173,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
         self._backend_widget = container
         self._layout = grid
+        self._backend_widget.setEnabled(bool(self._enabled))
 
         if self.hasChildren():
             self._attach_child_backend()

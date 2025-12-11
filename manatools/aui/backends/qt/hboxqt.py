@@ -57,6 +57,7 @@ class YHBoxQt(YWidget):
                     widget.setSizePolicy(sp)
             except Exception:
                 pass
+            self._backend_widget.setEnabled(bool(self._enabled))
             print(  f"YHBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 

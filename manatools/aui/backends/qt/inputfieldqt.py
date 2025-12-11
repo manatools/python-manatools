@@ -54,6 +54,7 @@ class YInputFieldQt(YWidget):
         
         self._backend_widget = container
         self._entry_widget = entry
+        self._backend_widget.setEnabled(bool(self._enabled))
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the input field: entry and container."""

@@ -37,6 +37,7 @@ class YLabelQt(YWidget):
             font.setBold(True)
             font.setPointSize(font.pointSize() + 2)
             self._backend_widget.setFont(font)
+        self._backend_widget.setEnabled(bool(self._enabled))
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QLabel backend."""

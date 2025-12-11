@@ -70,6 +70,7 @@ class YComboBoxQt(YSelectionWidget):
         
         self._backend_widget = container
         self._combo_widget = combo
+        self._backend_widget.setEnabled(bool(self._enabled))
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the combobox and its container."""

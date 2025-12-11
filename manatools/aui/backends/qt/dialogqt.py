@@ -164,6 +164,7 @@ class YDialogQt(YSingleChildContainerWidget):
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
+        self._backend_widget.setEnabled(bool(self._enabled))
     
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog window and propagate to logical child widgets."""

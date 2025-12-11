@@ -107,6 +107,7 @@ class YSelectionBoxQt(YSelectionWidget):
         layout.addWidget(list_widget)
         
         self._backend_widget = container
+        self._backend_widget.setEnabled(bool(self._enabled))
         self._list_widget = list_widget
 
     def _set_backend_enabled(self, enabled):

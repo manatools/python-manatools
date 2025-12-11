@@ -58,8 +58,7 @@ class YVBoxQt(YWidget):
             except Exception:
                 pass
 
-
-
+            self._backend_widget.setEnabled(bool(self._enabled))
             print(  f"YVBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
             layout.addWidget(widget, stretch=expand)
 

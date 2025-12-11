@@ -126,6 +126,7 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._checkbox = grp
             self._content_widget = content
             self._content_layout = content_layout
+            self._backend_widget.setEnabled(bool(self._enabled))
 
             # connect group toggled signal
             try:
