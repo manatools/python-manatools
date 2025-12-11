@@ -130,7 +130,8 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         self._update_min_height()
         # ensure children enablement matches checkbox initial state
         try:
-            self._apply_children_enablement(self._checked)
+            if self.isEnabled():
+                self._apply_children_enablement(self._checked)
         except Exception:
             pass
 
@@ -138,7 +139,7 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         try:
             if not self._auto_enable:
                 return
-            state = bool(isChecked)
+            state = bool(isChecked) if self.isEnabled() else False
             if self._invert_auto:
                 state = not state
             child = self.child()
