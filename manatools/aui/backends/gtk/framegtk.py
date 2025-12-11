@@ -193,6 +193,7 @@ class YFrameGtk(YSingleChildContainerWidget):
                         pass
                 self._backend_widget = frame
                 self._content_box = content
+                self._backend_widget.set_sensitive(self._enabled)
                 # attach existing child if any
                 try:
                     if self.hasChildren():

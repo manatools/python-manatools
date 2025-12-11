@@ -56,6 +56,7 @@ class YLabelGtk(YWidget):
                 self._backend_widget.set_markup(markup)
             except Exception:
                 pass
+        self._backend_widget.set_sensitive(self._enabled)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the label widget backend."""

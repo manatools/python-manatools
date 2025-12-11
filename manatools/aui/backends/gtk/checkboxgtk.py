@@ -50,6 +50,7 @@ class YCheckBoxGtk(YWidget):
             self._backend_widget.connect("toggled", self._on_toggled)
         except Exception:
             pass
+        self._backend_widget.set_sensitive(self._enabled)
     
     def _on_toggled(self, button):
         try:

@@ -65,6 +65,7 @@ class YHBoxGtk(YWidget):
                     self._backend_widget.add(widget)
                 except Exception:
                     pass
+        self._backend_widget.set_sensitive(self._enabled)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the HBox and propagate to children."""

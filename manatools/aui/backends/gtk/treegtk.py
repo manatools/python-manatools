@@ -101,6 +101,7 @@ class YTreeGtk(YSelectionWidget):
 
         self._backend_widget = vbox
         self._listbox = listbox
+        self._backend_widget.set_sensitive(self._enabled)
 
         try:
             vbox.append(sw)

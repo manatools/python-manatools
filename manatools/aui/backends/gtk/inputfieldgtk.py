@@ -81,6 +81,7 @@ class YInputFieldGtk(YWidget):
 
         self._backend_widget = hbox
         self._entry_widget = entry
+        self._backend_widget.set_sensitive(self._enabled)
     
     def _on_changed(self, entry):
         try:

@@ -178,6 +178,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
                 self._checkbox = check
                 self._content_box = content
                 self._label_widget = None
+            self._backend_widget.set_sensitive(self._enabled)
 
             # Ensure a little top margin between title and content
             try:
@@ -279,7 +280,8 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
             pass
 
         # apply enablement state
-        self._apply_children_enablement(self.value())
+        if self.isEnabled():
+            self._apply_children_enablement(self.value())
 
     def _on_toggled(self, widget):
         try:

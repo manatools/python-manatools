@@ -65,7 +65,8 @@ class YVBoxGtk(YWidget):
                         widget.set_halign(Gtk.Align.START)
             except Exception:
                 pass
-
+            
+            self._backend_widget.set_sensitive(self._enabled)
             # Gtk4: use append instead of pack_start
             try:
                 self._backend_widget.append(widget)

@@ -266,6 +266,7 @@ class YSelectionBoxGtk(YSelectionWidget):
 
         self._backend_widget = vbox
         self._listbox = listbox
+        self._backend_widget.set_sensitive(self._enabled)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the selection box and its listbox/rows."""

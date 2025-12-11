@@ -277,6 +277,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             box = Gtk.Box()
 
         self._backend_widget = box
+        self._backend_widget.set_sensitive(self._enabled)
 
         # Connect draw handler if we have a background pixbuf
         if self._background_pixbuf and not self._signal_id:

@@ -252,6 +252,7 @@ class YDialogGtk(YSingleChildContainerWidget):
                 pass
 
         self._backend_widget = self._window
+        self._backend_widget.set_sensitive(self._enabled)
         # Connect destroy/close handlers
         try:
             # Gtk4: use 'close-request' if available, otherwise 'destroy'
