@@ -37,7 +37,8 @@ class YPushButtonQt(YWidget):
                 sp = self._backend_widget.sizePolicy()
                 # PySide6 may expect enum class; try both styles defensively
                 try:
-                    sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Minimum)
+                    sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Minimum if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Fixed)
+                    sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Minimum if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Fixed)
                 except Exception:
                     try:
                         sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Minimum)
