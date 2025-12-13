@@ -43,10 +43,10 @@ class YPushButtonGtk(YWidget):
         self._backend_widget = Gtk.Button(label=self._label)
         # Prevent button from being stretched horizontally by default.
         try:
-            if hasattr(self._backend_widget, "set_hexpand"):
-                self._backend_widget.set_hexpand(False)
-            if hasattr(self._backend_widget, "set_halign"):
-                self._backend_widget.set_halign(Gtk.Align.START)
+            self._backend_widget.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))            
+            self._backend_widget.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            self._backend_widget.set_halign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_HORIZ) else Gtk.Align.CENTER)
+            self._backend_widget.set_valign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_VERT) else Gtk.Align.CENTER)
         except Exception:
             pass
         try:
