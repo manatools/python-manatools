@@ -24,8 +24,9 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     """
     GTK4 implementation of YAlignment.
 
-    - Uses a Gtk.Box as a lightweight container that requests expansion when
-      needed so child halign/valign can take effect (matches the small GTK sample).
+    - Uses a Gtk.Grid as a lightweight container that expands to provide space
+        so child halign/valign can take effect. Gtk.Grid honors child halign/valign
+        within its allocation, which matches YAlignment.h semantics.
     - Applies halign/valign hints to the child's backend widget.
     - Defers attaching the child if its backend is not yet created (GLib.idle_add).
     - Supports an optional repeating background pixbuf painted in the draw signal.
@@ -37,6 +38,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         self._background_pixbuf = None
         self._signal_id = None
         self._backend_widget = None
+        # get a reference to the single row container
+        self._row = []
         # schedule guard for deferred attach
         self._attach_scheduled = False
         # Track if we've already attached a child
@@ -46,7 +49,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         return "YAlignment"
 
     def _to_gtk_halign(self):
-        """Convert Horizontal YAlignmentType to Gtk.Align or None."""        
+        """Convert Horizontal YAlignmentType to Gtk.Align or Gtk.Align.CENTER."""        
         if self._halign_spec:
             if self._halign_spec == YAlignmentType.YAlignBegin:
                 return Gtk.Align.START
@@ -54,10 +57,11 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.CENTER
             if self._halign_spec == YAlignmentType.YAlignEnd:
                 return Gtk.Align.END
-        return None
+        #default
+        return Gtk.Align.CENTER
     
     def _to_gtk_valign(self):
-        """Convert Vertical YAlignmentType to Gtk.Align or None."""        
+        """Convert Vertical YAlignmentType to Gtk.Align or Gtk.Align.CENTER."""        
         if self._valign_spec:
             if self._valign_spec == YAlignmentType.YAlignBegin:
                 return Gtk.Align.START
@@ -65,7 +69,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.CENTER
             if self._valign_spec == YAlignmentType.YAlignEnd:
                 return Gtk.Align.END
-        return None
+        #default
+        return Gtk.Align.CENTER
 
     #def stretchable(self, dim):
     #    """Report whether this alignment should expand in given dimension.
@@ -84,16 +89,27 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     #    return False
 
     def stretchable(self, dim: YUIDimension):
-        ''' Returns the stretchability of the layout box:
-          * The layout box is stretchable if the child is stretchable in
-          * this dimension or if the child widget has a layout weight in
-          * this dimension.
-        '''
-        if self.child():
-            expand = bool(self.child().stretchable(dim))
-            weight = bool(self.child().weight(dim))
-            if expand or weight:
-                return True
+        """Stretchability semantics consistent with YAlignment.h:
+        - In the aligned dimension (Begin/Center/End), the alignment container is stretchable
+          so there is space for alignment to take effect.
+        - In the unchanged dimension, reflect the child's stretchability or layout weight.
+        """
+        try:
+            if dim == YUIDimension.YD_HORIZ:
+                if self._halign_spec is not None and self._halign_spec != YAlignmentType.YAlignUnchanged:
+                    return True
+            if dim == YUIDimension.YD_VERT:
+                if self._valign_spec is not None and self._valign_spec != YAlignmentType.YAlignUnchanged:
+                    return True
+        except Exception:
+            pass
+
+        child = self.child()
+        if child:
+            try:
+                return bool(child.stretchable(dim) or child.weight(dim))
+            except Exception:
+                return False
         return False
 
     def setBackgroundPixmap(self, filename):
@@ -148,6 +164,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         """Schedule a single idle callback to attach child backend later."""
         if self._attach_scheduled or self._child_attached:
             return
+        print("Scheduling child attach in idle")
         self._attach_scheduled = True
 
         def _idle_cb():
@@ -165,7 +182,10 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             _idle_cb()
 
     def _ensure_child_attached(self):
-        """Attach child's backend to our container, apply alignment hints."""
+        """Attach child's backend to our container using a 3x3 grid built
+        from a vertical Gtk.Box with three Gtk.CenterBox rows. Position the
+        child in the appropriate row and slot according to halign/valign.
+        """
         if self._backend_widget is None:
             self._create_backend_widget()
             return
@@ -184,6 +204,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         if cw is None:
             # child backend not yet ready; schedule again
             if not self._child_attached:
+                print(f"Child {child.widgetClass()} {child.debugLabel()} backend not ready; deferring attach")
                 self._schedule_attach_child()
             return
 
@@ -191,98 +212,80 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         hal = self._to_gtk_halign()
         val = self._to_gtk_valign()
 
-        # Apply alignment and expansion hints to child
         try:
-            # Set horizontal alignment and expansion
-            if hasattr(cw, "set_halign"):
-                if hal is not None:
-                    cw.set_halign(hal)
-                else:
-                    cw.set_halign(Gtk.Align.FILL)
-                
-                # Request expansion for alignment to work properly
-                cw.set_hexpand(True)
-            
-            # Set vertical alignment and expansion  
-            if hasattr(cw, "set_valign"):
-                if val is not None:
-                    cw.set_valign(val)
-                else:
-                    cw.set_valign(Gtk.Align.FILL)
-                
-                # Request expansion for alignment to work properly
-                cw.set_vexpand(True)
-                
-        except Exception as e:
-            print(f"Error setting alignment properties: {e}")
 
-        # If the child widget is already parented to us, nothing to do
-        parent_of_cw = None
-        try:
-            if hasattr(cw, 'get_parent'):
-                parent_of_cw = cw.get_parent()
-        except Exception:
-            parent_of_cw = None
+            # Determine row index based on vertical alignment
+            row_index = 0 if val == Gtk.Align.START else 2 if val == Gtk.Align.END else 1  # center default
+            target_cb = self._row[row_index]
 
-        if parent_of_cw == self._backend_widget:
-            self._child_attached = True
-            return
-
-        # Remove any existing children from our container
-        try:
-            # In GTK4, we need to remove all existing children
-            while True:
-                child_widget = self._backend_widget.get_first_child()
-                if child_widget is None:
-                    break
-                self._backend_widget.remove(child_widget)
-        except Exception as e:
-            print(f"Error removing existing children: {e}")
-
-        # Append child to our box - this is the critical fix for GTK4
-        try:
-            self._backend_widget.append(cw)
-            self._child_attached = True
-            print(f"Successfully attached child {child.widgetClass()} {child.debugLabel()} to alignment container")
-        except Exception as e:
-            print(f"Error appending child: {e}")
-            # Try alternative method for GTK4
+            # Place child in start/center/end based on horizontal alignment
+            # Default to center if unspecified
             try:
-                self._backend_widget.set_child(cw)
-                self._child_attached = True
-                print(f"Successfully set child {child.widgetClass()} {child.debugLabel()} using set_child()")
-            except Exception as e2:
-                print(f"Error setting child: {e2}")
+                # Clear any existing widgets in the target centerbox slots
+                target_cb.set_start_widget(None)
+                target_cb.set_center_widget(None)
+                target_cb.set_end_widget(None)
+            except Exception:
+                pass
+            cw.set_halign(hal)
+            cw.set_valign(val)
+
+            if hal == Gtk.Align.START:
+                target_cb.set_start_widget(cw)
+            elif hal == Gtk.Align.END:
+                target_cb.set_end_widget(cw)
+            else:
+                target_cb.set_center_widget(cw)
+
+            self._backend_widget.set_halign(hal)
+            self._backend_widget.set_valign(val)
+            #self._backend_widget.set_hexpand(True)
+            #self._backend_widget.set_vexpand(True)
+            self._child_attached = True
+
+            col_index = 0 if hal == Gtk.Align.START else 2 if hal == Gtk.Align.END else 1  # center default
+            print(f"Successfully attached child {child.widgetClass()} {child.label()} [{row_index},{col_index}]")
+        except Exception as e:
+            print(f"Error building CenterBox layout: {e}")
 
     def _create_backend_widget(self):
-        """Create a Box container oriented to allow alignment to work.
+        """Create a container for the 3x3 alignment layout.
 
-        In GTK4, we use a simple Box that expands in both directions
-        to provide space for the child widget to align within.
+        Use a simple Gtk.Box as root container; actual 3x3 is built on attach.
         """
         try:
-            # Use a box that can expand in both directions
-            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            root.set_hexpand(True)
+            root.set_vexpand(True)
+            root.set_halign(Gtk.Align.FILL)
+            root.set_valign(Gtk.Align.FILL)
             
-            # Make the box expand to fill available space
-            box.set_hexpand(True)
-            box.set_vexpand(True)
+            for _ in range(3):
+                cb = Gtk.CenterBox()
+                cb.set_hexpand(True)
+                cb.set_vexpand(True)
+                cb.set_halign(Gtk.Align.FILL)
+                cb.set_valign(Gtk.Align.FILL)
+                cb.set_margin_start(0)
+                cb.set_margin_end(0)
+                self._row.append(cb)
+                root.append(cb)
             
-            # Set the box to fill its allocation so child has space to align
-            box.set_halign(Gtk.Align.FILL)
-            box.set_valign(Gtk.Align.FILL)
+            for cb in self._row:
+                cb.set_vexpand(True)
             
+
         except Exception as e:
             print(f"Error creating backend widget: {e}")
-            box = Gtk.Box()
+            root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        self._backend_widget = box
+        self._backend_widget = root
         self._backend_widget.set_sensitive(self._enabled)
 
         # Connect draw handler if we have a background pixbuf
         if self._background_pixbuf and not self._signal_id:
             try:
-                self._signal_id = box.connect("draw", self._on_draw)
+                self._signal_id = self._backend_widget.connect("draw", self._on_draw)
             except Exception as e:
                 print(f"Error connecting draw signal: {e}")
                 self._signal_id = None

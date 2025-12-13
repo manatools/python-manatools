@@ -40,29 +40,11 @@ class YVBoxGtk(YWidget):
         
         for child in self._children:
             widget = child.get_backend_widget()
-            expand = bool(child.stretchable(YUIDimension.YD_VERT))
-            fill = True
-            padding = 0
-
             try:
-                if expand:
-                    if hasattr(widget, "set_vexpand"):
-                        widget.set_vexpand(True)
-                    if hasattr(widget, "set_valign"):
-                        widget.set_valign(Gtk.Align.FILL)
-                    if hasattr(widget, "set_hexpand"):
-                        widget.set_hexpand(True)
-                    if hasattr(widget, "set_halign"):
-                        widget.set_halign(Gtk.Align.FILL)
-                else:
-                    if hasattr(widget, "set_vexpand"):
-                        widget.set_vexpand(False)
-                    if hasattr(widget, "set_valign"):
-                        widget.set_valign(Gtk.Align.START)
-                    if hasattr(widget, "set_hexpand"):
-                        widget.set_hexpand(False)
-                    if hasattr(widget, "set_halign"):
-                        widget.set_halign(Gtk.Align.START)
+                widget.set_vexpand(True)
+                widget.set_hexpand(True)
+                #widget.set_valign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_VERT) else Gtk.Align.START)
+                #widget.set_halign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_HORIZ) else Gtk.Align.START)
             except Exception:
                 pass
             
