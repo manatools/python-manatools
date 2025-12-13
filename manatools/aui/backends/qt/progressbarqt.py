@@ -68,28 +68,25 @@ class YProgressBarQt(YWidget):
 			layout.setContentsMargins(0, 0, 0, 0)
 			layout.setSpacing(0)
 
-			# Create a horizontal row to keep label attached to the progress bar
-			row = QtWidgets.QWidget()
-			h = QtWidgets.QHBoxLayout(row)
-			h.setContentsMargins(0, 0, 0, 0)
-			h.setSpacing(0)
+			# container vertical stretching is allowed only if widget is stretchable vertically
+			h_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Preferred
+			v_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed
+			container.setSizePolicy(h_policy, v_policy)
 
-			# optional label
+			# Place label above the progress bar with no spacing so they remain attached
 			lbl = QtWidgets.QLabel(self._label) if self._label else None
 			if lbl is not None:
-				lbl.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-				h.addWidget(lbl)
+				lbl.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+				layout.addWidget(lbl)
 
 			prog = QtWidgets.QProgressBar()
 			prog.setRange(0, max(1, int(self._max_value)))
 			prog.setValue(int(self._value))
 			prog.setTextVisible(True)
-			# let progress bar expand to take remaining horizontal space
-			prog.setSizePolicy(QtWidgets.QSizePolicy.Preferred, 
-					  QtWidgets.QSizePolicy.Preferred if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Fixed)
-			h.addWidget(prog)
-
-			layout.addWidget(row)
+			# progress bar horizontal expand; vertical policy mirrors container vertical policy
+			prog.setSizePolicy(QtWidgets.QSizePolicy.Expanding, 
+					  QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed)
+			layout.addWidget(prog)
 
 			self._backend_widget = container
 			self._label_widget = lbl
