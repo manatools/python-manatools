@@ -257,3 +257,6 @@ class YWidgetFactoryGtk:
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)
+
+    def createProgressBar(self, parent, label, max_value=100):
+        return YProgressBarGtk(parent, label, max_value)
