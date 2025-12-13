@@ -125,7 +125,15 @@ class YDialogGtk(YSingleChildContainerWidget):
  
         def on_timeout():
             # post timeout event and quit loop
-            self._event_result = YTimeoutEvent()
+            try:
+                self._event_result = YTimeoutEvent()
+            except Exception:
+                pass
+            # mark timeout id consumed so cleanup won't try to remove it again
+            try:
+                self._timeout_id = None
+            except Exception:
+                pass
             try:
                 if self._glib_loop.is_running():
                     self._glib_loop.quit()
