@@ -28,7 +28,7 @@ def test_progressbar(backend_name=None):
 
         ui = YUI_ui()
         factory = ui.widgetFactory()
-        ui.application().setApplicationTitle("Progress bar Application")
+        ui.application().setApplicationTitle(f"Progress bar {backend.value} application")
         dialog = factory.createMainDialog()
 
         vbox = factory.createVBox(dialog)
