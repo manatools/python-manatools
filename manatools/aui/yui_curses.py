@@ -205,3 +205,7 @@ class YWidgetFactoryCurses:
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameCurses(parent, label, checked)
+    
+    def createProgressBar(self, parent, label, max_value=100):
+        """Create a Progress Bar widget."""
+        return YProgressBarCurses(parent, label, max_value)

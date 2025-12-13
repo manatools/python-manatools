@@ -11,7 +11,7 @@ from .framecurses import YFrameCurses
 from .inputfieldcurses import YInputFieldCurses
 from .selectionboxcurses import YSelectionBoxCurses
 from .checkboxframecurses import YCheckBoxFrameCurses
-
+from .progressbarcurses import YProgressBarCurses
 
 __all__ = [
     "YDialogCurses",
@@ -27,5 +27,6 @@ __all__ = [
     "YComboBoxCurses",
     "YAlignmentCurses",
     "YCheckBoxFrameCurses",
+    "YProgressBarCurses",
     # ...
 ]
