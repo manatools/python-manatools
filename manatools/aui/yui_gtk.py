@@ -260,3 +260,7 @@ class YWidgetFactoryGtk:
 
     def createProgressBar(self, parent, label, max_value=100):
         return YProgressBarGtk(parent, label, max_value)
+    
+    def createRadioButton(self, parent, label:str = "", isChecked:bool = False):    
+        """Create a Radio Button widget."""
+        return YRadioButtonGtk(parent, label, isChecked)
