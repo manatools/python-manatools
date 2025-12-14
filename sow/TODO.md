@@ -14,7 +14,7 @@ Missing Widgets comparing libyui:
     [X] YTree
     [X] YFrame
     [ ] YTable
-    [ ] YProgressBar
+    [X] YProgressBar
     [ ] YRichText
     [ ] YMultiLineEdit
     [ ] YIntField
