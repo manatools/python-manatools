@@ -19,10 +19,6 @@ def test_progressbar(backend_name=None):
         from manatools.aui.yui import YUI, YUI_ui
         from manatools.aui.yui_common import YTimeoutEvent
 
-        # Force re-detection
-        YUI._instance = None
-        YUI._backend = None
-
         backend = YUI.backend()
         print(f"Using backend: {backend.value}")
 
