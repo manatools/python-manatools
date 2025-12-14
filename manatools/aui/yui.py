@@ -30,15 +30,17 @@ class YUI:
             return Backend.NCURSES
         
         # Auto-detect based on available imports
+        # Require PySide6 (Qt6)
         try:
-            import PyQt5.QtWidgets
+            import PySide6.QtWidgets
             return Backend.QT
         except ImportError:
             pass
-            
+
+        # GTK: require GTK4
         try:
             import gi
-            gi.require_version('Gtk', '3.0')
+            gi.require_version('Gtk', '4.0')
             from gi.repository import Gtk
             return Backend.GTK
         except (ImportError, ValueError):
@@ -50,7 +52,7 @@ class YUI:
         except ImportError:
             pass
             
-        raise RuntimeError("No UI backend available. Install PyQt5, PyGObject, or curses.")
+        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), or curses.")
     
     @classmethod
     def ui(cls):

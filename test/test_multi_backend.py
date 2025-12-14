@@ -95,19 +95,20 @@ def test_all_backends():
     backends_to_test = []
     
     # Check which backends are available
+    # Require PySide6 (Qt6)
     try:
-        import PyQt5.QtWidgets
+        import PySide6.QtWidgets
         backends_to_test.append('qt')
-        print("✓ Qt backend available")
+        print("✓ Qt backend available (PySide6)")
     except ImportError:
-        print("✗ Qt backend not available")
+        print("✗ Qt backend not available (PySide6 required)")
     
     try:
         import gi
-        gi.require_version('Gtk', '3.0')
+        gi.require_version('Gtk', '4.0')
         from gi.repository import Gtk
         backends_to_test.append('gtk')
-        print("✓ GTK backend available")
+        print("✓ GTK backend available (GTK4)")
     except (ImportError, ValueError) as e:
         print(f"✗ GTK backend not available: {e}")
     
