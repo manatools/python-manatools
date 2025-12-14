@@ -209,3 +209,7 @@ class YWidgetFactoryCurses:
     def createProgressBar(self, parent, label, max_value=100):
         """Create a Progress Bar widget."""
         return YProgressBarCurses(parent, label, max_value)
+
+    def createRadioButton(self, parent, label="", isChecked=False):
+        """Create a Radio Button widget."""
+        return YRadioButtonCurses(parent, label, isChecked)
