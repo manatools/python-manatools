@@ -18,6 +18,7 @@ import cairo
 import threading
 import os
 from ...yui_common import *
+from ... import yui as yui_mod
 
 class YDialogGtk(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -175,23 +176,12 @@ class YDialogGtk(YSingleChildContainerWidget):
     
     def _create_backend_widget(self):
         # Determine window title from YApplicationGtk instance stored on the YUI backend
-        title = "Manatools YUI GTK Dialog"
+        title = "Manatools GTK Dialog"
         try:
-            from . import yui as yui_mod
-            appobj = None
-            # YUI._backend may hold the backend instance (YUIGtk)
-            backend = getattr(yui_mod.YUI, "_backend", None)
-            if backend and hasattr(backend, "application"):
-                appobj = backend.application()
-            # fallback: YUI._instance might be set and expose application/yApp
-            if not appobj:
-                inst = getattr(yui_mod.YUI, "_instance", None)
-                if inst and hasattr(inst, "application"):
-                    appobj = inst.application()
-            if appobj and hasattr(appobj, "applicationTitle"):
-                atitle = appobj.applicationTitle()
-                if atitle:
-                    title = atitle
+            appobj = yui_mod.YUI.ui().application()
+            atitle = appobj.applicationTitle()
+            if atitle:
+                title = atitle
             # try to obtain resolved pixbuf from application and store for window icon
             _resolved_pixbuf = None
             try:
@@ -199,6 +189,7 @@ class YDialogGtk(YSingleChildContainerWidget):
             except Exception:
                 _resolved_pixbuf = None
         except Exception:
+            print("Warning: could not determine application title for dialog")
             pass
 
         # Create Gtk4 Window
