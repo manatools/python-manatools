@@ -77,7 +77,7 @@ class YUICurses:
 class YApplicationCurses:
     def __init__(self):
         self._application_title = "manatools Curses Application"
-        self._product_name = "manatools YUI Curses"
+        self._product_name = "manatools AUI Curses"
         self._icon_base_path = ""
         self._icon = ""
 

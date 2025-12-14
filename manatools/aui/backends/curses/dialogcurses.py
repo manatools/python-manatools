@@ -15,6 +15,7 @@ import sys
 import os
 import time
 from ...yui_common import *
+from ... import yui as yui_mod
 
 class YDialogCurses(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -142,26 +143,12 @@ class YDialogCurses(YSingleChildContainerWidget):
             
             # Draw title
             title = " manatools YUI NCurses Dialog "
-            try:
-                from . import yui as yui_mod
-                appobj = None
-                # YUI._backend may hold the backend instance (YUIQt)
-                backend = getattr(yui_mod.YUI, "_backend", None)
-                if backend:
-                    if hasattr(backend, "application"):
-                        appobj = backend.application()
-                # fallback: YUI._instance might be set and expose application/yApp
-                if not appobj:
-                    inst = getattr(yui_mod.YUI, "_instance", None)
-                    if inst:
-                        if hasattr(inst, "application"):
-                            appobj = inst.application()
-                if appobj and hasattr(appobj, "applicationTitle"):
-                    atitle = appobj.applicationTitle()
-                    if atitle:
-                        title = atitle
-                if appobj:
-                    appobj.setApplicationTitle(title)
+            try:                
+                appobj = yui_mod.YUI.ui().application()
+                atitle = appobj.applicationTitle()
+                if atitle:
+                    title = atitle
+                appobj.setApplicationTitle(title)
             except Exception:
                 # ignore and keep default
                 pass
