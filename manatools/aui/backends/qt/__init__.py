@@ -12,6 +12,7 @@ from .inputfieldqt import YInputFieldQt
 from .selectionboxqt import YSelectionBoxQt
 from .checkboxframeqt import YCheckBoxFrameQt
 from .progressbarqt import YProgressBarQt
+from .radiobuttonqt import YRadioButtonQt
 
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "YAlignmentQt",
     "YCheckBoxFrameQt",
     "YProgressBarQt",
+    "YRadioButtonQt",
     # ...
 ]

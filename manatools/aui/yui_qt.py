@@ -245,3 +245,7 @@ class YWidgetFactoryQt:
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameQt(parent, label, checked)
+
+    def createRadioButton(self, parent, label:str = "", isChecked:bool = False):    
+        """Create a Radio Button widget."""
+        return YRadioButtonQt(parent, label, isChecked)
