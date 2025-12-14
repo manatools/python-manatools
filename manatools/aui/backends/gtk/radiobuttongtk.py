@@ -25,6 +25,29 @@ class YRadioButtonGtk(YWidget):
         self._label = label
         self._is_checked = bool(isChecked)
         self._backend_widget = None
+        # determine radio-group membership among siblings
+        self._group = None
+        try:
+            brothers = getattr(parent, '_children', []) if parent is not None else []
+            for b in brothers:
+                try:
+                    if b is self:
+                        continue
+                    if getattr(b, 'widgetClass', None) and b.widgetClass() == 'YRadioButton':
+                        # adopt existing sibling's group if set, otherwise use sibling as group leader
+                        grp = getattr(b, '_group', None)
+                        if grp is not None:
+                            self._group = grp
+                        else:
+                            self._group = b # should not happen
+                        break
+                except Exception:
+                    pass
+            if self._group is None:
+                # no sibling found: become group leader
+                self._group = self
+        except Exception:
+            self._group = self
 
     def widgetClass(self):
         return "YRadioButton"
@@ -63,7 +86,27 @@ class YRadioButtonGtk(YWidget):
             pass
 
     def _create_backend_widget(self):
-        self._backend_widget = Gtk.CheckButton(label=self._label)
+        # Create a check-like radio using Gtk.CheckButton (GTK4 bindings may
+        # not provide Gtk.RadioButton reliably). If a sibling group's backend
+        # widget exists, try to join its GTK group via `set_group`.
+        try:
+            self._backend_widget = Gtk.CheckButton(label=self._label)
+            if getattr(self, '_group', None) is not None and self._group is not self:
+                ref_w = getattr(self._group, '_backend_widget', None)
+                if ref_w is not None:
+                    try:
+                        if hasattr(self._backend_widget, 'set_group'):
+                            try:
+                                self._backend_widget.set_group(ref_w)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+        except Exception:
+            try:
+                self._backend_widget = Gtk.CheckButton(label=self._label)
+            except Exception:
+                self._backend_widget = None
  
         # Prevent radio button from being stretched horizontally by default.
         try:
@@ -74,9 +117,10 @@ class YRadioButtonGtk(YWidget):
         except Exception:
             pass
         try:
-            self._backend_widget.set_sensitive(self._enabled)
-            self._backend_widget.connect("toggled", self._on_toggled)
-            self._backend_widget.set_active(self._is_checked)
+            if self._backend_widget is not None:
+                self._backend_widget.set_sensitive(self._enabled)
+                self._backend_widget.connect("toggled", self._on_toggled)
+                self._backend_widget.set_active(self._is_checked)
         except Exception:
             pass
 
