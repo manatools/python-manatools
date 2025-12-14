@@ -35,7 +35,7 @@ class YUIGtk:
 class YApplicationGtk:
     def __init__(self):
         self._application_title = "manatools GTK Application"
-        self._product_name = "manatools YUI GTK"
+        self._product_name = "manatools AUI Gtk"
         self._icon_base_path = None
         self._icon = ""
         # cached resolved GdkPixbuf.Pixbuf (or None)
