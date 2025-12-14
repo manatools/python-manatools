@@ -12,6 +12,8 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from ...yui_common import YSingleChildContainerWidget, YUIDimension, YPropertySet, YProperty, YPropertyType, YUINoDialogException, YDialogType, YDialogColorMode, YEvent, YCancelEvent, YTimeoutEvent
+from ... import yui as yui_mod
+import os
 
 class YDialogQt(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -91,26 +93,13 @@ class YDialogQt(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         self._qwidget = QtWidgets.QMainWindow()
         # Determine window title:from YApplicationQt instance stored on the YUI backend
-        title = "Manatools YUI Qt Dialog"
+        title = "Manatools Qt Dialog"
         
         try:
-            from . import yui as yui_mod
-            appobj = None
-            # YUI._backend may hold the backend instance (YUIQt)
-            backend = getattr(yui_mod.YUI, "_backend", None)
-            if backend:
-                if hasattr(backend, "application"):
-                    appobj = backend.application()
-            # fallback: YUI._instance might be set and expose application/yApp
-            if not appobj:
-                inst = getattr(yui_mod.YUI, "_instance", None)
-                if inst:
-                    if hasattr(inst, "application"):
-                        appobj = inst.application()
-            if appobj and hasattr(appobj, "applicationTitle"):
-                atitle = appobj.applicationTitle()
-                if atitle:
-                    title = atitle
+            appobj = yui_mod.YUI.ui().application()
+            atitle = appobj.applicationTitle()
+            if atitle:
+                title = atitle
             # try to obtain a resolved QIcon from the application backend if available
             app_qicon = None
             if appobj:

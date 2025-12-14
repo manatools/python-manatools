@@ -36,7 +36,7 @@ class YUIQt:
 class YApplicationQt:
     def __init__(self):
         self._application_title = "manatools Qt Application"
-        self._product_name = "manatools YUI Qt"
+        self._product_name = "manatools AUI Qt"
         self._icon_base_path = None
         self._icon = ""
         # cached QIcon resolved from _icon (None if not resolved)
