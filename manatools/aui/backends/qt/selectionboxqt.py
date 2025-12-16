@@ -129,6 +129,51 @@ class YSelectionBoxQt(YSelectionWidget):
         except Exception:
             pass
 
+    def addItem(self, item):
+        """Add a single item to the selection box (model + Qt view)."""
+        # Let base class normalize strings to YItem and append to _items
+        super().addItem(item)
+
+        # The newly added item is the last in the model list
+        try:
+            new_item = self._items[-1]
+        except Exception:
+            return
+
+        # Ensure index is set
+        try:
+            new_item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+
+        # If the backend list widget exists, append a visual entry
+        try:
+            if getattr(self, '_list_widget', None) is not None:
+                try:
+                    self._list_widget.addItem(new_item.label())
+                    # If the item is marked selected in the model, reflect it
+                    if new_item.selected():
+                        idx = self._list_widget.count() - 1
+                        list_item = self._list_widget.item(idx)
+                        if list_item is not None:
+                            list_item.setSelected(True)
+                        if new_item not in self._selected_items:
+                            self._selected_items.append(new_item)
+                        if not self._value:
+                            self._value = new_item.label()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def addItems(self, items):
+        """Add multiple items to the selection box."""
+        for it in items:
+            try:
+                self.addItem(it)
+            except Exception:
+                pass
+
     def _on_selection_changed(self):
         """Handle selection change in the list widget"""
         if hasattr(self, '_list_widget') and self._list_widget:
@@ -152,3 +197,21 @@ class YSelectionBoxQt(YSelectionWidget):
                         dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
             except Exception:
                 pass
+
+    def deleteAllItems(self):
+        """Remove all items from the selection box, both in the model and the Qt view."""
+        # Clear internal model state
+        super().deleteAllItems()
+        self._value = ""
+        self._selected_items = []
+
+        # Clear Qt list widget if present
+        try:
+            if getattr(self, '_list_widget', None) is not None:
+                try:
+                    self._list_widget.clear()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
