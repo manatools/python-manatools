@@ -303,6 +303,11 @@ class YSelectionWidget(YWidget):
         if isinstance(item, str):
             item = YItem(item)
         self._items.append(item)
+
+    def addItems(self, items):
+        """Add multiple items to the selection widget."""
+        for it in items:
+            self.addItem(it)
     
     def deleteAllItems(self):
         self._items.clear()
