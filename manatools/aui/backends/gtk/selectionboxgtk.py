@@ -417,3 +417,97 @@ class YSelectionBoxGtk(YSelectionWidget):
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
+
+    def deleteAllItems(self):
+        """Remove all items from the selection box (model + GTK view)."""
+        # Clear internal model
+        super().deleteAllItems()
+        self._value = ""
+        self._selected_items = []
+
+        # Clear GTK rows/listbox
+        try:
+            rows = list(getattr(self, '_rows', []) or [])
+            for r in rows:
+                try:
+                    if getattr(self, '_listbox', None) is not None:
+                        try:
+                            self._listbox.remove(r)
+                        except Exception:
+                            try:
+                                # fallback: unparent the row
+                                r.unparent()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+            self._rows = []
+        except Exception:
+            pass
+
+    def addItem(self, item):
+        """Add a single item to the selection box (model + GTK view)."""
+        super().addItem(item)
+        try:
+            new_item = self._items[-1]
+        except Exception:
+            return
+
+        try:
+            new_item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+
+        # If listbox exists, create a new row and append
+        try:
+            if getattr(self, '_listbox', None) is not None:
+                row = Gtk.ListBoxRow()
+                lbl = Gtk.Label(label=new_item.label() or "")
+                try:
+                    if hasattr(lbl, "set_xalign"):
+                        lbl.set_xalign(0.0)
+                except Exception:
+                    pass
+                try:
+                    row.set_child(lbl)
+                except Exception:
+                    try:
+                        row.add(lbl)
+                    except Exception:
+                        pass
+                try:
+                    row.set_selectable(True)
+                except Exception:
+                    pass
+
+                # reflect selected state
+                try:
+                    if new_item.selected():
+                        try:
+                            row.set_selected(True)
+                        except Exception:
+                            try:
+                                setattr(row, '_selected_flag', True)
+                            except Exception:
+                                pass
+                        if new_item not in self._selected_items:
+                            self._selected_items.append(new_item)
+                        if not self._value:
+                            self._value = new_item.label()
+                except Exception:
+                    pass
+
+                try:
+                    self._listbox.append(row)
+                except Exception:
+                    try:
+                        self._listbox.add(row)
+                    except Exception:
+                        pass
+                try:
+                    self._rows.append(row)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
