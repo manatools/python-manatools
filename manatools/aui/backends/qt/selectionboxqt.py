@@ -166,14 +166,6 @@ class YSelectionBoxQt(YSelectionWidget):
         except Exception:
             pass
 
-    def addItems(self, items):
-        """Add multiple items to the selection box."""
-        for it in items:
-            try:
-                self.addItem(it)
-            except Exception:
-                pass
-
     def _on_selection_changed(self):
         """Handle selection change in the list widget"""
         if hasattr(self, '_list_widget') and self._list_widget:
