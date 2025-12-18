@@ -58,12 +58,40 @@ class YSelectionBoxQt(YSelectionWidget):
                 list_item = self._list_widget.item(i)
                 if list_item.text() == item.label():
                     if selected:
+                        # If single-selection, clear model flags for other items
+                        if not self._multi_selection:
+                            for it in self._items:
+                                try:
+                                    if it is not item:
+                                        it.setSelected(False)
+                                except Exception:
+                                    pass
+                            try:
+                                # clear visual selection
+                                self._list_widget.clearSelection()
+                            except Exception:
+                                pass
+                            self._selected_items = []
+
                         self._list_widget.setCurrentItem(list_item)
+                        try:
+                            item.setSelected(True)
+                        except Exception:
+                            pass
                         if item not in self._selected_items:
                             self._selected_items.append(item)
                     else:
+                        try:
+                            item.setSelected(False)
+                        except Exception:
+                            pass
                         if item in self._selected_items:
                             self._selected_items.remove(item)
+                    # ensure internal state and notify
+                    try:
+                        self._on_selection_changed()
+                    except Exception:
+                        pass
                     break
 
     def setMultiSelection(self, enabled):
@@ -226,17 +254,43 @@ class YSelectionBoxQt(YSelectionWidget):
     def _on_selection_changed(self):
         """Handle selection change in the list widget"""
         if hasattr(self, '_list_widget') and self._list_widget:
-            # Update selected items
-            self._selected_items = []
+            # Update model.selected flags and selected items list
             selected_indices = [index.row() for index in self._list_widget.selectedIndexes()]
-            
-            for idx in selected_indices:
-                if idx < len(self._items):
-                    self._selected_items.append(self._items[idx])
-            
+            new_selected = []
+            for idx, it in enumerate(self._items):
+                try:
+                    if idx in selected_indices:
+                        try:
+                            it.setSelected(True)
+                        except Exception:
+                            pass
+                        new_selected.append(it)
+                    else:
+                        try:
+                            it.setSelected(False)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # In single-selection mode ensure only one model item remains selected
+            if not self._multi_selection and len(new_selected) > 1:
+                # Keep only the last selected (mimic addItem logic and selection expectations)
+                last = new_selected[-1]
+                for it in list(new_selected)[:-1]:
+                    try:
+                        it.setSelected(False)
+                    except Exception:
+                        pass
+                new_selected = [last]
+
+            self._selected_items = new_selected
+
             # Update value to first selected item
             if self._selected_items:
                 self._value = self._selected_items[0].label()
+            else:
+                self._value = ""
             
             # Post selection-changed event to containing dialog
             try:
