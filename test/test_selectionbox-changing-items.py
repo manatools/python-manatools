@@ -35,14 +35,35 @@ def test_selectionbox(backend_name=None):
 
         selBox = factory.createSelectionBox( vbox, "Menu" )
 
-        # Default: first courses
-        selBox.addItem( "Spaghetti Carbonara" )
-        selBox.addItem( "Penne Arrabbiata" )
-        selBox.addItem( "Fettuccine" )
-        selBox.addItem( "Lasagna" )
-        selBox.addItem( "Ravioli" )
-        selBox.addItem( "Trofie al pesto" ) # Ligurian specialty
+        firstCourses = [
+            yui.YItem("Spaghetti Carbonara"),
+            yui.YItem("Penne Arrabbiata"),
+            yui.YItem("Fettuccine"),
+            yui.YItem("Lasagna"),
+            yui.YItem("Ravioli"),
+            yui.YItem("Trofie al pesto") # Ligurian specialty
+        ]
+        firstCourses[0].setSelected( True )
+        secondCourses = [
+            yui.YItem("Beef Steak"),
+            yui.YItem("Roast Chicken"),
+            yui.YItem("Pork Chops"),
+            yui.YItem("Lamb Ribs"),
+            yui.YItem("Vegan Burger"),
+            yui.YItem("Grilled Tofu")
+        ]
+        secondCourses[0].setSelected( True )
+        desserts = [
+            yui.YItem("Apple Pie"),
+            yui.YItem("Ice Cream"),
+            yui.YItem("Cheesecake"),
+            yui.YItem("Brownies")
+        ]
+        desserts[0].setSelected( True )
 
+        # Default: first courses
+        selBox.addItems( firstCourses )
+        
         hbox = factory.createHBox( vbox )
         checkBox = factory.createCheckBox( hbox, "Notify on change", selBox.notify() )
         factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
@@ -89,25 +110,13 @@ def test_selectionbox(backend_name=None):
                 try:
                     if wdg == rb1:
                         # First courses (default)
-                        selBox.addItem( "Spaghetti Carbonara" )
-                        selBox.addItem( "Penne Arrabbiata" )
-                        selBox.addItem( "Fettuccine" )
-                        selBox.addItem( "Lasagna" )
-                        selBox.addItem( "Ravioli" )
-                        selBox.addItem( "Trofie al pesto" )
+                        selBox.addItems( firstCourses )
                     elif wdg == rb2:
                         # Second courses: 4 meat, 2 vegan
-                        selBox.addItem( "Beef Steak" )
-                        selBox.addItem( "Roast Chicken" )
-                        selBox.addItem( "Pork Chops" )
-                        selBox.addItem( "Lamb Ribs" )
-                        selBox.addItem( "Vegan Burger" )
-                        selBox.addItem( "Grilled Tofu" )
+                        selBox.addItems( secondCourses )
                     elif wdg == rb3:
                         # Desserts: 3 typical American desserts
-                        selBox.addItem( "Apple Pie" )
-                        selBox.addItem( "Cheesecake" )
-                        selBox.addItem( "Brownies" )
+                        selBox.addItems( desserts )
                 except Exception:
                     pass
                 # update display to first item
