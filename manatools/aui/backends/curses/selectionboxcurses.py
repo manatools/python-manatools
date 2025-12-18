@@ -54,8 +54,35 @@ class YSelectionBoxCurses(YSelectionWidget):
     def setValue(self, text):
         """Select first item matching text."""
         self._value = text
-        # update selected_items
-        self._selected_items = [it for it in self._items if it.label() == text][:1]
+        # update model flags and selected_items
+        self._selected_items = []
+        try:
+            for it in self._items:
+                try:
+                    if it.label() == text:
+                        try:
+                            it.setSelected(True)
+                        except Exception:
+                            pass
+                        self._selected_items.append(it)
+                    else:
+                        if not self._multi_selection:
+                            try:
+                                it.setSelected(False)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+            if not self._multi_selection and len(self._selected_items) > 1:
+                last = self._selected_items[-1]
+                for it in list(self._selected_items)[:-1]:
+                    try:
+                        it.setSelected(False)
+                    except Exception:
+                        pass
+                self._selected_items = [last]
+        except Exception:
+            pass
         # update hover to first matching index
         for idx, it in enumerate(self._items):
             if it.label() == text:
@@ -80,14 +107,33 @@ class YSelectionBoxCurses(YSelectionWidget):
 
         if selected:
             if not self._multi_selection:
+                # clear other model flags
+                for it in self._items:
+                    try:
+                        if it is not self._items[idx]:
+                            it.setSelected(False)
+                    except Exception:
+                        pass
                 self._selected_items = [self._items[idx]]
                 self._value = self._items[idx].label()
+                try:
+                    self._items[idx].setSelected(True)
+                except Exception:
+                    pass
             else:
                 if self._items[idx] not in self._selected_items:
                     self._selected_items.append(self._items[idx])
+                    try:
+                        self._items[idx].setSelected(True)
+                    except Exception:
+                        pass
         else:
             if self._items[idx] in self._selected_items:
                 self._selected_items.remove(self._items[idx])
+                try:
+                    self._items[idx].setSelected(False)
+                except Exception:
+                    pass
                 self._value = self._selected_items[0].label() if self._selected_items else ""
 
         # ensure hover and scroll reflect this item
@@ -143,6 +189,37 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._ensure_hover_visible()
         # reset the cached visible rows so future navigation uses the next draw's value
         self._current_visible_rows = None
+        # Reflect model YItem.selected flags into internal state so selection is visible
+        try:
+            sel = []
+            if self._multi_selection:
+                for it in self._items:
+                    try:
+                        if it.selected():
+                            sel.append(it)
+                    except Exception:
+                        pass
+            else:
+                last = None
+                for it in self._items:
+                    try:
+                        if it.selected():
+                            last = it
+                    except Exception:
+                        pass
+                if last is not None:
+                    sel = [last]
+            self._selected_items = sel
+            self._value = self._selected_items[0].label() if self._selected_items else ""
+            if self._selected_items:
+                try:
+                    idx = self._items.index(self._selected_items[0])
+                    self._hover_index = idx
+                    self._ensure_hover_visible()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable selection box: affect focusability and propagate to row items."""
@@ -259,17 +336,38 @@ class YSelectionBoxCurses(YSelectionWidget):
             if 0 <= self._hover_index < len(self._items):
                 item = self._items[self._hover_index]
                 if self._multi_selection:
-                    # toggle membership
+                    # toggle membership and update model flag
                     if item in self._selected_items:
                         self._selected_items.remove(item)
+                        try:
+                            item.setSelected(False)
+                        except Exception:
+                            pass
                     else:
                         self._selected_items.append(item)
+                        try:
+                            item.setSelected(True)
+                        except Exception:
+                            pass
                     # update primary value to first selected or empty
                     self._value = self._selected_items[0].label() if self._selected_items else ""
                 else:
-                    # single selection: set as sole selected
+                    # single selection: set as sole selected and clear other model flags
+                    try:
+                        for it in self._items:
+                            try:
+                                if it is not item:
+                                    it.setSelected(False)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                     self._selected_items = [item]
                     self._value = item.label()
+                    try:
+                        item.setSelected(True)
+                    except Exception:
+                        pass
                 # notify dialog of selection change
                 try:
                     if getattr(self, "notify", lambda: True)():
@@ -282,3 +380,45 @@ class YSelectionBoxCurses(YSelectionWidget):
             handled = False
 
         return handled
+
+
+    def addItem(self, item):
+        """Add item to model; if item has selected flag, update internal selection state.
+
+        Do not emit notification on add.
+        """
+        super().addItem(item)
+        try:
+            new_item = self._items[-1]
+        except Exception:
+            return
+        try:
+            new_item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+
+        try:
+            if new_item.selected():
+                if not self._multi_selection:
+                    try:
+                        for it in self._items[:-1]:
+                            try:
+                                it.setSelected(False)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    self._selected_items = []
+
+                try:
+                    if new_item not in self._selected_items:
+                        self._selected_items.append(new_item)
+                except Exception:
+                    pass
+
+                try:
+                    self._value = new_item.label()
+                except Exception:
+                    pass
+        except Exception:
+            pass
