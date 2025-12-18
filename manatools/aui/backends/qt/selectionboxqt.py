@@ -102,7 +102,46 @@ class YSelectionBoxQt(YSelectionWidget):
         # Add items to list widget
         for item in self._items:
             list_widget.addItem(item.label())
-        
+
+        # Reflect model's selected flags into the view.
+        # If multi-selection is enabled, select all items flagged selected.
+        # If single-selection, only the last item with selected()==True should be selected.
+        try:
+            if self._multi_selection:
+                for idx, item in enumerate(self._items):
+                    try:
+                        if item.selected():
+                            li = list_widget.item(idx)
+                            if li is not None:
+                                li.setSelected(True)
+                                if item not in self._selected_items:
+                                    self._selected_items.append(item)
+                                if not self._value:
+                                    self._value = item.label()
+                    except Exception:
+                        pass
+            else:
+                last_selected_idx = None
+                for idx, item in enumerate(self._items):
+                    try:
+                        if item.selected():
+                            last_selected_idx = idx
+                    except Exception:
+                        pass
+                if last_selected_idx is not None:
+                    li = list_widget.item(last_selected_idx)
+                    if li is not None:
+                        list_widget.setCurrentItem(li)
+                        li.setSelected(True)
+                        # update model internal selection list and value
+                        try:
+                            self._selected_items = [self._items[last_selected_idx]]
+                            self._value = self._items[last_selected_idx].label()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
         list_widget.itemSelectionChanged.connect(self._on_selection_changed)
         layout.addWidget(list_widget)
         
@@ -151,16 +190,34 @@ class YSelectionBoxQt(YSelectionWidget):
             if getattr(self, '_list_widget', None) is not None:
                 try:
                     self._list_widget.addItem(new_item.label())
-                    # If the item is marked selected in the model, reflect it
+                    # If the item is marked selected in the model, reflect it.
                     if new_item.selected():
                         idx = self._list_widget.count() - 1
                         list_item = self._list_widget.item(idx)
                         if list_item is not None:
+                            # For single-selection, clear previous selections so
+                            # only the newly-added selected item remains selected.
+                            if not self._multi_selection:
+                                try:
+                                    self._list_widget.clearSelection()
+                                except Exception:
+                                    pass
+                                # Also clear model-side selected flags for other items
+                                for it in self._items[:-1]:
+                                    try:
+                                        it.setSelected(False)
+                                    except Exception:
+                                        pass
+                                self._selected_items = []
+
                             list_item.setSelected(True)
                         if new_item not in self._selected_items:
                             self._selected_items.append(new_item)
-                        if not self._value:
+                        # Update value to the newly selected item (single or last)
+                        try:
                             self._value = new_item.label()
+                        except Exception:
+                            pass
                 except Exception:
                     pass
         except Exception:
