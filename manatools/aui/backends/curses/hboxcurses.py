@@ -141,8 +141,15 @@ class YHBoxCurses(YWidget):
             w = widths[i]
             if w <= 0:
                 continue
-            # If child is vertically stretchable, give full height; else give its minimum
-            if child.stretchable(YUIDimension.YD_VERT):
+            # Give full container height to vertically-stretchable children
+            # and to nested VBoxes so their internal layout can use the
+            # available vertical space. Otherwise fall back to the child's
+            # declared minimal height.
+            try:
+                cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
+            except Exception:
+                cls = ""
+            if child.stretchable(YUIDimension.YD_VERT) or cls == "YVBox":
                 ch = height
             else:
                 ch = min(height, max(1, getattr(child, "_height", 1)))
