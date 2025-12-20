@@ -26,6 +26,7 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._label = label
         self._value = ""
         self._selected_items = []
+        self._old_selected_items = [] # for change detection
         self._multi_selection = False
         self._listbox = None
         self._backend_widget = None
@@ -163,12 +164,10 @@ class YSelectionBoxGtk(YSelectionWidget):
                 try:
                     hid = self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))                    
                     self._signal_handlers['selected-rows-changed'] = hid
-                except Exception:
-                    try:
-                        hid = self._listbox.connect("row-selected", lambda lb, row: self._on_selected_rows_changed(lb))
-                        self._signal_handlers['row-selected_for_multi'] = hid
-                    except Exception:
-                        pass
+                    hid = self._listbox.connect("row-activated", lambda lb, row: self._on_row_selected_for_multi(lb, row))
+                    self._signal_handlers['row-selected_for_multi'] = hid
+                except Exception:                   
+                    pass
             else:
                 try:
                     hid = self._listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
@@ -245,12 +244,9 @@ class YSelectionBoxGtk(YSelectionWidget):
                     try:
                         if it.selected():
                             try:
-                                self._rows[idx].set_selected(True)
+                                listbox.select_row( self._rows[idx] )                                
                             except Exception:
-                                try:
-                                    setattr(self._rows[idx], '_selected_flag', True)
-                                except Exception:
-                                    pass
+                                pass
                             if it not in self._selected_items:
                                 self._selected_items.append(it)
                             if not self._value:
@@ -326,33 +322,12 @@ class YSelectionBoxGtk(YSelectionWidget):
             vbox.append(sw)
         except Exception:
             vbox.add(sw)
-
-        # connect selection signal: choose appropriate signal per selection mode
-        # store handler ids so we can disconnect later if selection mode changes at runtime
-        self._signal_handlers = {}
-        try:
-            # ensure any previous handlers are disconnected (defensive)
-            try:
-                for hid in list(self._signal_handlers.values()):
-                    if hid and isinstance(hid, int):
-                        try:
-                            listbox.disconnect(hid)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-            # Use row-selected for both single and multi modes; handler will toggle for multi
-            try:
-                hid = listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
-                self._signal_handlers['row-selected'] = hid
-            except Exception:
-                pass
-        except Exception:
-            pass
-
+        
         self._backend_widget = vbox
         self._listbox = listbox
+        # connect selection signal: choose appropriate signal per selection mode
+        # if multi-selection has been set before widget creation, ensure correct mode
+        self.setMultiSelection( self._multi_selection )
         self._backend_widget.set_sensitive(self._enabled)
 
     def _set_backend_enabled(self, enabled):
@@ -404,44 +379,17 @@ class YSelectionBoxGtk(YSelectionWidget):
         the provided row and rebuilds the selected items list.
         """
         try:
-            #if row is not None:
-            #    if self._multi_selection:
-            #        # toggle selection state for this row
-            #        try:
-            #            cur = self._row_is_selected(row)
-            #            try:
-            #                if not cur:
-            #                    self._listbox.select_row( row )
-            #            except Exception:
-            #                # fallback: store a flag when set_selected isn't available
-            #                setattr(row, "_selected_flag", not cur)
-            #        except Exception:
-            #            pass
-            #    else:
-            #        # single-selection: select provided row and deselect others
-            #        for r in getattr(self, "_rows", []):
-            #            try:
-            #                if r is row:
-            #                    self._listbox.select_row( r )
-            #            except Exception:
-            #                try:
-            #                    setattr(r, "_selected_flag", (r is row))
-            #                except Exception:
-            #                    pass
-
             # rebuild selected_items scanning cached rows (works for both modes)
+            old_item = self._selected_items[0] if self._selected_items else None
+            if old_item:
+                old_item.setSelected( False )
+            idx = self._rows.index(row)            
             self._selected_items = []
-            for i, r in enumerate(getattr(self, "_rows", [])):
-                try:
-                    if row is r and i < len(self._items):
-                        self._selected_items.append(self._items[i])
-                        self._items[i].setSelected( True )
-                except Exception:
-                    print("Failed to check row selection")
-                    pass
-
+            self._selected_items.append(self._items[idx])
+            self._items[idx].setSelected( True )
             self._value = self._selected_items[0].label() if self._selected_items else None
         except Exception:
+            print("SelectionBoxGTK: failed to process row-selected event")
             # be defensive
             self._selected_items = []
             self._value = None
@@ -450,6 +398,20 @@ class YSelectionBoxGtk(YSelectionWidget):
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+
+    def _on_row_selected_for_multi(self, listbox, row):
+        """
+        Handler for row selection in multi-selection mode: for de-selection.
+        """
+        sel_rows = listbox.get_selected_rows()
+        idx = self._rows.index(row)
+        if self._items[idx] in self._old_selected_items:
+            self._listbox.unselect_row( row )
+            self._items[idx].setSelected( False )
+            self._on_selected_rows_changed(listbox)
+        else:
+            self._old_selected_items = self._selected_items
+
 
     def _on_selected_rows_changed(self, listbox):
         """
@@ -466,6 +428,7 @@ class YSelectionBoxGtk(YSelectionWidget):
             except Exception:
                 sel_rows = None
 
+            self._old_selected_items = self._selected_items
             self._selected_items = []
             if sel_rows:
                 # sel_rows may be list of Row objects or Paths; try to match by identity
@@ -477,6 +440,7 @@ class YSelectionBoxGtk(YSelectionWidget):
                                 idx = self._rows.index(r)
                                 if idx < len(self._items):
                                     self._selected_items.append(self._items[idx])
+                                    self._items[idx].setSelected( True )
                             except Exception:
                                 pass
                         else:
@@ -485,6 +449,7 @@ class YSelectionBoxGtk(YSelectionWidget):
                                 try:
                                     if self._row_is_selected(cr) and i < len(self._items):
                                         self._selected_items.append(self._items[i])
+                                        self._items[i].setSelected( True )
                                 except Exception:
                                     pass
                     except Exception:
