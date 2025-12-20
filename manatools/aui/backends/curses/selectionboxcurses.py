@@ -140,16 +140,6 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._hover_index = idx
         self._ensure_hover_visible()
 
-        if self.notify():
-            # notify dialog
-            try:
-                if getattr(self, "notify", lambda: True)():
-                    dlg = self.findDialog()
-                    if dlg is not None:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-            except Exception:
-                pass
-
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
         # if disabling multi-selection, reduce to first selected item
@@ -339,43 +329,25 @@ class YSelectionBoxCurses(YSelectionWidget):
                     # toggle membership and update model flag
                     if item in self._selected_items:
                         self._selected_items.remove(item)
-                        try:
-                            item.setSelected(False)
-                        except Exception:
-                            pass
+                        item.setSelected(False)
                     else:
                         self._selected_items.append(item)
-                        try:
-                            item.setSelected(True)
-                        except Exception:
-                            pass
+                        item.setSelected(True)
                     # update primary value to first selected or empty
                     self._value = self._selected_items[0].label() if self._selected_items else ""
                 else:
                     # single selection: set as sole selected and clear other model flags
-                    try:
-                        for it in self._items:
-                            try:
-                                if it is not item:
-                                    it.setSelected(False)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
+                    it = self._selected_items[0] if self._selected_items else None
+                    if it is not None:
+                        it.setSelected(False)                    
                     self._selected_items = [item]
                     self._value = item.label()
-                    try:
-                        item.setSelected(True)
-                    except Exception:
-                        pass
+                    item.setSelected(True)
                 # notify dialog of selection change
-                try:
-                    if getattr(self, "notify", lambda: True)():
-                        dlg = self.findDialog()
-                        if dlg is not None:
-                            dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-                except Exception:
-                    pass
+                if self.notify():
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
         else:
             handled = False
 
