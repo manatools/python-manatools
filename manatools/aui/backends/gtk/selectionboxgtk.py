@@ -49,46 +49,6 @@ class YSelectionBoxGtk(YSelectionWidget):
     def value(self):
         return self._value
 
-    def setValue(self, text):
-        """Select first item matching text."""
-        self._value = text
-        self._selected_items = [it for it in self._items if it.label() == text]
-        if self._listbox is None:
-            return
-        # find and select corresponding row using the cached rows list
-        for i, row in enumerate(getattr(self, "_rows", [])):
-            if i >= len(self._items):
-                continue
-            try:
-                if self._items[i].label() == text:
-                    row.set_selectable(True)
-                    row.set_selected(True)
-                else:
-                    # ensure others are not selected in single-selection mode
-                    if not self._multi_selection:
-                        row.set_selected(False)
-            except Exception:
-                pass
-
-        # rebuild internal selection state and notify
-        try:
-            self._selected_items = []
-            for i, r in enumerate(getattr(self, "_rows", [])):
-                try:
-                    if self._row_is_selected(r) and i < len(self._items):
-                        self._selected_items.append(self._items[i])
-                except Exception:
-                    pass
-            self._value = self._selected_items[0].label() if self._selected_items else None
-        except Exception:
-            self._selected_items = []
-            self._value = None
-
-        if self.notify():
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-
     def selectedItems(self):
         return list(self._selected_items)
 
@@ -131,11 +91,6 @@ class YSelectionBoxGtk(YSelectionWidget):
         except Exception:
             self._selected_items = []
             self._value = None
-
-        if self.notify():
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
