@@ -94,6 +94,7 @@ class YSelectionBoxGtk(YSelectionWidget):
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
+        old_selected = list(self._selected_items)
         # If listbox already created, update its selection mode at runtime.
         if self._listbox is None:
             return
@@ -131,7 +132,24 @@ class YSelectionBoxGtk(YSelectionWidget):
                     self._signal_handlers['row-selected'] = hid
                 except Exception:
                     pass
+
+                selected_item = old_selected[0] if old_selected else None
+                if selected_item:
+                    if len(old_selected) > 1:
+                        for it in old_selected[1:]:
+                            it.setSelected(False)
+                    self._selected_items = [selected_item]
+                    self._value = self._selected_items[0].label() if self._selected_items else ""
+                    if self._selected_items and self._listbox:
+                        try:
+                            idx = self._items.index( self._selected_items[0] )
+                            row = self._rows[idx]
+                            self._listbox.select_row( row )
+                        except Exception:
+                            pass
+            self._logger.debug("setMultiSelection: mode set to %s - value=%r", "MULTIPLE" if self._multi_selection else "SINGLE", self._value)
         except Exception:
+            self._logger.error("setMultiSelection: failed in multi-selection update", exc_info=True)
             pass
 
     def multiSelection(self):
