@@ -14,12 +14,29 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level safe logging setup: add a StreamHandler by default only if
+# the root logger has no handlers so main can fully configure logging later.
+_mod_logger = logging.getLogger("manatools.aui.curses.selectionbox.module")
+if not logging.getLogger().handlers:
+    h = logging.StreamHandler()
+    h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YSelectionBoxCurses(YSelectionWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
+        # per-instance logger named by package/backend/class
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            # ensure instance logger at least inherits module handler if root not configured
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("YSelectionBoxCurses.__init__ label=%s", label)
         self._label = label
         self._value = ""
         self._selected_items = []
@@ -30,7 +47,7 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._height = 1
         # preferred rows used for paging when no draw happened yet
         self._preferred_rows = 6
-
+        
         self._scroll_offset = 0
         self._hover_index = 0  # index into self._items (global)
         self._can_focus = True
@@ -192,8 +209,10 @@ class YSelectionBoxCurses(YSelectionWidget):
                     sel = [last]
             self._selected_items = sel
             self._value = self._selected_items[0].label() if self._selected_items else ""
+            _mod_logger.debug("_create_backend_widget: <%s> selected_items=<%r> value=<%r>", self.debugLabel(), self._selected_items, self._value)
         except Exception:
             pass
+        self._backend_widget = self
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable selection box: affect focusability and propagate to row items."""
@@ -283,15 +302,18 @@ class YSelectionBoxCurses(YSelectionWidget):
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():
             return False
+        self._logger.debug("_handle_key called key=%r focused=%s hover_index=%d", key, self._focused, self._hover_index)
         handled = True
         if key == curses.KEY_UP:
             if self._hover_index > 0:
                 self._hover_index -= 1
                 self._ensure_hover_visible()
+                self._logger.debug("hover moved up -> %d", self._hover_index)
         elif key == curses.KEY_DOWN:
             if self._hover_index < max(0, len(self._items) - 1):
                 self._hover_index += 1
                 self._ensure_hover_visible()
+                self._logger.debug("hover moved down -> %d", self._hover_index)
         elif key == curses.KEY_PPAGE:  # PageUp
             step = self._visible_row_count() or 1
             self._hover_index = max(0, self._hover_index - step)
@@ -311,22 +333,38 @@ class YSelectionBoxCurses(YSelectionWidget):
                 item = self._items[self._hover_index]
                 if self._multi_selection:
                     # toggle membership and update model flag
-                    if item in self._selected_items:
+                    was_selected = item in self._selected_items
+                    if was_selected:
                         self._selected_items.remove(item)
-                        item.setSelected(False)
+                        try:
+                            item.setSelected(False)
+                        except Exception:
+                            pass
+                        self._logger.info("item deselected: <%s>", item.label())
                     else:
                         self._selected_items.append(item)
-                        item.setSelected(True)
+                        try:
+                            item.setSelected(True)
+                        except Exception:
+                            pass
+                        self._logger.info("item selected: <%s>", item.label())
                     # update primary value to first selected or empty
                     self._value = self._selected_items[0].label() if self._selected_items else ""
                 else:
                     # single selection: set as sole selected and clear other model flags
                     it = self._selected_items[0] if self._selected_items else None
                     if it is not None:
-                        it.setSelected(False)                    
+                        try:
+                            it.setSelected(False)
+                        except Exception:
+                            pass
                     self._selected_items = [item]
                     self._value = item.label()
-                    item.setSelected(True)
+                    try:
+                        item.setSelected(True)
+                    except Exception:
+                        pass
+                    self._logger.info("single selection set: %s", item.label())
                 # notify dialog of selection change
                 if self.notify():
                     dlg = self.findDialog()
@@ -346,15 +384,24 @@ class YSelectionBoxCurses(YSelectionWidget):
         try:
             new_item = self._items[-1]
             new_item.setIndex(len(self._items) - 1)
-            if new_item.selected():
+            selected_flag = False
+            try:
+                selected_flag = bool(new_item.selected())
+            except Exception:
+                selected_flag = False
+            if selected_flag:
                 if not self._multi_selection:
                     selected = self._selected_items[0] if self._selected_items else None
                     if selected is not None:
-                        selected.setSelected(False)
+                        try:
+                            selected.setSelected(False)
+                        except Exception:
+                            pass
                     self._selected_items = [new_item]
                     self._value = new_item.label()
                 else:
                     self._selected_items.append(new_item)
                     self._value = self._selected_items[0].label() if self._selected_items else ""
+            self._logger.debug("addItem: label=<%s> selected=<%s> value=<%r>", new_item.label(), selected_flag, self._value)
         except Exception:
             pass
