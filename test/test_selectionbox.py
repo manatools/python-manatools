@@ -5,6 +5,29 @@ import sys
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import logging
+
+# Configure file logger for this test: write DEBUG logs to '<testname>.log' in cwd
+try:
+  log_name = os.path.splitext(os.path.basename(__file__))[0] + '.log'
+  fh = logging.FileHandler(log_name, mode='w')
+  fh.setLevel(logging.DEBUG)
+  fh.setFormatter(logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s'))
+  root_logger = logging.getLogger()
+  root_logger.setLevel(logging.DEBUG)
+  existing = False
+  for h in list(root_logger.handlers):
+    try:
+      if isinstance(h, logging.FileHandler) and os.path.abspath(getattr(h, 'baseFilename', '')) == os.path.abspath(log_name):
+        existing = True
+        break
+    except Exception:
+      pass
+  if not existing:
+    root_logger.addHandler(fh)
+  print(f"Logging test output to: {os.path.abspath(log_name)}")
+except Exception as _e:
+  print(f"Failed to configure file logger: {_e}")
 
 def test_selectionbox(backend_name=None):
     """Test Selection Box widget specifically"""
@@ -42,14 +65,14 @@ def test_selectionbox(backend_name=None):
         selBox.addItem( "Ravioli" )
         selBox.addItem( "Trofie al pesto" ) # Ligurian specialty
 
+        #selBox.setMultiSelection(True)
+
         vbox = factory.createVBox( hbox )
-        align = factory.createTop(vbox)
-        notifyCheckBox = factory.createCheckBox( align, "Notify on change", selBox.notify() )
+        notifyCheckBox = factory.createCheckBox( vbox, "Notify on change", selBox.notify() )
         notifyCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         multiSelectionCheckBox = factory.createCheckBox( vbox, "Multi-selection", selBox.multiSelection() )
         multiSelectionCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
-        align = factory.createBottom( vbox )
-        disableSelectionBox = factory.createCheckBox( align, "disable selection box", not selBox.isEnabled() )
+        disableSelectionBox = factory.createCheckBox( vbox, "disable selection box", not selBox.isEnabled() )
         disableSelectionBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         disableValue = factory.createCheckBox( vbox, "disable value button", False )
         disableValue.setStretchable( yui.YUIDimension.YD_HORIZ, True )
@@ -61,6 +84,13 @@ def test_selectionbox(backend_name=None):
         label.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         valueField  = factory.createLabel(hbox, "<SelectionBox value unknown>")
         valueField.setStretchable( yui.YUIDimension.YD_HORIZ, True ) # // allow stretching over entire dialog width
+        if selBox.multiSelection():
+           labels = [item.label() for item in selBox.selectedItems()]
+           valueField.setText( ", ".join(labels) )
+        else:
+           item = selBox.selectedItem()
+           valueField.setText( item.label() if item else "<none>" )
+
 
         #factory.createVSpacing( vbox, 0.3 )
 
