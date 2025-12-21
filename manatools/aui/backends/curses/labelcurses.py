@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for label curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.label.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YLabelCurses(YWidget):
@@ -26,6 +35,12 @@ class YLabelCurses(YWidget):
         self._height = 1
         self._focused = False
         self._can_focus = False  # Labels don't get focus
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ text=%s heading=%s", self.__class__.__name__, text, isHeading)
     
     def widgetClass(self):
         return "YLabel"
@@ -37,7 +52,14 @@ class YLabelCurses(YWidget):
         self._text = new_text
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable label: labels are not focusable; just keep enabled state for drawing."""
@@ -60,5 +82,8 @@ class YLabelCurses(YWidget):
             # Truncate text to fit available width
             display_text = self._text[:max(0, width-1)]
             window.addstr(y, x, display_text, attr)
-        except curses.error:
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw curses.error: %s", e, exc_info=True)

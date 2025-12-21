@@ -14,8 +14,17 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
 from .commoncurses import _curses_recursive_min_height
+
+# Module-level logger for checkbox frame curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.checkboxframe.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 class YCheckBoxFrameCurses(YSingleChildContainerWidget):
     """
@@ -39,6 +48,12 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         self._focused = False
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s checked=%s", self.__class__.__name__, self._label, self._checked)
 
     def widgetClass(self):
         return "YCheckBoxFrame"
@@ -125,15 +140,22 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
             self._height = max(self._height, 3)
 
     def _create_backend_widget(self):
-        # no persistent backend object for curses
-        self._backend_widget = None
-        self._update_min_height()
-        # ensure children enablement matches checkbox initial state
         try:
-            if self.isEnabled():
-                self._apply_children_enablement(self._checked)
-        except Exception:
-            pass
+            # no persistent backend object for curses; associate placeholder
+            self._backend_widget = self
+            self._update_min_height()
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            # ensure children enablement matches checkbox initial state
+            try:
+                if self.isEnabled():
+                    self._apply_children_enablement(self._checked)
+            except Exception as e:
+                self._logger.error("_create_backend_widget inner error: %s", e, exc_info=True)
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _apply_children_enablement(self, isChecked: bool):
         try:
@@ -158,8 +180,11 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
                             pass
                 except Exception:
                     pass
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self._logger.error("_draw error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled: bool):
         try:

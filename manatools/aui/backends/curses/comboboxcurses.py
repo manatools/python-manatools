@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for combobox curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.combobox.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YComboBoxCurses(YSelectionWidget):
@@ -31,6 +40,12 @@ class YComboBoxCurses(YSelectionWidget):
         self._combo_x = 0
         self._combo_y = 0
         self._combo_width = 0
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s editable=%s", self.__class__.__name__, label, editable)
     
     def widgetClass(self):
         return "YComboBox"
@@ -51,7 +66,15 @@ class YComboBoxCurses(YSelectionWidget):
         return self._editable
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            # associate a placeholder backend widget to avoid None
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable combobox: affect focusability, expanded state and focused state."""
@@ -129,8 +152,11 @@ class YComboBoxCurses(YSelectionWidget):
             # Draw expanded list if active and enabled
             if self._expanded and self.isEnabled():
                 self._draw_expanded_list(window)
-        except curses.error:
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     
     def _draw_expanded_list(self, window):
@@ -187,9 +213,11 @@ class YComboBoxCurses(YSelectionWidget):
                     except curses.error:
                         pass  # Ignore out-of-bounds errors
                 
-        except curses.error:
-            # Ignore drawing errors
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw_expanded_list curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw_expanded_list curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():

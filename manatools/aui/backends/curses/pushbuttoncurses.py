@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for pushbutton curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.pushbutton.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YPushButtonCurses(YWidget):
@@ -24,6 +33,11 @@ class YPushButtonCurses(YWidget):
         self._focused = False
         self._can_focus = True
         self._height = 1  # Fixed height - buttons are always one line
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s", self.__class__.__name__, label)
     
     def widgetClass(self):
         return "YPushButton"
@@ -35,7 +49,14 @@ class YPushButtonCurses(YWidget):
         self._label = label
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable push button: update focusability and collapse focus if disabling."""
@@ -74,8 +95,11 @@ class YPushButtonCurses(YWidget):
                         attr |= curses.A_BOLD
 
                 window.addstr(y, text_x, button_text, attr)
-        except curses.error:
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():
@@ -88,6 +112,9 @@ class YPushButtonCurses(YWidget):
                 try:
                     dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
                 except Exception:
-                    pass
+                    try:
+                        self._logger.error("_handle_key post event error", exc_info=True)
+                    except Exception:
+                        _mod_logger.error("_handle_key post event error", exc_info=True)
             return True
         return False

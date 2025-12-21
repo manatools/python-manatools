@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for inputfield curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.inputfield.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YInputFieldCurses(YWidget):
@@ -27,6 +36,12 @@ class YInputFieldCurses(YWidget):
         self._focused = False
         self._can_focus = True
         self._height = 1
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s password_mode=%s", self.__class__.__name__, label, password_mode)
     
     def widgetClass(self):
         return "YInputField"
@@ -42,7 +57,14 @@ class YInputFieldCurses(YWidget):
         return self._label
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the input field: affect focusability and focused state."""
@@ -118,8 +140,11 @@ class YInputFieldCurses(YWidget):
                 cursor_display_pos = min(self._cursor_pos, width - 1)
                 if cursor_display_pos < len(display_value):
                     window.chgat(y, x + cursor_display_pos, 1, curses.A_REVERSE | curses.A_BOLD)
-        except curses.error:
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():

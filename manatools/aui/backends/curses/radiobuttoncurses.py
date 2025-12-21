@@ -15,7 +15,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for radiobutton curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.radiobutton.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YRadioButtonCurses(YWidget):
@@ -26,6 +35,12 @@ class YRadioButtonCurses(YWidget):
         self._focused = False
         self._can_focus = True
         self._height = 1
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s checked=%s", self.__class__.__name__, label, is_checked)
 
     def widgetClass(self):
         return "YRadioButton"
@@ -61,8 +76,15 @@ class YRadioButtonCurses(YWidget):
         return self._label
 
     def _create_backend_widget(self):
-        # No native curses widget; state is kept here
-        pass
+        try:
+            # associate placeholder backend widget
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable radio button: update focusability and collapse focus if disabling."""
@@ -111,8 +133,11 @@ class YRadioButtonCurses(YWidget):
                         window.attroff(curses.A_DIM)
                 except Exception:
                     pass
-        except curses.error:
-            pass
+        except curses.error as e:
+            try:
+                self._logger.error("_draw curses.error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
         if not self.isEnabled():
@@ -151,12 +176,18 @@ class YRadioButtonCurses(YWidget):
                     if dlg is not None:
                         try:
                             dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            try:
+                                self._logger.error("_select post event error: %s", e, exc_info=True)
+                            except Exception:
+                                _mod_logger.error("_select post event error: %s", e, exc_info=True)
                     else:
                         try:
                             print(f"RadioButton selected (no dialog): {self._label}")
                         except Exception:
                             pass
         except Exception:
-            pass
+            try:
+                self._logger.error("_select error", exc_info=True)
+            except Exception:
+                _mod_logger.error("_select error", exc_info=True)

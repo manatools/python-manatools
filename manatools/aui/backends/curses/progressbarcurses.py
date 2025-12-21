@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for progressbar curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.progressbar.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 class YProgressBarCurses(YWidget):
     def __init__(self, parent=None, label="", maxValue=100):
@@ -25,6 +34,11 @@ class YProgressBarCurses(YWidget):
         # progress bar occupies 2 rows when label present, otherwise 1
         self._height = 2 if self._label else 1
         self._backend_widget = None
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s maxValue=%s", self.__class__.__name__, label, maxValue)
 
     def widgetClass(self):
         return "YProgressBar"
@@ -75,8 +89,15 @@ class YProgressBarCurses(YWidget):
             pass
 
     def _create_backend_widget(self):
-        # curses backend widgets don't wrap native widgets; keep None
-        self._backend_widget = None
+        try:
+            # associate placeholder backend widget to self
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _draw(self, window, y, x, width, height):
         try:
@@ -137,5 +158,8 @@ class YProgressBarCurses(YWidget):
                     pass
             except Exception:
                 pass
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self._logger.error("_draw error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw error: %s", e, exc_info=True)

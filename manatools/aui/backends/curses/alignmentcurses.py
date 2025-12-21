@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for curses alignment backend
+_mod_logger = logging.getLogger("manatools.aui.curses.alignment.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YAlignmentCurses(YSingleChildContainerWidget):
@@ -27,6 +36,12 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._backend_widget = None  # not used by curses
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ halign=%s valign=%s", self.__class__.__name__, horAlign, vertAlign)
         self._height = 1
 
     def widgetClass(self):
@@ -48,8 +63,16 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         return False
 
     def _create_backend_widget(self):
-        self._backend_widget = None  # no real widget for curses
-        self._height = max(1, getattr(self.child(), "_height", 1) if self.hasChildren() else 1)
+        try:
+            # for curses we don't create a real window; associate backend_widget to self
+            self._backend_widget = self
+            self._height = max(1, getattr(self.child(), "_height", 1) if self.hasChildren() else 1)
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable alignment container and propagate to its logical child."""

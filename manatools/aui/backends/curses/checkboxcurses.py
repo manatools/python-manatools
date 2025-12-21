@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for curses checkbox backend
+_mod_logger = logging.getLogger("manatools.aui.curses.checkbox.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YCheckBoxCurses(YWidget):
@@ -25,6 +34,12 @@ class YCheckBoxCurses(YWidget):
         self._focused = False
         self._can_focus = True
         self._height = 1
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s checked=%s", self.__class__.__name__, label, is_checked)
     
     def widgetClass(self):
         return "YCheckBox"
@@ -39,8 +54,15 @@ class YCheckBoxCurses(YWidget):
         return self._label
     
     def _create_backend_widget(self):
-        # In curses, there's no actual backend widget, just internal state
-        pass
+        try:
+            # In curses, there's no actual backend widget; associate placeholder to self
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable checkbox: update focusability and collapse focus if disabling."""

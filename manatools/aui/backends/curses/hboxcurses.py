@@ -14,21 +14,43 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
 
 from .commoncurses import _curses_recursive_min_height
+
+# Module-level logger for hbox curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.hbox.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 class YHBoxCurses(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # Minimum height will be computed from children
         self._height = 1
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__", self.__class__.__name__)
     
     def widgetClass(self):
         return "YHBox"
     
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            # No real curses widget; associate placeholder to self
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _recompute_min_height(self):
         """Compute minimal height for this horizontal box as the tallest child's minimum."""

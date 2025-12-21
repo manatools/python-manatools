@@ -14,9 +14,18 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
 
 from .commoncurses import _curses_recursive_min_height
+
+# Module-level logger for frame curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.frame.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 class YFrameCurses(YSingleChildContainerWidget):
     """
@@ -34,6 +43,12 @@ class YFrameCurses(YSingleChildContainerWidget):
         self._height = 3
         # inner top padding to separate frame title from child's label
         self._inner_top_padding = 1
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__ label=%s", self.__class__.__name__, self._label)
 
     def widgetClass(self):
         return "YFrame"
@@ -77,11 +92,18 @@ class YFrameCurses(YSingleChildContainerWidget):
         return False
 
     def _create_backend_widget(self):
-        # curses backend does not create a separate widget object for frames;
-        # drawing is performed in _draw by the parent container.
-        self._backend_widget = None
-        # Update minimal height based on the child
-        self._update_min_height()
+        try:
+            # curses backend does not create a separate widget object for frames;
+            # associate placeholder backend_widget to self to avoid None problems
+            self._backend_widget = self
+            # Update minimal height based on the child
+            self._update_min_height()
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception as e:
+            try:
+                self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Propagate enabled state to the child."""
@@ -92,8 +114,11 @@ class YFrameCurses(YSingleChildContainerWidget):
                     child.setEnabled(enabled)
                 except Exception:
                     pass
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self._logger.error("_draw error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.error("_draw error: %s", e, exc_info=True)
 
     def addChild(self, child):
         super().addChild(child)        
