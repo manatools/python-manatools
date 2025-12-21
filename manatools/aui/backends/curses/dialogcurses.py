@@ -14,8 +14,17 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
 from ... import yui as yui_mod
+
+# Module-level safe logging setup for dialog backend; main application may override
+_mod_logger = logging.getLogger("manatools.aui.curses.dialog.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 class YDialogCurses(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -23,6 +32,12 @@ class YDialogCurses(YSingleChildContainerWidget):
     
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
         super().__init__()
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("YDialogCurses.__init__ dialog_type=%s color_mode=%s", dialog_type, color_mode)
         self._dialog_type = dialog_type
         self._color_mode = color_mode
         self._is_open = False
@@ -61,6 +76,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         
         self._is_open = True
         YDialogCurses._current_dialog = self
+        self._logger.debug("dialog opened; current_dialog set")
         
         # Find first focusable widget
         focusable = self._find_focusable_widgets()
@@ -81,6 +97,10 @@ class YDialogCurses(YSingleChildContainerWidget):
             YDialogCurses._open_dialogs.remove(self)
         if YDialogCurses._current_dialog == self:
             YDialogCurses._current_dialog = None
+        try:
+            self._logger.debug("dialog destroyed; remaining open=%d", len(YDialogCurses._open_dialogs))
+        except Exception:
+            pass
         return True
     
     @classmethod
@@ -101,6 +121,10 @@ class YDialogCurses(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         # Use the main screen
         self._backend_widget = curses.newwin(0, 0, 0, 0)
+        try:
+            self._logger.debug("_create_backend_widget created backend window")
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog and propagate to contained widgets."""
