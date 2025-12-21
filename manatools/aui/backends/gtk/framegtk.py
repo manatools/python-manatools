@@ -35,6 +35,7 @@ class YFrameGtk(YSingleChildContainerWidget):
         self._label = label or ""
         self._backend_widget = None
         self._content_box = None
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YFrame"
@@ -200,6 +201,10 @@ class YFrameGtk(YSingleChildContainerWidget):
                         self._attach_child_backend()
                 except Exception:
                     pass
+                try:
+                    self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+                except Exception:
+                    pass
                 return
             except Exception:
                 # fallback to a boxed container with a visible border using CSS if Frame creation fails
@@ -231,6 +236,10 @@ class YFrameGtk(YSingleChildContainerWidget):
         except Exception:
             self._backend_widget = None
             self._content_box = None
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the frame and propagate to child."""

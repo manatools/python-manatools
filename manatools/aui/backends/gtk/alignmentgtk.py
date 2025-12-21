@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -33,6 +34,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
     """
     def __init__(self, parent=None, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         super().__init__(parent)
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._background_pixbuf = None
@@ -132,7 +134,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                     self._signal_id = self._backend_widget.connect("draw", self._on_draw)
                     self._backend_widget.queue_draw()  # Trigger redraw
             except Exception as e:
-                print(f"Failed to load background image: {e}")
+                self._logger.error("Failed to load background image: %s", e, exc_info=True)
                 self._background_pixbuf = None
 
     def _on_draw(self, widget, cr):
@@ -151,7 +153,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             cr.rectangle(0, 0, width, height)
             cr.fill()
         except Exception as e:
-            print(f"Error drawing background: {e}")
+            self._logger.error("Error drawing background: %s", e, exc_info=True)
         return False
 
     def addChild(self, child):
@@ -164,7 +166,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         """Schedule a single idle callback to attach child backend later."""
         if self._attach_scheduled or self._child_attached:
             return
-        print("Scheduling child attach in idle")
+        self._logger.debug("Scheduling child attach in idle")
         self._attach_scheduled = True
 
         def _idle_cb():
@@ -172,7 +174,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             try:
                 self._ensure_child_attached()
             except Exception as e:
-                print(f"Error attaching child: {e}")
+                self._logger.error("Error attaching child: %s", e, exc_info=True)
             return False
 
         try:
@@ -204,7 +206,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         if cw is None:
             # child backend not yet ready; schedule again
             if not self._child_attached:
-                print(f"Child {child.widgetClass()} {child.debugLabel()} backend not ready; deferring attach")
+                self._logger.debug("Child %s %s backend not ready; deferring attach", child.widgetClass(), child.debugLabel())
                 self._schedule_attach_child()
             return
 
@@ -244,9 +246,9 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             self._child_attached = True
 
             col_index = 0 if hal == Gtk.Align.START else 2 if hal == Gtk.Align.END else 1  # center default
-            print(f"Successfully attached child {child.widgetClass()} {child.label()} [{row_index},{col_index}]")
+            self._logger.debug("Successfully attached child %s %s [%d,%d]", child.widgetClass(), child.label(), row_index, col_index)
         except Exception as e:
-            print(f"Error building CenterBox layout: {e}")
+            self._logger.error("Error building CenterBox layout: %s", e, exc_info=True)
 
     def _create_backend_widget(self):
         """Create a container for the 3x3 alignment layout.
@@ -276,7 +278,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             
 
         except Exception as e:
-            print(f"Error creating backend widget: {e}")
+            self._logger.error("Error creating backend widget: %s", e, exc_info=True)
             root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         self._backend_widget = root
@@ -287,11 +289,15 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             try:
                 self._signal_id = self._backend_widget.connect("draw", self._on_draw)
             except Exception as e:
-                print(f"Error connecting draw signal: {e}")
+                self._logger.error("Error connecting draw signal: %s", e, exc_info=True)
                 self._signal_id = None
 
         # Mark that backend is ready and attempt to attach child
         self._ensure_child_attached()
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def get_backend_widget(self):
         """Return the backend GTK widget."""

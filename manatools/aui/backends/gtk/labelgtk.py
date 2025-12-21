@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -26,6 +27,7 @@ class YLabelGtk(YWidget):
         self._text = text
         self._is_heading = isHeading
         self._is_output_field = isOutputField
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YLabel"
@@ -57,6 +59,10 @@ class YLabelGtk(YWidget):
             except Exception:
                 pass
         self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the label widget backend."""

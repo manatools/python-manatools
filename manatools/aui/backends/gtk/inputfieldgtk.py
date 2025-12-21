@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -26,6 +27,7 @@ class YInputFieldGtk(YWidget):
         self._label = label
         self._value = ""
         self._password_mode = password_mode
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YInputField"
@@ -82,6 +84,10 @@ class YInputFieldGtk(YWidget):
         self._backend_widget = hbox
         self._entry_widget = entry
         self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
     
     def _on_changed(self, entry):
         try:

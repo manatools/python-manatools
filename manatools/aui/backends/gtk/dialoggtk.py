@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 from ... import yui as yui_mod
 
@@ -32,6 +33,7 @@ class YDialogGtk(YSingleChildContainerWidget):
         self._event_result = None
         self._glib_loop = None
         YDialogGtk._open_dialogs.append(self)
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YDialog"
@@ -189,7 +191,10 @@ class YDialogGtk(YSingleChildContainerWidget):
             except Exception:
                 _resolved_pixbuf = None
         except Exception:
-            print("Warning: could not determine application title for dialog")
+            try:
+                self._logger.warning("Could not determine application title for dialog", exc_info=True)
+            except Exception:
+                pass
             pass
 
         # Create Gtk4 Window
@@ -263,6 +268,10 @@ class YDialogGtk(YSingleChildContainerWidget):
                         self._window.connect("destroy", self._on_destroy)
                     except Exception:
                         pass
+        except Exception:
+            self._logger.error("Failed to connect window close/destroy handlers", exc_info=True)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
     

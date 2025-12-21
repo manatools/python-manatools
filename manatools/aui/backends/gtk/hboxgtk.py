@@ -17,12 +17,14 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
 class YHBoxGtk(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YHBox"
@@ -39,7 +41,10 @@ class YHBoxGtk(YWidget):
         self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
 
         for child in self._children:
-            print("HBox child: ", child.widgetClass())
+            try:
+                self._logger.debug("HBox child: %s", child.widgetClass())
+            except Exception:
+                pass
             widget = child.get_backend_widget()
             try:
                 widget.set_hexpand(True)
@@ -57,6 +62,10 @@ class YHBoxGtk(YWidget):
                 except Exception:
                     pass
         self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the HBox and propagate to children."""

@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 class YRadioButtonGtk(YWidget):
@@ -48,6 +49,7 @@ class YRadioButtonGtk(YWidget):
                 self._group = self
         except Exception:
             self._group = self
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YRadioButton"
@@ -121,6 +123,13 @@ class YRadioButtonGtk(YWidget):
                 self._backend_widget.set_sensitive(self._enabled)
                 self._backend_widget.connect("toggled", self._on_toggled)
                 self._backend_widget.set_active(self._is_checked)
+        except Exception:
+            try:
+                self._logger.error("_create_backend_widget failed to finalize", exc_info=True)
+            except Exception:
+                pass
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
 

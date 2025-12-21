@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -28,6 +29,7 @@ class YComboBoxGtk(YSelectionWidget):
         self._value = ""
         self._selected_items = []
         self._combo_widget = None
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YComboBox"
@@ -118,6 +120,10 @@ class YComboBoxGtk(YSelectionWidget):
 
         self._backend_widget = hbox
         self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the combobox/backing widget and its entry/dropdown."""
@@ -236,3 +242,7 @@ class YComboBoxGtk(YSelectionWidget):
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+        try:
+            self._logger.debug("_on_changed_dropdown: value=%s selected_items=%s", self._value, [it.label() for it in self._selected_items])
+        except Exception:
+            pass

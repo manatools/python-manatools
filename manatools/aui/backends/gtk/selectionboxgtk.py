@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -37,6 +38,7 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._preferred_rows = 6
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YSelectionBox"
@@ -329,6 +331,7 @@ class YSelectionBoxGtk(YSelectionWidget):
         # if multi-selection has been set before widget creation, ensure correct mode
         self.setMultiSelection( self._multi_selection )
         self._backend_widget.set_sensitive(self._enabled)
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the selection box and its listbox/rows."""
@@ -389,7 +392,10 @@ class YSelectionBoxGtk(YSelectionWidget):
             self._items[idx].setSelected( True )
             self._value = self._selected_items[0].label() if self._selected_items else None
         except Exception:
-            print("SelectionBoxGTK: failed to process row-selected event")
+            try:
+                self._logger.error("SelectionBoxGTK: failed to process row-selected event", exc_info=True)
+            except Exception:
+                pass
             # be defensive
             self._selected_items = []
             self._value = None
@@ -424,7 +430,10 @@ class YSelectionBoxGtk(YSelectionWidget):
             try:
                 # Some bindings may provide get_selected_rows()
                 sel_rows = listbox.get_selected_rows()
-                print(f"Using get_selected_rows() {len(sel_rows)} API")
+                try:
+                    self._logger.debug("Using get_selected_rows() API, count=%d", len(sel_rows))
+                except Exception:
+                    pass
             except Exception:
                 sel_rows = None
 
@@ -563,7 +572,10 @@ class YSelectionBoxGtk(YSelectionWidget):
                                         self._listbox.unselect_row( r )
                                         #r.set_selected(False)
                                     except Exception:
-                                        print("Failed to deselect row")
+                                        try:
+                                            self._logger.error("Failed to deselect row", exc_info=True)
+                                        except Exception:
+                                            pass
                                         try:
                                             setattr(r, '_selected_flag', False)
                                         except Exception:

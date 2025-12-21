@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 class YProgressBarGtk(YWidget):
@@ -28,6 +29,7 @@ class YProgressBarGtk(YWidget):
 		self._backend_widget = None
 		self._label_widget = None
 		self._progress_widget = None
+		self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
 
 	def widgetClass(self):
 		return "YProgressBar"
@@ -87,3 +89,11 @@ class YProgressBarGtk(YWidget):
 		container.append(self._progress_widget)
 
 		self._backend_widget = container
+		try:
+			self._backend_widget.set_sensitive(self._enabled)
+		except Exception:
+			pass
+		try:
+			self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+		except Exception:
+			pass

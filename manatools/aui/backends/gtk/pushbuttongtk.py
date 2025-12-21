@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -24,6 +25,7 @@ class YPushButtonGtk(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
         self._label = label
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YPushButton"
@@ -52,6 +54,13 @@ class YPushButtonGtk(YWidget):
         try:
             self._backend_widget.set_sensitive(self._enabled)
             self._backend_widget.connect("clicked", self._on_clicked)
+        except Exception:
+            try:
+                self._logger.error("_create_backend_widget setup failed", exc_info=True)
+            except Exception:
+                pass
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
     

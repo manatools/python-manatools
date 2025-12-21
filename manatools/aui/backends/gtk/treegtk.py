@@ -17,6 +17,7 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 
@@ -39,6 +40,7 @@ class YTreeGtk(YSelectionWidget):
         self._immediate = self.notify()
         self._backend_widget = None
         self._listbox = None
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         # cached rows and mappings
         self._rows = []               # ordered list of Gtk.ListBoxRow
         self._row_to_item = {}        # row -> YTreeItem
@@ -97,7 +99,10 @@ class YTreeGtk(YSelectionWidget):
         try:
             listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
         except Exception:
-            pass
+            try:
+                self._logger.error("Failed to connect row-selected handler", exc_info=True)
+            except Exception:
+                pass
 
         self._backend_widget = vbox
         self._listbox = listbox
@@ -115,6 +120,13 @@ class YTreeGtk(YSelectionWidget):
         try:
             if getattr(self, "_items", None):
                 self.rebuildTree()
+        except Exception:
+            try:
+                self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
+            except Exception:
+                pass
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
 

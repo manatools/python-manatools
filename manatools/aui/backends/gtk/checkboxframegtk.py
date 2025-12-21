@@ -36,6 +36,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
         self._checkbox = None
         self._content_box = None
         self._label_widget = None
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YCheckBoxFrame"
@@ -208,10 +209,16 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
             except Exception:
                 pass
         except Exception:
+            self._logger.critical("_create_backend_widget failed", exc_info=True)
             self._backend_widget = None
             self._checkbox = None
             self._content_box = None
             self._label_widget = None
+            return
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _attach_child_backend(self):
         """Attach the logical child backend widget into the content box (clear previous)."""

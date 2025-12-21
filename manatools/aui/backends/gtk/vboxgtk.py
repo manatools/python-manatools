@@ -17,11 +17,13 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+import logging
 from ...yui_common import *
 
 class YVBoxGtk(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YVBox"
@@ -57,6 +59,10 @@ class YVBoxGtk(YWidget):
                 except Exception:
                     pass
         self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
 
     def _set_backend_enabled(self, enabled):
