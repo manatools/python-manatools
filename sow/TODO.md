@@ -20,10 +20,11 @@ Missing Widgets comparing libyui:
     [ ] YIntField
     [ ] YMenuButton, YMenuBar
     [ ] YWizard
-    [ ] YPackageSelector
+    [-] ~~YPackageSelector~~
     [ ] YSpacing, YAlignment
     [ ] YReplacePoint
-    [X] YRadioButton, (YRadioButtonGroup avoid by now)
+    [X] YRadioButton,
+    [-] ~~YRadioButtonGroup~~
 
 To check how to manage YEvents [X] and YItems [ ] (verify selection attirbute).
 
