@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YRadioButtonQt(YWidget):
@@ -18,6 +19,7 @@ class YRadioButtonQt(YWidget):
         self._label = label
         self._is_checked = bool(isChecked)
         self._backend_widget = None
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YRadioButton"
@@ -73,6 +75,10 @@ class YRadioButtonQt(YWidget):
                 pass
         except Exception:
             self._backend_widget = None
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         try:
@@ -97,6 +103,6 @@ class YRadioButtonQt(YWidget):
             else:
                 # best-effort debug output when no dialog
                 try:
-                    print(f"RadioButton toggled: {self._label} = {self._is_checked}")
+                    self._logger.warning("RadioButton toggled on None dialog: %s = %s", self._label, self._is_checked)
                 except Exception:
                     pass

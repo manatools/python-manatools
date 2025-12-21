@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YLabelQt(YWidget):
@@ -18,6 +19,7 @@ class YLabelQt(YWidget):
         self._text = text
         self._is_heading = isHeading
         self._is_output_field = isOutputField
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YLabel"
@@ -38,6 +40,10 @@ class YLabelQt(YWidget):
             font.setPointSize(font.pointSize() + 2)
             self._backend_widget.setFont(font)
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QLabel backend."""

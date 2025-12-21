@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets, QtCore
+import logging
 from ...yui_common import *
 
 class YCheckBoxQt(YWidget):
@@ -17,6 +18,7 @@ class YCheckBoxQt(YWidget):
         super().__init__(parent)
         self._label = label
         self._is_checked = is_checked
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YCheckBox"
@@ -45,6 +47,10 @@ class YCheckBoxQt(YWidget):
         self._backend_widget.setChecked(self._is_checked)
         self._backend_widget.stateChanged.connect(self._on_state_changed)
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QCheckBox backend."""
@@ -68,4 +74,7 @@ class YCheckBoxQt(YWidget):
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
             else:
-                print(f"CheckBox state changed (no dialog found): {self._label} = {self._is_checked}")
+                try:
+                    self._logger.warning("CheckBox state changed (no dialog found): %s = %s", self._label, self._is_checked)
+                except Exception:
+                    pass

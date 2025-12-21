@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 
@@ -17,6 +18,7 @@ class YPushButtonQt(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
         self._label = label
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YPushButton"
@@ -55,6 +57,10 @@ class YPushButtonQt(YWidget):
              pass
         self._backend_widget.setEnabled(bool(self._enabled))
         self._backend_widget.clicked.connect(self._on_clicked)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QPushButton backend."""
@@ -74,4 +80,7 @@ class YPushButtonQt(YWidget):
             dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
         else:
             # fallback logging for now
-            print(f"Button clicked (no dialog found): {self._label}")
+            try:
+                self._logger.warning("Button clicked (no dialog found): %s", self._label)
+            except Exception:
+                pass

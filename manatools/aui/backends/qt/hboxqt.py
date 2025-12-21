@@ -10,11 +10,13 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YHBoxQt(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YHBox"
@@ -58,8 +60,15 @@ class YHBoxQt(YWidget):
             except Exception:
                 pass
             self._backend_widget.setEnabled(bool(self._enabled))
-            print(  f"YHBoxQt: adding child {child.widgetClass()} expand={expand}" ) #TODO remove debug
+            try:
+                self._logger.debug("YHBoxQt: adding child %s expand=%s", child.widgetClass(), expand)
+            except Exception:
+                pass
             layout.addWidget(widget, stretch=expand)
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the HBox container and propagate to children."""

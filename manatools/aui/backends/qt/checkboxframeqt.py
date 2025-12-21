@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets, QtCore
+import logging
 from ...yui_common import *
 
 class YCheckBoxFrameQt(YSingleChildContainerWidget):
@@ -26,6 +27,7 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
         self._checkbox = None
         self._content_widget = None
         self._content_layout = None
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YCheckBoxFrame"
@@ -146,6 +148,10 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._checkbox = None
             self._content_widget = None
             self._content_layout = None
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _attach_child_backend(self):
         """Attach child's backend widget into content area."""

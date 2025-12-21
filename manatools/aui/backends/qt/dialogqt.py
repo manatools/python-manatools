@@ -14,6 +14,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 from ...yui_common import YSingleChildContainerWidget, YUIDimension, YPropertySet, YProperty, YPropertyType, YUINoDialogException, YDialogType, YDialogColorMode, YEvent, YCancelEvent, YTimeoutEvent
 from ... import yui as yui_mod
 import os
+import logging
 
 class YDialogQt(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -27,6 +28,7 @@ class YDialogQt(YSingleChildContainerWidget):
         self._event_result = None
         self._qt_event_loop = None
         YDialogQt._open_dialogs.append(self)
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YDialog"
@@ -154,6 +156,10 @@ class YDialogQt(YSingleChildContainerWidget):
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
     
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog window and propagate to logical child widgets."""

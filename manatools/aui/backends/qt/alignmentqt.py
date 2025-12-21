@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets, QtCore
+import logging
 from ...yui_common import *
 
 class YAlignmentQt(YSingleChildContainerWidget):
@@ -20,6 +21,7 @@ class YAlignmentQt(YSingleChildContainerWidget):
     """
     def __init__(self, parent=None, horAlign: YAlignmentType=YAlignmentType.YAlignUnchanged, vertAlign: YAlignmentType=YAlignmentType.YAlignUnchanged):
         super().__init__(parent)
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._backend_widget = None
@@ -177,6 +179,10 @@ class YAlignmentQt(YSingleChildContainerWidget):
 
         if self.hasChildren():
             self._attach_child_backend()
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the alignment container and propagate to its logical child."""

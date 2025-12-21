@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YComboBoxQt(YSelectionWidget):
@@ -19,6 +20,7 @@ class YComboBoxQt(YSelectionWidget):
         self._editable = editable
         self._value = ""
         self._selected_items = []
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YComboBox"
@@ -71,6 +73,10 @@ class YComboBoxQt(YSelectionWidget):
         self._backend_widget = container
         self._combo_widget = combo
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the combobox and its container."""

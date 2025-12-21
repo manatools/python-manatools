@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YProgressBarQt(YWidget):
@@ -21,6 +22,7 @@ class YProgressBarQt(YWidget):
 		self._backend_widget = None
 		self._label_widget = None
 		self._progress_widget = None
+		self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
 
 	def widgetClass(self):
 		return "YProgressBar"
@@ -92,6 +94,10 @@ class YProgressBarQt(YWidget):
 			self._label_widget = lbl
 			self._progress_widget = prog
 			self._backend_widget.setEnabled(bool(self._enabled))
+			try:
+				self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+			except Exception:
+				pass
 		except Exception:
 			self._backend_widget = None
 			self._label_widget = None

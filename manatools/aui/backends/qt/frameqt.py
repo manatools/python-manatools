@@ -3,6 +3,7 @@ Qt backend implementation for YUI
 """
 
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YFrameQt(YSingleChildContainerWidget):
@@ -17,6 +18,7 @@ class YFrameQt(YSingleChildContainerWidget):
         self._label = label
         self._backend_widget = None
         self._group_layout = None
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
 
     def widgetClass(self):
         return "YFrame"
@@ -102,6 +104,10 @@ class YFrameQt(YSingleChildContainerWidget):
                         layout.addWidget(w)
                 except Exception:
                     pass
+            try:
+                self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            except Exception:
+                pass
         except Exception:
             # fallback to a plain QWidget container if QGroupBox creation fails
             try:
@@ -118,6 +124,10 @@ class YFrameQt(YSingleChildContainerWidget):
                             layout.addWidget(w)
                     except Exception:
                         pass
+                try:
+                    self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+                except Exception:
+                    pass
             except Exception:
                 self._backend_widget = None
                 self._group_layout = None

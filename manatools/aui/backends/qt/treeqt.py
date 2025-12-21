@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YTreeQt(YSelectionWidget):
@@ -66,6 +67,18 @@ class YTreeQt(YSelectionWidget):
         # populate if items already present
         try:
             self.rebuildTree()
+        except Exception:
+            try:
+                self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+                self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
+            except Exception:
+                pass
+            pass
+        try:
+            # ensure logger exists and emit debug
+            if not hasattr(self, "_logger"):
+                self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
 

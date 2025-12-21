@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YInputFieldQt(YWidget):
@@ -18,6 +19,7 @@ class YInputFieldQt(YWidget):
         self._label = label
         self._value = ""
         self._password_mode = password_mode
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YInputField"
@@ -55,6 +57,10 @@ class YInputFieldQt(YWidget):
         self._backend_widget = container
         self._entry_widget = entry
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the input field: entry and container."""

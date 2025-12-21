@@ -10,6 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.qt
 '''
 from PySide6 import QtWidgets
+import logging
 from ...yui_common import *
 
 class YSelectionBoxQt(YSelectionWidget):
@@ -21,6 +22,7 @@ class YSelectionBoxQt(YSelectionWidget):
         self._multi_selection = False
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
         return "YSelectionBox"
@@ -176,6 +178,10 @@ class YSelectionBoxQt(YSelectionWidget):
         self._backend_widget = container
         self._backend_widget.setEnabled(bool(self._enabled))
         self._list_widget = list_widget
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the selection box and its list widget; propagate where applicable."""
