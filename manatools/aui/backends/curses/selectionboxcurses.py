@@ -68,46 +68,6 @@ class YSelectionBoxCurses(YSelectionWidget):
     def value(self):
         return self._value
 
-    def setValue(self, text):
-        """Select first item matching text."""
-        self._value = text
-        # update model flags and selected_items
-        self._selected_items = []
-        try:
-            for it in self._items:
-                try:
-                    if it.label() == text:
-                        try:
-                            it.setSelected(True)
-                        except Exception:
-                            pass
-                        self._selected_items.append(it)
-                    else:
-                        if not self._multi_selection:
-                            try:
-                                it.setSelected(False)
-                            except Exception:
-                                pass
-                except Exception:
-                    pass
-            if not self._multi_selection and len(self._selected_items) > 1:
-                last = self._selected_items[-1]
-                for it in list(self._selected_items)[:-1]:
-                    try:
-                        it.setSelected(False)
-                    except Exception:
-                        pass
-                self._selected_items = [last]
-        except Exception:
-            pass
-        # update hover to first matching index
-        for idx, it in enumerate(self._items):
-            if it.label() == text:
-                self._hover_index = idx
-                # adjust scroll offset to make hovered visible
-                self._ensure_hover_visible()
-                break
-
     def selectedItems(self):
         return list(self._selected_items)
 
