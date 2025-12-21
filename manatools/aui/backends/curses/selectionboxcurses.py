@@ -107,33 +107,21 @@ class YSelectionBoxCurses(YSelectionWidget):
 
         if selected:
             if not self._multi_selection:
-                # clear other model flags
-                for it in self._items:
-                    try:
-                        if it is not self._items[idx]:
-                            it.setSelected(False)
-                    except Exception:
-                        pass
-                self._selected_items = [self._items[idx]]
-                self._value = self._items[idx].label()
-                try:
-                    self._items[idx].setSelected(True)
-                except Exception:
-                    pass
+                if item not in self._selected_items:
+                    selected_item = self._selected_items[0] if self._selected_items else None
+                    if selected_item is not None:
+                        selected_item.setSelected(False)
+                    self._selected_items = [item]
+                    self._value = item.label()
+                    item.setSelected(True)
             else:
-                if self._items[idx] not in self._selected_items:
-                    self._selected_items.append(self._items[idx])
-                    try:
-                        self._items[idx].setSelected(True)
-                    except Exception:
-                        pass
+                if item not in self._selected_items:
+                    self._selected_items.append(item)
+                    item.setSelected(True)
         else:
-            if self._items[idx] in self._selected_items:
-                self._selected_items.remove(self._items[idx])
-                try:
-                    self._items[idx].setSelected(False)
-                except Exception:
-                    pass
+            if item in self._selected_items:
+                self._selected_items.remove(item)
+                item.setSelected(False)
                 self._value = self._selected_items[0].label() if self._selected_items else ""
 
         # ensure hover and scroll reflect this item
@@ -145,6 +133,8 @@ class YSelectionBoxCurses(YSelectionWidget):
         # if disabling multi-selection, reduce to first selected item
         if not self._multi_selection and len(self._selected_items) > 1:
             first = self._selected_items[0]
+            for it in list(self._selected_items)[1:]:
+                it.setSelected(False)
             self._selected_items = [first]
             self._value = first.label()
 
@@ -174,11 +164,10 @@ class YSelectionBoxCurses(YSelectionWidget):
         # Keep minimal layout height small so parent can give more space.
         self._height = len(self._items) + (1 if self._label else 0)
         # reset scroll/hover if out of range
-        if self._hover_index >= len(self._items):
-             self._hover_index = max(0, len(self._items) - 1)
-        self._ensure_hover_visible()
+        self._hover_index = 0
         # reset the cached visible rows so future navigation uses the next draw's value
         self._current_visible_rows = None
+        self._ensure_hover_visible()
         # Reflect model YItem.selected flags into internal state so selection is visible
         try:
             sel = []
@@ -194,6 +183,8 @@ class YSelectionBoxCurses(YSelectionWidget):
                 for it in self._items:
                     try:
                         if it.selected():
+                            if last is not None:
+                               last.setSelected(False)
                             last = it
                     except Exception:
                         pass
@@ -201,13 +192,6 @@ class YSelectionBoxCurses(YSelectionWidget):
                     sel = [last]
             self._selected_items = sel
             self._value = self._selected_items[0].label() if self._selected_items else ""
-            if self._selected_items:
-                try:
-                    idx = self._items.index(self._selected_items[0])
-                    self._hover_index = idx
-                    self._ensure_hover_visible()
-                except Exception:
-                    pass
         except Exception:
             pass
 
@@ -356,41 +340,21 @@ class YSelectionBoxCurses(YSelectionWidget):
 
     def addItem(self, item):
         """Add item to model; if item has selected flag, update internal selection state.
-
-        Do not emit notification on add.
+           Do not emit notification on add.
         """
         super().addItem(item)
         try:
             new_item = self._items[-1]
-        except Exception:
-            return
-        try:
             new_item.setIndex(len(self._items) - 1)
-        except Exception:
-            pass
-
-        try:
             if new_item.selected():
                 if not self._multi_selection:
-                    try:
-                        for it in self._items[:-1]:
-                            try:
-                                it.setSelected(False)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                    self._selected_items = []
-
-                try:
-                    if new_item not in self._selected_items:
-                        self._selected_items.append(new_item)
-                except Exception:
-                    pass
-
-                try:
+                    selected = self._selected_items[0] if self._selected_items else None
+                    if selected is not None:
+                        selected.setSelected(False)
+                    self._selected_items = [new_item]
                     self._value = new_item.label()
-                except Exception:
-                    pass
+                else:
+                    self._selected_items.append(new_item)
+                    self._value = self._selected_items[0].label() if self._selected_items else ""
         except Exception:
             pass
