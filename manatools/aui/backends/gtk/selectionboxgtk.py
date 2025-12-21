@@ -53,44 +53,29 @@ class YSelectionBoxGtk(YSelectionWidget):
         return list(self._selected_items)
 
     def selectItem(self, item, selected=True):
-        if selected:
-            if not self._multi_selection:
-                self._selected_items = [item]
-                self._value = item.label()
-            else:
+        """Select or deselect a specific item"""
+        if self.multiSelection():
+            if selected:
                 if item not in self._selected_items:
                     self._selected_items.append(item)
+            else:
+                if item in self._selected_items:
+                    self._selected_items.remove(item)
         else:
-            if item in self._selected_items:
-                self._selected_items.remove(item)
-                self._value = self._selected_items[0].label() if self._selected_items else ""
-
-        if self._listbox is None:
-            return
-
-        # reflect change in UI
-        rows = getattr(self, "_rows", [])
-        for i, it in enumerate(self._items):
-            if it is item or it.label() == item.label():
-                try:
-                    row = rows[i]
-                    row.set_selected(selected)
-                except Exception:
-                    pass
-                break
-        # rebuild internal selection state and notify
-        try:
-            self._selected_items = []
-            for i, r in enumerate(getattr(self, "_rows", [])):
-                try:
-                    if self._row_is_selected(r) and i < len(self._items):
-                        self._selected_items.append(self._items[i])
-                except Exception:
-                    pass
-            self._value = self._selected_items[0].label() if self._selected_items else None
-        except Exception:
-            self._selected_items = []
-            self._value = None
+            old_selected = self._selected_items[0] if self._selected_items else None            
+            if selected:
+                if old_selected is not None:
+                    old_selected.setSelected(False)
+                self._selected_items = [item]
+                idx = self._items.index( self._selected_items[0] )
+                row = self._rows[idx]
+                if self._listbox is not None:
+                    self._listbox.select_row( row )
+            else:
+                self._selected_items = [] 
+        
+        item.setSelected(bool(selected))
+        self._value = self._selected_items[0].label() if self._selected_items else None
 
     def setMultiSelection(self, enabled):
         self._multi_selection = bool(enabled)
