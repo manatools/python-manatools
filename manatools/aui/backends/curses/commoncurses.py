@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for common curses helpers
+_mod_logger = logging.getLogger("manatools.aui.curses.common.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 __all__ = ["_curses_recursive_min_height"]
 
@@ -51,5 +60,9 @@ def _curses_recursive_min_height(widget):
             return max(3, 2 + inner_top + inner_min)  # borders(2) + padding + inner
         else:
             return max(1, getattr(widget, "_height", 1))
-    except Exception:
+    except Exception as e:
+        try:
+            _mod_logger.error("_curses_recursive_min_height error: %s", e, exc_info=True)
+        except Exception:
+            pass
         return max(1, getattr(widget, "_height", 1))

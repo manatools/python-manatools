@@ -14,7 +14,16 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
+
+# Module-level logger for tree curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.tree.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 
 class YTreeCurses(YSelectionWidget):
@@ -47,6 +56,16 @@ class YTreeCurses(YSelectionWidget):
         self._suppress_selection_handler = False
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        # debuglabel: class and initial label
+        try:
+            self._logger.debug("%s.__init__ label=%s multiselection=%s recursive=%s", self.__class__.__name__, label, multiselection, recursiveselection)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YTree"
@@ -63,9 +82,18 @@ class YTreeCurses(YSelectionWidget):
         self.setNotify(on)
 
     def _create_backend_widget(self):
-        # Keep preferred minimum for the layout (items + optional label)
-        self._height = max(self._height, self._min_height + (1 if self._label else 0))
-        self.rebuildTree()
+        try:
+            # Keep preferred minimum for the layout (items + optional label)
+            self._height = max(self._height, self._min_height + (1 if self._label else 0))
+            # associate placeholder backend widget to avoid None
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            self.rebuildTree()
+        except Exception as e:
+            try:
+                self._logger.critical("_create_backend_widget critical error: %s", e, exc_info=True)
+            except Exception:
+                _mod_logger.critical("_create_backend_widget critical error: %s", e, exc_info=True)
 
     def addItem(self, item):
         """Ensure base storage gets the item and rebuild visible list immediately."""

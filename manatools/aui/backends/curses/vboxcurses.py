@@ -14,13 +14,28 @@ import curses.ascii
 import sys
 import os
 import time
+import logging
 from ...yui_common import *
 
 from .commoncurses import _curses_recursive_min_height
 
+# Module-level logger for vbox curses backend
+_mod_logger = logging.getLogger("manatools.aui.curses.vbox.module")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
+
 class YVBoxCurses(YWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # per-instance logger
+        self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        if not self._logger.handlers and not logging.getLogger().handlers:
+            for h in _mod_logger.handlers:
+                self._logger.addHandler(h)
+        self._logger.debug("%s.__init__", self.__class__.__name__)
     
     def widgetClass(self):
         return "YVBox"
@@ -40,7 +55,11 @@ class YVBoxCurses(YWidget):
         return False
 
     def _create_backend_widget(self):
-        self._backend_widget = None
+        try:
+            self._backend_widget = self
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable VBox and propagate to logical children."""
@@ -49,9 +68,15 @@ class YVBoxCurses(YWidget):
                 try:
                     c.setEnabled(enabled)
                 except Exception:
-                    pass
+                    try:
+                        self._logger.error("_set_backend_enabled child setEnabled error", exc_info=True)
+                    except Exception:
+                        _mod_logger.error("_set_backend_enabled child setEnabled error", exc_info=True)
         except Exception:
-            pass
+            try:
+                self._logger.error("_set_backend_enabled error", exc_info=True)
+            except Exception:
+                _mod_logger.error("_set_backend_enabled error", exc_info=True)
 
     def _draw(self, window, y, x, width, height):
         # Vertical layout with spacing; give stretchable children more than their minimum
@@ -134,7 +159,10 @@ class YVBoxCurses(YWidget):
                 if hasattr(child, "_draw"):
                     child._draw(window, cy, x, width, ch)
             except Exception:
-                pass
+                try:
+                    self._logger.error("_draw child error: %s", child, exc_info=True)
+                except Exception:
+                    _mod_logger.error("_draw child error", exc_info=True)
             cy += ch
             if i < num_children - 1 and cy < (y + height):
                 cy += 1  # one-line spacing
