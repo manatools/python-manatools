@@ -22,6 +22,7 @@ class YSelectionBoxQt(YSelectionWidget):
         self._multi_selection = False
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
+        self._list_widget = None
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -29,23 +30,7 @@ class YSelectionBoxQt(YSelectionWidget):
     
     def value(self):
         return self._value
-    
-    def setValue(self, text):
-        self._value = text
-        if hasattr(self, '_list_widget') and self._list_widget:
-            # Find and select the item with matching text
-            for i in range(self._list_widget.count()):
-                item = self._list_widget.item(i)
-                if item.text() == text:
-                    self._list_widget.setCurrentItem(item)
-                    break
-        # Update selected_items to keep internal state consistent
-        self._selected_items = []
-        for item in self._items:
-            if item.label() == text:
-                self._selected_items.append(item)
-                break
-    
+
     def label(self):
         return self._label
     
@@ -56,44 +41,30 @@ class YSelectionBoxQt(YSelectionWidget):
     def selectItem(self, item, selected=True):
         """Select or deselect a specific item"""
         if hasattr(self, '_list_widget') and self._list_widget:
-            for i in range(self._list_widget.count()):
-                list_item = self._list_widget.item(i)
-                if list_item.text() == item.label():
-                    if selected:
-                        # If single-selection, clear model flags for other items
-                        if not self._multi_selection:
-                            for it in self._items:
-                                try:
-                                    if it is not item:
-                                        it.setSelected(False)
-                                except Exception:
-                                    pass
-                            try:
-                                # clear visual selection
-                                self._list_widget.clearSelection()
-                            except Exception:
-                                pass
-                            self._selected_items = []
-
-                        self._list_widget.setCurrentItem(list_item)
-                        try:
-                            item.setSelected(True)
-                        except Exception:
-                            pass
-                        if item not in self._selected_items:
-                            self._selected_items.append(item)
+            for idx, it in enumerate(self._items):
+                if it is item:
+                    if self.multiSelection():
+                        if selected:
+                            if item not in self._selected_items:
+                                self._selected_items.append(item)
+                        else:
+                            if item in self._selected_items:
+                                self._selected_items.remove(item)
                     else:
-                        try:
-                            item.setSelected(False)
-                        except Exception:
-                            pass
-                        if item in self._selected_items:
-                            self._selected_items.remove(item)
-                    # ensure internal state and notify
-                    try:
-                        self._on_selection_changed()
-                    except Exception:
-                        pass
+                        old_selected = self._selected_items[0] if self._selected_items else None
+                        self._list_widget.clearSelection()
+                        if selected:
+                            if old_selected is not None:
+                                old_selected.setSelected(False)
+                            self._selected_items = [item]                            
+                        else:
+                            self._selected_items = []
+                    #fix item selection in the view and YItem
+                    if selected:
+                        self._list_widget.setCurrentItem(self._list_widget.item(idx))
+                    self._list_widget.item(idx).setSelected(bool(selected))
+                    item.setSelected(bool(selected))
+                    self._value = self._selected_items[0].label() if self._selected_items else ""
                     break
 
     def setMultiSelection(self, enabled):
@@ -109,8 +80,17 @@ class YSelectionBoxQt(YSelectionWidget):
                     first = selected[0]
                     self._list_widget.clearSelection()
                     first.setSelected(True)
-                    # update internal state to reflect change
-                    self._on_selection_changed()
+                    self._list_widget.setCurrentItem(first)
+                    selected_indices = [index.row() for index in self._list_widget.selectedIndexes()]
+                    new_selected = []
+                    for idx, it in enumerate(self._items):                
+                        if idx in selected_indices:
+                            it.setSelected(True)
+                            new_selected.append(it)
+                        else:
+                            it.setSelected(False)
+                    self._selected_items = new_selected
+                    self._value = self._selected_items[0].label() if self._selected_items else ""
 
     def multiSelection(self):
         """Return whether multi-selection is enabled."""
@@ -146,8 +126,6 @@ class YSelectionBoxQt(YSelectionWidget):
                                 li.setSelected(True)
                                 if item not in self._selected_items:
                                     self._selected_items.append(item)
-                                if not self._value:
-                                    self._value = item.label()
                     except Exception:
                         pass
             else:
@@ -155,6 +133,9 @@ class YSelectionBoxQt(YSelectionWidget):
                 for idx, item in enumerate(self._items):
                     try:
                         if item.selected():
+                            if last_selected_idx is not None:
+                                # clear previous selection in model
+                                self._items[last_selected_idx].setSelected(False)
                             last_selected_idx = idx
                     except Exception:
                         pass
@@ -164,11 +145,7 @@ class YSelectionBoxQt(YSelectionWidget):
                         list_widget.setCurrentItem(li)
                         li.setSelected(True)
                         # update model internal selection list and value
-                        try:
-                            self._selected_items = [self._items[last_selected_idx]]
-                            self._value = self._items[last_selected_idx].label()
-                        except Exception:
-                            pass
+                        self._selected_items = [self._items[last_selected_idx]]
         except Exception:
             pass
 
@@ -178,6 +155,7 @@ class YSelectionBoxQt(YSelectionWidget):
         self._backend_widget = container
         self._backend_widget.setEnabled(bool(self._enabled))
         self._list_widget = list_widget
+        self._value = self._selected_items[0].label() if self._selected_items else ""
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -263,31 +241,19 @@ class YSelectionBoxQt(YSelectionWidget):
             # Update model.selected flags and selected items list
             selected_indices = [index.row() for index in self._list_widget.selectedIndexes()]
             new_selected = []
-            for idx, it in enumerate(self._items):
-                try:
-                    if idx in selected_indices:
-                        try:
-                            it.setSelected(True)
-                        except Exception:
-                            pass
-                        new_selected.append(it)
-                    else:
-                        try:
-                            it.setSelected(False)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
+            for idx, it in enumerate(self._items):                
+                if idx in selected_indices:
+                    it.setSelected(True)
+                    new_selected.append(it)
+                else:
+                    it.setSelected(False)
+           
             # In single-selection mode ensure only one model item remains selected
             if not self._multi_selection and len(new_selected) > 1:
                 # Keep only the last selected (mimic addItem logic and selection expectations)
                 last = new_selected[-1]
                 for it in list(new_selected)[:-1]:
-                    try:
-                        it.setSelected(False)
-                    except Exception:
-                        pass
+                    it.setSelected(False)
                 new_selected = [last]
 
             self._selected_items = new_selected
@@ -299,13 +265,10 @@ class YSelectionBoxQt(YSelectionWidget):
                 self._value = ""
             
             # Post selection-changed event to containing dialog
-            try:
-                if self.notify():
-                    dlg = self.findDialog()
-                    if dlg is not None:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
-            except Exception:
-                pass
+            if self.notify():
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
     def deleteAllItems(self):
         """Remove all items from the selection box, both in the model and the Qt view."""
