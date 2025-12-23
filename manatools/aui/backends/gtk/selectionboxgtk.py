@@ -19,6 +19,7 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _resolve_icon
 
 
 class YSelectionBoxGtk(YSelectionWidget):
@@ -167,19 +168,78 @@ class YSelectionBoxGtk(YSelectionWidget):
         self._rows = []
         for it in self._items:
             row = Gtk.ListBoxRow()
+            # build a horizontal container to hold optional icon + label
+            try:
+                widget_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            except Exception:
+                widget_box = Gtk.Box()
+
+            # try to resolve icon for this item
+            icon_name = None
+            try:
+                fn = getattr(it, 'iconName', None)
+                if callable(fn):
+                    icon_name = fn()
+                else:
+                    icon_name = fn
+            except Exception:
+                icon_name = None
+
+            img = None
+            try:
+                img = _resolve_icon(icon_name, size=16)
+            except Exception:
+                img = None
+
             lbl = Gtk.Label(label=it.label() or "")
             try:
                 if hasattr(lbl, "set_xalign"):
                     lbl.set_xalign(0.0)
             except Exception:
                 pass
+
             try:
-                row.set_child(lbl)
+                if img is not None:
+                    try:
+                        widget_box.append(img)
+                    except Exception:
+                        try:
+                            widget_box.add(img)
+                        except Exception:
+                            pass
+                # append label after icon (or alone)
+                try:
+                    widget_box.append(lbl)
+                except Exception:
+                    try:
+                        widget_box.add(lbl)
+                    except Exception:
+                        pass
+            except Exception:
+                # worst case: fall back to label only on the row
+                try:
+                    row.set_child(lbl)
+                except Exception:
+                    try:
+                        row.add(lbl)
+                    except Exception:
+                        pass
+
+            # attach widget_box into the row if not already attached
+            try:
+                row.set_child(widget_box)
             except Exception:
                 try:
-                    row.add(lbl)
+                    row.add(widget_box)
                 except Exception:
-                    pass
+                    # if that fails, ensure label at least
+                    try:
+                        row.set_child(lbl)
+                    except Exception:
+                        try:
+                            row.add(lbl)
+                        except Exception:
+                            pass
 
             # Make every row selectable so users can multi-select if mode allows.
             try:
@@ -485,19 +545,74 @@ class YSelectionBoxGtk(YSelectionWidget):
         try:
             if getattr(self, '_listbox', None) is not None:
                 row = Gtk.ListBoxRow()
+                # build widget with optional icon + label
+                try:
+                    widget_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                except Exception:
+                    widget_box = Gtk.Box()
+
+                icon_name = None
+                try:
+                    fn = getattr(new_item, 'iconName', None)
+                    if callable(fn):
+                        icon_name = fn()
+                    else:
+                        icon_name = fn
+                except Exception:
+                    icon_name = None
+
+                img = None
+                try:
+                    img = _resolve_icon(icon_name, size=16)
+                except Exception:
+                    img = None
+
                 lbl = Gtk.Label(label=new_item.label() or "")
                 try:
                     if hasattr(lbl, "set_xalign"):
                         lbl.set_xalign(0.0)
                 except Exception:
                     pass
+
                 try:
-                    row.set_child(lbl)
+                    if img is not None:
+                        try:
+                            widget_box.append(img)
+                        except Exception:
+                            try:
+                                widget_box.add(img)
+                            except Exception:
+                                pass
+                    try:
+                        widget_box.append(lbl)
+                    except Exception:
+                        try:
+                            widget_box.add(lbl)
+                        except Exception:
+                            pass
                 except Exception:
                     try:
-                        row.add(lbl)
+                        row.set_child(lbl)
                     except Exception:
-                        pass
+                        try:
+                            row.add(lbl)
+                        except Exception:
+                            pass
+
+                try:
+                    row.set_child(widget_box)
+                except Exception:
+                    try:
+                        row.add(widget_box)
+                    except Exception:
+                        try:
+                            row.set_child(lbl)
+                        except Exception:
+                            try:
+                                row.add(lbl)
+                            except Exception:
+                                pass
+
                 try:
                     row.set_selectable(True)
                 except Exception:
