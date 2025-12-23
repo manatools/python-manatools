@@ -11,7 +11,9 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 from PySide6 import QtWidgets
 import logging
+import os
 from ...yui_common import *
+from .commonqt import _resolve_icon
 
 class YSelectionBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label=""):
@@ -33,7 +35,7 @@ class YSelectionBoxQt(YSelectionWidget):
 
     def label(self):
         return self._label
-    
+
     def selectedItems(self):
         """Get list of selected items"""
         return self._selected_items
@@ -109,9 +111,41 @@ class YSelectionBoxQt(YSelectionWidget):
         mode = QtWidgets.QAbstractItemView.MultiSelection if self._multi_selection else QtWidgets.QAbstractItemView.SingleSelection
         list_widget.setSelectionMode(mode)
         
-        # Add items to list widget
+        # Add items to list widget (use QListWidgetItem to support icons)
         for item in self._items:
-            list_widget.addItem(item.label())
+            try:
+                text = item.label() if hasattr(item, 'label') else str(item)
+            except Exception:
+                try:
+                    text = str(item)
+                except Exception:
+                    text = ""
+            try:
+                li = QtWidgets.QListWidgetItem(text)
+                icon_name = None
+                try:
+                    fn = getattr(item, 'iconName', None)
+                    if callable(fn):
+                        icon_name = fn()
+                    else:
+                        icon_name = fn
+                except Exception:
+                    icon_name = None
+                icon = _resolve_icon(icon_name)
+                if icon is not None:
+                    try:
+                        li.setIcon(icon)
+                    except Exception:
+                        pass
+                list_widget.addItem(li)
+            except Exception:
+                try:
+                    list_widget.addItem(item.label())
+                except Exception:
+                    try:
+                        list_widget.addItem(str(item))
+                    except Exception:
+                        pass
 
         # Reflect model's selected flags into the view.
         # If multi-selection is enabled, select all items flagged selected.
@@ -201,7 +235,36 @@ class YSelectionBoxQt(YSelectionWidget):
         try:
             if getattr(self, '_list_widget', None) is not None:
                 try:
-                    self._list_widget.addItem(new_item.label())
+                    try:
+                        text = new_item.label() if hasattr(new_item, 'label') else str(new_item)
+                    except Exception:
+                        text = str(new_item)
+                    try:
+                        li = QtWidgets.QListWidgetItem(text)
+                        icon_name = None
+                        try:
+                            fn = getattr(new_item, 'iconName', None)
+                            if callable(fn):
+                                icon_name = fn()
+                            else:
+                                icon_name = fn
+                        except Exception:
+                            icon_name = None
+                        icon = _resolve_icon(icon_name)
+                        if icon is not None:
+                            try:
+                                li.setIcon(icon)
+                            except Exception:
+                                pass
+                        self._list_widget.addItem(li)
+                    except Exception:
+                        try:
+                            self._list_widget.addItem(new_item.label())
+                        except Exception:
+                            try:
+                                self._list_widget.addItem(str(new_item))
+                            except Exception:
+                                pass
                     # If the item is marked selected in the model, reflect it.
                     if new_item.selected():
                         idx = self._list_widget.count() - 1
