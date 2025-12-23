@@ -9,9 +9,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtGui
 import logging
 from ...yui_common import *
+from .commonqt import _resolve_icon
 
 class YTreeQt(YSelectionWidget):
     """
@@ -39,6 +40,7 @@ class YTreeQt(YSelectionWidget):
         self._suppress_selection_handler = False
         # remember last selected QTreeWidgetItem set to detect added/removed selections
         self._last_selected_qitems = set()
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")            
 
     def widgetClass(self):
         return "YTree"
@@ -67,23 +69,13 @@ class YTreeQt(YSelectionWidget):
         # populate if items already present
         try:
             self.rebuildTree()
-        except Exception:
-            try:
-                self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
-                self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
-            except Exception:
-                pass
-            pass
-        try:
-            # ensure logger exists and emit debug
-            if not hasattr(self, "_logger"):
-                self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-        except Exception:
-            pass
+        except Exception:            
+            self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
+
 
     def rebuildTree(self):
         """Rebuild the QTreeWidget from self._items (calls helper recursively)."""
+        self._logger.debug("rebuildTree: rebuilding tree with %d items", len(self._items) if self._items else 0)
         if self._tree_widget is None:
             # ensure backend exists
             self._create_backend_widget()
@@ -91,6 +83,8 @@ class YTreeQt(YSelectionWidget):
         self._qitem_to_item.clear()
         self._item_to_qitem.clear()
         self._tree_widget.clear()
+        # collect selected candidates while building so we can apply single-selection rules
+        selected_candidates = []
 
         def _add_recursive(parent_qitem, item):
             # item expected to provide label() and possibly children() iterable
@@ -106,6 +100,25 @@ class YTreeQt(YSelectionWidget):
             # preserve mapping
             self._qitem_to_item[qitem] = item
             self._item_to_qitem[item] = qitem
+            # set icon for this item if provided
+            try:
+                icon_name = None
+                fn = getattr(item, 'iconName', None)
+                if callable(fn):
+                    icon_name = fn()
+                else:
+                    icon_name = fn
+                if icon_name:
+                    ico = _resolve_icon(icon_name)
+                    if ico is not None:
+                        try:
+                            self._logger.debug("Column count for item %d", qitem.columnCount())
+                            qitem.setIcon(0, ico)
+                        except Exception:
+                            pass
+            except Exception:
+                self._logger.error("Error setting icon for tree item %s", text, exc_info=True)
+                pass
             # attach to parent or top-level
             if parent_qitem is None:
                 self._tree_widget.addTopLevelItem(qitem)
@@ -117,6 +130,14 @@ class YTreeQt(YSelectionWidget):
                 is_open = bool(getattr(item, "_is_open", False))
                 # setExpanded ensures the node shows as expanded/collapsed
                 qitem.setExpanded(is_open)
+            except Exception:
+                pass
+
+            # remember selection candidates
+            try:
+                if getattr(item, 'selected', None) and callable(getattr(item, 'selected')):
+                    if item.selected():
+                        selected_candidates.append((qitem, item))
             except Exception:
                 pass
 
@@ -146,6 +167,33 @@ class YTreeQt(YSelectionWidget):
                 _add_recursive(None, it)
             except Exception:
                 pass
+        # Apply selection state according to collected candidates and selection mode
+        try:
+            self._selected_items = []
+            if self._multi:
+                for qit, it in selected_candidates:
+                    try:
+                        qit.setSelected(True)
+                        if it not in self._selected_items:
+                            self._selected_items.append(it)
+                        try:
+                            it.setSelected(True)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+            else:
+                if selected_candidates:
+                    qit, it = selected_candidates[-1]
+                    try:
+                        qit.setSelected(True)
+                        it.setSelected(True)
+                        self._selected_items = [it]
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
         # do not call expandAll(); expansion is controlled per-item by _is_open
 
     def currentItem(self):
@@ -329,9 +377,26 @@ class YTreeQt(YSelectionWidget):
         '''Add a YItem redefinition from YSelectionWidget to manage YTreeItems.'''
         if isinstance(item, str):
             item = YTreeItem(item)            
-            self._items.append(item)
-        else:
             super().addItem(item)
+        elif isinstance(item, YTreeItem):
+            super().addItem(item)
+        else:
+            self._logger.error("YTree.addItem: invalid item type %s", type(item))
+            raise TypeError("YTree.addItem expects a YTreeItem or string label")
+        # ensure index set
+        try:
+            item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+        # if backend exists, refresh tree to reflect new item (including icon/selection)
+        try:
+            if getattr(self, '_tree_widget', None) is not None:
+                try:
+                    self.rebuildTree()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # property API hooks (minimal implementation)
     def setProperty(self, propertyName, val):
@@ -367,6 +432,102 @@ class YTreeQt(YSelectionWidget):
                 try:
                     if hasattr(c, "setEnabled"):
                         c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def selectItem(self, item, selected=True):
+        """Select or deselect the given logical YTreeItem and reflect in the view."""
+        try:
+            # update model flag
+            try:
+                item.setSelected(bool(selected))
+            except Exception:
+                pass
+            # if no tree widget, only model is updated
+            if getattr(self, '_tree_widget', None) is None:
+                # maintain internal selected list
+                if selected:
+                    if item not in self._selected_items:
+                        if not self._multi:
+                            self._selected_items = [item]
+                        else:
+                            self._selected_items.append(item)
+                else:
+                    try:
+                        if item in self._selected_items:
+                            self._selected_items.remove(item)
+                    except Exception:
+                        pass
+                return
+
+            qit = self._item_to_qitem.get(item, None)
+            if qit is None:
+                # item may be newly added — rebuild tree and retry
+                try:
+                    self.rebuildTree()
+                    qit = self._item_to_qitem.get(item, None)
+                except Exception:
+                    qit = None
+
+            if qit is None:
+                return
+
+            # apply selection in view
+            try:
+                if not self._multi and selected:
+                    try:
+                        self._tree_widget.clearSelection()
+                    except Exception:
+                        pass
+                # if recursive selection is enabled, select/deselect descendants too
+                targets = [qit]
+                if selected and self._recursive:
+                    targets = self._collect_descendant_qitems(qit)
+                for tq in targets:
+                    try:
+                        tq.setSelected(bool(selected))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # update internal selected items list
+            try:
+                new_selected = []
+                for q in self._tree_widget.selectedItems():
+                    itm = self._qitem_to_item.get(q, None)
+                    if itm is not None:
+                        new_selected.append(itm)
+                # if not multi, keep only last
+                if not self._multi and len(new_selected) > 1:
+                    new_selected = [new_selected[-1]]
+                self._selected_items = new_selected
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def deleteAllItems(self):
+        """Remove all items from model and QTreeWidget view."""
+        try:
+            super().deleteAllItems()
+        except Exception:
+            self._items = []
+            self._selected_items = []
+        try:
+            self._qitem_to_item.clear()
+        except Exception:
+            pass
+        try:
+            self._item_to_qitem.clear()
+        except Exception:
+            pass
+        try:
+            if getattr(self, '_tree_widget', None) is not None:
+                try:
+                    self._tree_widget.clear()
                 except Exception:
                     pass
         except Exception:
