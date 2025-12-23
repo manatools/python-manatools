@@ -12,6 +12,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from ...yui_common import YSingleChildContainerWidget, YUIDimension, YPropertySet, YProperty, YPropertyType, YUINoDialogException, YDialogType, YDialogColorMode, YEvent, YCancelEvent, YTimeoutEvent
+from .commonqt import _resolve_icon
 from ... import yui as yui_mod
 import os
 import logging
@@ -112,16 +113,7 @@ class YDialogQt(YSingleChildContainerWidget):
                     try:
                         icon_spec = appobj.applicationIcon()
                         if icon_spec:
-                            # use the application's iconBasePath if present
-                            base = getattr(appobj, "_icon_base_path", None)
-                            if base and not os.path.isabs(icon_spec):
-                                p = os.path.join(base, icon_spec)
-                                if os.path.exists(p):
-                                    app_qicon = QtGui.QIcon(p)
-                            if not app_qicon:
-                                q = QtGui.QIcon.fromTheme(icon_spec)
-                                if not q.isNull():
-                                    app_qicon = q
+                            app_qicon = _resolve_icon(icon_spec)
                     except Exception:
                         pass
             # if we have a qicon, set it on the QApplication and the new window

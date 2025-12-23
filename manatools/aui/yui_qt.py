@@ -7,6 +7,7 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import os
 from .yui_common import *
 from .backends.qt import *
+from .backends.qt.commonqt import _resolve_icon
 
 class YUIQt:
     def __init__(self):
@@ -72,34 +73,6 @@ class YApplicationQt:
         except Exception:
             pass
 
-    def _resolve_qicon(self, icon_spec):
-        """Resolve icon_spec (path or theme name) into a QtGui.QIcon or None.
-        If iconBasePath is set, prefer that as absolute path base.
-        """
-        if not icon_spec:
-            return None
-        # if we have a base path and the spec is not absolute, try that first
-        try:
-            if self._icon_base_path:
-                cand = icon_spec
-                if not os.path.isabs(cand):
-                    cand = os.path.join(self._icon_base_path, icon_spec)
-                if os.path.exists(cand):
-                    return QtGui.QIcon(cand)
-            # if icon_spec looks like an absolute path, try it
-            if os.path.isabs(icon_spec) and os.path.exists(icon_spec):
-                return QtGui.QIcon(icon_spec)
-        except Exception:
-            pass
-        # fallback to theme lookup
-        try:
-            theme_icon = QtGui.QIcon.fromTheme(icon_spec)
-            if not theme_icon.isNull():
-                return theme_icon
-        except Exception:
-            pass
-        return None
-
     def setApplicationIcon(self, Icon):
         """Set application icon spec (theme name or path). Try to apply it to QApplication and active dialogs.
 
@@ -111,7 +84,7 @@ class YApplicationQt:
             self._icon = ""
         # resolve into a QIcon and cache
         try:
-            self._qt_icon = self._resolve_qicon(self._icon)
+            self._qt_icon = _resolve_icon(self._icon)
         except Exception:
             self._qt_icon = None
 
