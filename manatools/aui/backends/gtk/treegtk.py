@@ -49,6 +49,8 @@ class YTreeGtk(YSelectionWidget):
         self._visible_items = []      # list of (item, depth)
         self._suppress_selection_handler = False
         self._last_selected_ids = set()
+        # preferred visible rows to hint initial/min height (approx 24px per row)
+        self._preferred_rows = 8
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
@@ -75,8 +77,9 @@ class YTreeGtk(YSelectionWidget):
             # Let listbox expand in available area
             listbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
             listbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            listbox.set_valign(Gtk.Align.FILL)
         except Exception:
-            pass
+            self._logger.debug("Failed to set expansion on tree listbox")
 
         sw = Gtk.ScrolledWindow()
         try:
@@ -89,12 +92,23 @@ class YTreeGtk(YSelectionWidget):
 
         # Make scrolled window expand to fill container (so tree respects parent stretching)
         try:
+            
             sw.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
             sw.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            # In GTK4, scrolled windows may clamp to natural child height; disable propagation
+            sw.set_propagate_natural_height(False)
+            # hint a reasonable minimum height based on preferred rows
+            min_h = int(getattr(self, "_preferred_rows", 8) * 24)
+            sw.set_min_content_height(min_h)
             vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
             vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            vbox.set_valign(Gtk.Align.FILL)
         except Exception:
-            pass
+            self._logger.debug("Failed to set expansion on tree scrolled window / vbox")
+            sw.set_vexpand(True)
+            sw.set_hexpand(True)
+            vbox.set_vexpand(True)
+            vbox.set_hexpand(True)
 
         # connect selection signal; use defensive handler that scans rows
         try:
