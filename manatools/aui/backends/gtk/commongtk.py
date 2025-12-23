@@ -21,7 +21,7 @@ import logging
 from ...yui_common import *
 
 
-__all__ = ["_curses_recursive_min_height"]
+__all__ = ["_resolve_icon"]
 
 
 def _resolve_icon(icon_name, size=16):
