@@ -26,8 +26,7 @@ class YSelectionBoxGtk(YSelectionWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
         self._label = label
-        self._value = ""
-        self._selected_items = []
+        self._value = ""        
         self._old_selected_items = [] # for change detection
         self._multi_selection = False
         self._listbox = None
