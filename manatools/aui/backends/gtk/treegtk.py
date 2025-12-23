@@ -19,6 +19,7 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _resolve_icon
 
 
 class YTreeGtk(YSelectionWidget):
@@ -262,6 +263,32 @@ class YTreeGtk(YSelectionWidget):
             # ensure label expands to take remaining space
             try:
                 lbl.set_hexpand(True)
+            except Exception:
+                pass
+            # try to resolve icon and prepend image if available
+            try:
+                icon_name = None
+                fn = getattr(item, 'iconName', None)
+                if callable(fn):
+                    icon_name = fn()
+                else:
+                    icon_name = fn
+            except Exception:
+                icon_name = None
+            img = None
+            try:
+                img = _resolve_icon(icon_name, size=16)
+            except Exception:
+                img = None
+            try:
+                if img is not None:
+                    try:
+                        hbox.append(img)
+                    except Exception:
+                        try:
+                            hbox.add(img)
+                        except Exception:
+                            pass
             except Exception:
                 pass
             hbox.append(lbl)
@@ -763,3 +790,127 @@ class YTreeGtk(YSelectionWidget):
         if self._backend_widget is None:
             self._create_backend_widget()
         return self._backend_widget
+
+    def addItem(self, item):
+        """Add YTreeItem to model and refresh view when needed."""
+        if isinstance(item, str):
+            item = YTreeItem(item)
+            super().addItem(item)
+        else:
+            super().addItem(item)
+        try:
+            item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+        try:
+            if getattr(self, '_listbox', None) is not None:
+                try:
+                    self.rebuildTree()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def selectItem(self, item, selected=True):
+        """Select/deselect a logical YTreeItem and reflect changes in the Gtk.ListBox."""
+        try:
+            try:
+                item.setSelected(bool(selected))
+            except Exception:
+                pass
+
+            # if no listbox, update model only
+            if getattr(self, '_listbox', None) is None:
+                if selected:
+                    if not self._multi:
+                        self._selected_items = [item]
+                    else:
+                        if item not in self._selected_items:
+                            self._selected_items.append(item)
+                else:
+                    try:
+                        if item in self._selected_items:
+                            self._selected_items.remove(item)
+                    except Exception:
+                        pass
+                return
+
+            # ensure mapping exists
+            row = self._item_to_row.get(item, None)
+            if row is None:
+                try:
+                    self.rebuildTree()
+                    row = self._item_to_row.get(item, None)
+                except Exception:
+                    row = None
+            if row is None:
+                return
+
+            # apply selection to row; handle single-selection by clearing others
+            try:
+                if not self._multi and selected:
+                    try:
+                        self._listbox.unselect_all()
+                    except Exception:
+                        pass
+                try:
+                    row.set_selected(bool(selected))
+                except Exception:
+                    try:
+                        setattr(row, '_selected_flag', bool(selected))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # update logical selected list
+            try:
+                new_sel = []
+                for r in list(self._rows or []):
+                    try:
+                        if self._row_is_selected(r):
+                            it = self._row_to_item.get(r)
+                            if it is not None:
+                                new_sel.append(it)
+                    except Exception:
+                        pass
+                if not self._multi and len(new_sel) > 1:
+                    new_sel = [new_sel[-1]]
+                self._selected_items = new_sel
+                self._last_selected_ids = set(id(i) for i in self._selected_items)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def deleteAllItems(self):
+        """Clear model and view rows for this tree."""
+        try:
+            super().deleteAllItems()
+        except Exception:
+            self._items = []
+            self._selected_items = []
+        try:
+            self._rows = []
+            self._row_to_item.clear()
+            self._item_to_row.clear()
+            self._visible_items = []
+        except Exception:
+            pass
+        try:
+            if getattr(self, '_listbox', None) is not None:
+                try:
+                    # remove visible rows
+                    for r in list(self._listbox.get_children() or []) if hasattr(self._listbox, 'get_children') else []:
+                        try:
+                            self._listbox.remove(r)
+                        except Exception:
+                            pass
+                    try:
+                        self._listbox.unselect_all()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
