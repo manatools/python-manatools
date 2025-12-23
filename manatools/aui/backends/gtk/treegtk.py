@@ -42,6 +42,7 @@ class YTreeGtk(YSelectionWidget):
         self._backend_widget = None
         self._listbox = None
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        self._old_selected_items = []  # for change detection
         # cached rows and mappings
         self._rows = []               # ordered list of Gtk.ListBoxRow
         self._row_to_item = {}        # row -> YTreeItem
@@ -110,15 +111,6 @@ class YTreeGtk(YSelectionWidget):
             vbox.set_vexpand(True)
             vbox.set_hexpand(True)
 
-        # connect selection signal; use defensive handler that scans rows
-        try:
-            listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
-        except Exception:
-            try:
-                self._logger.error("Failed to connect row-selected handler", exc_info=True)
-            except Exception:
-                pass
-
         self._backend_widget = vbox
         self._listbox = listbox
         self._backend_widget.set_sensitive(self._enabled)
@@ -140,10 +132,21 @@ class YTreeGtk(YSelectionWidget):
                 self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
             except Exception:
                 pass
-        try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-        except Exception:
-            pass
+
+        # connect selection signal; use defensive handler that scans rows
+        if self._multi:
+            try:
+                self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))                    
+                self._listbox.connect("row-activated", lambda lb, row: self._on_row_selected_for_multi(lb, row))
+            except Exception:                   
+                pass
+        else:
+            try:
+                self._listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
+            except Exception:
+                pass
+
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
     def _make_row(self, item, depth):
         """Create a ListBoxRow for item with indentation and (optional) toggle button."""
@@ -439,9 +442,9 @@ class YTreeGtk(YSelectionWidget):
                     pass
 
             # restore previous selection (visible rows only)
+            self._suppress_selection_handler = True
             try:
                 if self._last_selected_ids:
-                    self._suppress_selection_handler = True
                     try:
                         self._listbox.unselect_all()
                     except Exception:
@@ -449,16 +452,15 @@ class YTreeGtk(YSelectionWidget):
                     for row, item in list(self._row_to_item.items()):
                         try:
                             if id(item) in self._last_selected_ids:
-                                try:
-                                    row.set_selected(True)
-                                except Exception:
-                                    pass
+                                self._listbox.select_row(row)
                         except Exception:
                             pass
-                    self._suppress_selection_handler = False
             except Exception:
-                self._suppress_selection_handler = False
+                pass
 
+            # cleaning up old selection
+            for it in self._selected_items:
+                it.setSelected(False)
             # rebuild logical selected items from rows
             self._selected_items = []
             for row in self._rows:
@@ -470,10 +472,12 @@ class YTreeGtk(YSelectionWidget):
                     if sel:
                         it = self._row_to_item.get(row, None)
                         if it is not None:
+                            it.setSelected(True)
                             self._selected_items.append(it)
                 except Exception:
                     pass
 
+            self._suppress_selection_handler = False
             self._last_selected_ids = set(id(i) for i in self._selected_items)
         except Exception:
             pass
@@ -482,9 +486,7 @@ class YTreeGtk(YSelectionWidget):
         """Robust helper to detect whether a ListBoxRow is selected."""
         try:
             # preferred API
-            sel = getattr(r, "get_selected", None)
-            if callable(sel):
-                return bool(sel())
+            return bool(r.is_selected())
         except Exception:
             pass
         try:
@@ -553,7 +555,10 @@ class YTreeGtk(YSelectionWidget):
                 try:
                     target = id(it) in desired_ids
                     try:
-                        row.set_selected(bool(target))
+                        if target:
+                            self._listbox.select_row(row)
+                        else:
+                            self._listbox.unselect_row(row)
                     except Exception:
                         try:
                             setattr(row, "_selected_flag", bool(target))
@@ -567,12 +572,28 @@ class YTreeGtk(YSelectionWidget):
             except Exception:
                 pass
 
-    def _on_row_selected(self, listbox, row):
-        """Handle selection change; update logical selected items reliably.
-
-        When recursive selection is enabled and multi-selection is on,
-        selecting/deselecting a parent will also select/deselect all its descendants.
+    def _on_row_selected_for_multi(self, listbox, row):
         """
+        Handler for row selection in multi-selection mode: for de-selection.
+        """
+        self._logger.debug("_on_row_selected_for_multi called")
+        sel_rows = listbox.get_selected_rows()
+        it = self._row_to_item.get(row, None)
+        if it is not None:
+            if it in self._old_selected_items:
+                self._listbox.unselect_row( row )
+                it.setSelected( False )
+                self._on_selected_rows_changed(listbox)
+            else:
+                self._old_selected_items = self._selected_items
+
+
+    def _on_selected_rows_changed(self, listbox):
+        """
+        Handler for multi-selection (or bulk selection change). Rebuild selected list
+        using either ListBox APIs (if available) or by scanning cached rows.
+        """
+        self._logger.debug("_on_selected_rows_changed called")
         # ignore if programmatic change in progress
         if self._suppress_selection_handler:
             return
@@ -713,6 +734,73 @@ class YTreeGtk(YSelectionWidget):
                 _clear_flags(list(getattr(self, "_items", []) or []))
             except Exception:
                 pass
+
+            for it in cur_selected_items:
+                try:
+                    it.setSelected(True)
+                except Exception:
+                    pass
+
+            # store logical selection
+            self._old_selected_items = self._selected_items
+            self._selected_items = list(cur_selected_items)
+            self._last_selected_ids = set(id(i) for i in self._selected_items)
+
+            # notify immediate mode
+            if self._immediate and self.notify():
+                try:
+                    dlg = self.findDialog()
+                    if dlg:
+                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_row_selected(self, listbox, row):
+        """Handle selection change; update logical selected items reliably.
+
+        When recursive selection is enabled and multi-selection is on,
+        selecting/deselecting a parent will also select/deselect all its descendants.
+        """
+        self._logger.debug(f"_on_row_selected called {row if row else 'None'}")
+        # ignore if programmatic change in progress
+        if self._suppress_selection_handler:
+            return
+
+        try:
+            selected_rows = self._gather_selected_rows()
+
+            # map rows -> items
+            cur_selected_items = []
+            for r in selected_rows:
+                try:
+                    it = self._row_to_item.get(r, None)
+                    if it is not None:
+                        cur_selected_items.append(it)
+                except Exception:
+                    pass
+
+            # Update logical selection flags
+            try:
+                def _clear_flags(nodes):
+                    for n in nodes:
+                        try:
+                            n.setSelected(False)
+                        except Exception:
+                            pass
+                        try:
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                        except Exception:
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            _clear_flags(chs)
+                _clear_flags(list(getattr(self, "_items", []) or []))
+            except Exception:
+                pass
+            
+            if len(cur_selected_items) > 1:
+                self._logger.warning(f"Multiple selected items: {[it.label() for it in cur_selected_items]}")
 
             for it in cur_selected_items:
                 try:
