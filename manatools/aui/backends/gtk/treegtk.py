@@ -172,87 +172,76 @@ class YTreeGtk(YSelectionWidget):
 
         if has_children:
             try:
-                btn = Gtk.Button(label="▾" if bool(getattr(item, "_is_open", False)) else "▸")
+                # Replace toggle button with Gtk.Expander to show standard tree affordance
+                exp = Gtk.Expander()
                 try:
-                    btn.set_relief(Gtk.ReliefStyle.NONE)
-                except Exception:
-                    pass
-                # prevent the toggle button from taking focus / causing selection side-effects
-                try:
-                    btn.set_focus_on_click(False)
+                    # keep the expander focused off to avoid selection side-effects
+                    exp.set_can_focus(False)
                 except Exception:
                     pass
                 try:
-                    btn.set_can_focus(False)
+                    # use an empty label so only the arrow is shown here
+                    exp.set_label("")
                 except Exception:
                     pass
-                # make button visually flat (no border/background) so it looks like a tree expander
                 try:
-                    btn.add_css_class("flat")
+                    # keep a compact width similar to the former button
+                    exp.set_size_request(14, 1)
                 except Exception:
-                    # fallback: try another common class name
+                    pass
+                try:
+                    # reflect current open state
+                    exp.set_expanded(bool(getattr(item, "_is_open", False)))
+                except Exception:
+                    pass
+
+                def _on_expanded_changed(expander, pspec, target_item=item):
                     try:
-                        btn.add_css_class("link")
+                        self._suppress_selection_handler = True
+                    except Exception:
+                        pass
+                    try:
+                        # Sync model open state from expander
+                        try:
+                            is_open = bool(getattr(expander, "get_expanded", None) and expander.get_expanded())
+                        except Exception:
+                            try:
+                                # fallback property access
+                                is_open = bool(getattr(expander, "expanded", False))
+                            except Exception:
+                                is_open = False
+                        try:
+                            target_item.setOpen(is_open)
+                        except Exception:
+                            try:
+                                target_item._is_open = is_open
+                            except Exception:
+                                pass
+                        # preserve selection and rebuild
+                        try:
+                            self._last_selected_ids = set(id(i) for i in getattr(self, "_selected_items", []) or [])
+                        except Exception:
+                            self._last_selected_ids = set()
+                        try:
+                            self.rebuildTree()
+                        except Exception:
+                            pass
+                    finally:
+                        try:
+                            self._suppress_selection_handler = False
+                        except Exception:
+                            pass
+
+                try:
+                    exp.connect("notify::expanded", _on_expanded_changed)
+                except Exception:
+                    # fallback: use activate if notify is not available
+                    try:
+                        exp.connect("activate", lambda e, it=item: self._on_toggle_clicked(it))
                     except Exception:
                         pass
 
-                # Use a GestureClick on the button to reliably receive a single-click action
-                # and avoid the occasional need for double clicks caused by focus/selection interplay.
-                try:
-                    gesture = Gtk.GestureClick()
-                    # accept any button; if set_button exists restrict to primary
-                    try:
-                        gesture.set_button(0)
-                    except Exception:
-                        pass
-                    # pressed handler will toggle immediately
-                    def _on_pressed(gesture_obj, n_press, x, y, target_item=item):
-                        # run toggle synchronously and suppress selection handler while rebuilding
-                        try:
-                            self._suppress_selection_handler = True
-                        except Exception:
-                            pass
-                        try:
-                            # toggle using public API if available
-                            try:
-                                cur = target_item.isOpen()
-                                target_item.setOpen(not cur)
-                            except Exception:
-                                try:
-                                    cur = bool(getattr(target_item, "_is_open", False))
-                                    target_item._is_open = not cur
-                                except Exception:
-                                    pass
-                            # preserve selection and rebuild
-                            try:
-                                self._last_selected_ids = set(id(i) for i in getattr(self, "_selected_items", []) or [])
-                            except Exception:
-                                self._last_selected_ids = set()
-                            try:
-                                self.rebuildTree()
-                            except Exception:
-                                pass
-                        finally:
-                            try:
-                                self._suppress_selection_handler = False
-                            except Exception:
-                                pass
-
-                    gesture.connect("pressed", _on_pressed)
-                    try:
-                        btn.add_controller(gesture)
-                    except Exception:
-                        try:
-                            btn.add_controller(gesture)
-                        except Exception:
-                            pass
-                except Exception:
-                    # Fallback to clicked if GestureClick not available
-                    try:
-                        btn.connect("clicked", lambda b, it=item: self._on_toggle_clicked(it))
-                    except Exception:
-                        pass
-                hbox.append(btn)
+                hbox.append(exp)
             except Exception:
                 # fallback spacer
                 try:
