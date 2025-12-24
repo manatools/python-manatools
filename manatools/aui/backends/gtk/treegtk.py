@@ -199,6 +199,8 @@ class YTreeGtk(YSelectionWidget):
                     pass
 
                 def _on_expanded_changed(expander, pspec, target_item=item):
+                    """Handler for expander expanded change: update model and rebuild."""
+                    self._logger.debug("_on_expanded_changed called for item <%s>", str(target_item))
                     try:
                         self._suppress_selection_handler = True
                     except Exception:
@@ -428,6 +430,54 @@ class YTreeGtk(YSelectionWidget):
                             _visit(childs, depth + 1)
 
             roots = list(getattr(self, "_items", []) or [])
+
+            # Ensure that any selected item has its ancestors opened so it becomes visible.
+            try:
+                def _collect_all_nodes(nodes):
+                    out = []
+                    for n in nodes:
+                        out.append(n)
+                        try:
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                        except Exception:
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            out.extend(_collect_all_nodes(chs))
+                    return out
+
+                all_nodes = _collect_all_nodes(roots)
+                for it in all_nodes:
+                    try:
+                        sel = False
+                        if callable(getattr(it, 'selected', None)):
+                            sel = it.selected()
+                        else:
+                            sel = bool(getattr(it, '_selected', False))
+                        if sel:
+                            # walk up parent chain and open each ancestor
+                            parent = None
+                            try:
+                                parent = it.parentItem() if callable(getattr(it, 'parentItem', None)) else getattr(it, '_parent_item', None)
+                            except Exception:
+                                parent = getattr(it, '_parent_item', None)
+                            while parent:
+                                try:
+                                    # prefer public API
+                                    try:
+                                        parent.setOpen(True)
+                                    except Exception:
+                                        parent._is_open = True
+                                except Exception:
+                                    pass
+                                try:
+                                    parent = parent.parentItem() if callable(getattr(parent, 'parentItem', None)) else getattr(parent, '_parent_item', None)
+                                except Exception:
+                                    break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             _visit(roots, 0)
 
             # create rows
@@ -442,38 +492,24 @@ class YTreeGtk(YSelectionWidget):
                     pass
 
             # restore previous selection (visible rows only)
+            # If caller provided _last_selected_ids (e.g. during toggle), honor that.
+            # Otherwise, honor any items that already have their model-selected flag set.
             self._suppress_selection_handler = True
             try:
-                if self._last_selected_ids:
-                    try:
-                        self._listbox.unselect_all()
-                    except Exception:
-                        pass
-                    for row, item in list(self._row_to_item.items()):
-                        try:
-                            if id(item) in self._last_selected_ids:
-                                self._listbox.select_row(row)
-                        except Exception:
-                            pass
+                self._listbox.unselect_all()
             except Exception:
                 pass
-
-            # cleaning up old selection
-            for it in self._selected_items:
-                it.setSelected(False)
-            # rebuild logical selected items from rows
+            
             self._selected_items = []
-            for row in self._rows:
+            for it in list(getattr(self, "_items", []) or []):
                 try:
-                    if getattr(row, "get_selected", None):
-                        sel = row.get_selected()
-                    else:
-                        sel = bool(getattr(row, "_selected_flag", False))
-                    if sel:
-                        it = self._row_to_item.get(row, None)
-                        if it is not None:
-                            it.setSelected(True)
-                            self._selected_items.append(it)
+                    if it.selected():
+                        row = self._row_to_item.get(it, None)
+                        if row is not None:
+                           self._listbox.select_row(row)
+                        else:
+                           self._logger.debug("rebuildTree: item <%s> not visible yet checking parent", str(it))
+                        self._selected_items.append(it)
                 except Exception:
                     pass
 
@@ -763,7 +799,18 @@ class YTreeGtk(YSelectionWidget):
         When recursive selection is enabled and multi-selection is on,
         selecting/deselecting a parent will also select/deselect all its descendants.
         """
-        self._logger.debug(f"_on_row_selected called {row if row else 'None'}")
+        try:
+            mapped = self._row_to_item.get(row, None) if row is not None else None
+            try:
+                mapped_label = mapped.label() if (mapped is not None and callable(getattr(mapped, 'label', None))) else str(mapped)
+            except Exception:
+                mapped_label = repr(mapped)
+            self._logger.debug("_on_row_selected called row=%r -> item=%r label=%r", row, mapped, mapped_label)
+        except Exception:
+            try:
+                self._logger.debug("_on_row_selected called (row=%r)", row)
+            except Exception:
+                pass
         # ignore if programmatic change in progress
         if self._suppress_selection_handler:
             return
@@ -944,13 +991,22 @@ class YTreeGtk(YSelectionWidget):
                         self._listbox.unselect_all()
                     except Exception:
                         pass
-                try:
-                    row.set_selected(bool(selected))
-                except Exception:
+                if selected:
                     try:
-                        setattr(row, '_selected_flag', bool(selected))
+                        self._listbox.select_row(row)
                     except Exception:
-                        pass
+                        try:
+                            setattr(row, '_selected_flag', True)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        self._listbox.unselect_row(row)
+                    except Exception:
+                        try:
+                            setattr(row, '_selected_flag', False)
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
