@@ -130,19 +130,6 @@ class YTreeCurses(YSelectionWidget):
             except Exception:
                 pass
 
-    def clearItems(self):
-        """Clear items and rebuild."""
-        try:
-            try:
-                super().clearItems()
-            except Exception:
-                self._items = []
-        finally:
-            try:
-                self.rebuildTree()
-            except Exception:
-                pass
-
     def deleteAllItems(self):
         """Clear model and all internal state for this tree."""
         try:
@@ -268,6 +255,25 @@ class YTreeCurses(YSelectionWidget):
 
             # now recompute visible list based on possibly opened parents
             self._flatten_visible()
+
+            # In single-selection mode, clamp desired selection to a single item.
+            if selected_ids and not self._multi:
+                chosen_id = None
+                # Prefer a visible item
+                for itm, _d in self._visible_items:
+                    try:
+                        if id(itm) in selected_ids:
+                            chosen_id = id(itm)
+                            break
+                    except Exception:
+                        pass
+                if chosen_id is None:
+                    try:
+                        # fallback: arbitrary one
+                        chosen_id = next(iter(selected_ids))
+                    except Exception:
+                        chosen_id = None
+                selected_ids = {chosen_id} if chosen_id is not None else set()
             # if there are previously saved last_selected_ids, prefer them
             selected_ids = set(self._last_selected_ids) if self._last_selected_ids else set()
             # if none, collect from items' selected() property
@@ -311,6 +317,18 @@ class YTreeCurses(YSelectionWidget):
                 for n in all_nodes:
                     if id(n) in selected_ids and n not in sel_items:
                         sel_items.append(n)
+                # Ensure single-selection list contains only one item
+                if not self._multi and len(sel_items) > 1:
+                    # Prefer the visible one if present
+                    visible_ids = {id(itm) for itm, _d in self._visible_items}
+                    chosen = None
+                    for it in sel_items:
+                        if id(it) in visible_ids:
+                            chosen = it
+                            break
+                    if chosen is None:
+                        chosen = sel_items[0]
+                    sel_items = [chosen]
             # apply selected flags to items consistently
             try:
                 # clear all first
