@@ -64,7 +64,9 @@ def test_Alignment(backend_name=None):
         align = factory.createVCenter( hbox )
         factory.createPushButton( align, "HVCenter" )
 
-        factory.createPushButton( vbox, "OK" )
+        b = factory.createPushButton( vbox, "OK" )
+        b.setStretchable(yui.YUIDimension.YD_HORIZ, True )
+        b.setStretchable(yui.YUIDimension.YD_VERT, True )
         dialog.open()
         event = dialog.waitForEvent()
         dialog.destroy()

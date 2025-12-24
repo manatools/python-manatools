@@ -31,9 +31,13 @@ def test_selectionbox(backend_name=None):
 ###############
         ui.application().setApplicationTitle("Test Frame")
         dialog = factory.createPopupDialog()
+#        dialog.setEnabled(False)
         mainVbox = factory.createVBox( dialog )
+#        mainVbox.setEnabled(False)
         hbox = factory.createHBox( mainVbox )
+#        hbox.setEnabled(False)
         frame = factory.createFrame( hbox , "Pasta Menu")
+#        frame.setEnabled(False)
         selBox = factory.createSelectionBox( frame, "Choose your pasta" )
 
         selBox.addItem( "Spaghetti Carbonara" )
@@ -43,8 +47,11 @@ def test_selectionbox(backend_name=None):
         selBox.addItem( "Ravioli" )
         selBox.addItem( "Trofie al pesto" ) # Ligurian specialty
 
-        frame1 = factory.createCheckBoxFrame( hbox , "SelectionBox Options")
+        frame1 = factory.createCheckBoxFrame( hbox , "SelectionBox Options", True)
+#        frame1 = factory.createFrame( hbox , "SelectionBox Options")
+#        frame1.setEnabled(False)
         vbox = factory.createVBox( frame1 )
+#        vbox.setEnabled(False)
         align = factory.createTop(vbox)
         notifyCheckBox = factory.createCheckBox( align, "Notify on change", selBox.notify() )
         notifyCheckBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
@@ -55,9 +62,11 @@ def test_selectionbox(backend_name=None):
         disableSelectionBox.setStretchable( yui.YUIDimension.YD_HORIZ, True )
         disableValue = factory.createCheckBox( vbox, "disable value button", False )
         disableValue.setStretchable( yui.YUIDimension.YD_HORIZ, True )
+#        disableValue.setEnabled(False)
 
         hbox = factory.createHBox( mainVbox )
         valueButton = factory.createPushButton( hbox, "Value" ) 
+#        valueButton.setEnabled(False)
         disableValue.setValue(not valueButton.isEnabled())
         label = factory.createLabel(hbox, "SelectionBox") #factory.createOutputField( hbox, "<SelectionBox value unknown>" )
         label.setStretchable( yui.YUIDimension.YD_HORIZ, True )

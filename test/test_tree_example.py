@@ -187,6 +187,7 @@ def test_tree_example(backend_name=None):
                 update_labels()
             elif w == swap_btn and reason == yui.YEventReason.Activated:
                 # perform swap: capture model items, clear, swap, and set new selections
+                root_logger.debug("YTree swapping tree items...")
                 try:
                     left_model = list(left_tree._items)
                     right_model = list(right_tree._items)
@@ -200,44 +201,49 @@ def test_tree_example(backend_name=None):
                     pass
                 # add swapped
                 try:
-                    for it in right_model:
-                        left_tree.addItem(it)
-                    for it in left_model:
-                        right_tree.addItem(it)
+                    right_tree.addItems(left_model)
+                    left_tree.addItems(right_model)
                 except Exception:
                     pass
-
-                # select different items than before: pick last top-level in each
-                try:
-                    if left_tree.hasItems():
-                        # pick last top-level's first sub-sub if available
-                        it = left_tree._items[-1]
-                        children = list(getattr(it, 'children', lambda: [])()) if callable(getattr(it, 'children', None)) else getattr(it, '_children', [])
-                        target = None
-                        if children:
-                            sc = children[0]
-                            sc2 = list(getattr(sc, 'children', lambda: [])()) if callable(getattr(sc, 'children', None)) else getattr(sc, '_children', [])
-                            if sc2:
-                                target = sc2[-1]
-                        if target is None:
-                            target = it
-                        left_tree.selectItem(target, True)
-                except Exception:
-                    pass
-                try:
-                    if right_tree.hasItems():
-                        it = right_tree._items[-1]
-                        children = list(getattr(it, 'children', lambda: [])()) if callable(getattr(it, 'children', None)) else getattr(it, '_children', [])
-                        target = None
-                        if children and len(children) >= 2:
-                            target = children[1]
-                        elif children:
-                            target = children[0]
-                        if target is None:
-                            target = it
-                        right_tree.selectItem(target, True)
-                except Exception:
-                    pass
+                #try:
+                #    for it in right_model:
+                #        left_tree.addItem(it)
+                #    for it in left_model:
+                #        right_tree.addItem(it)
+                #except Exception:
+                #    pass
+#
+                ## select different items than before: pick last top-level in each
+                #try:
+                #    if left_tree.hasItems():
+                #        # pick last top-level's first sub-sub if available
+                #        it = left_tree._items[-1]
+                #        children = list(getattr(it, 'children', lambda: [])()) if callable(getattr(it, 'children', None)) else getattr(it, '_children', [])
+                #        target = None
+                #        if children:
+                #            sc = children[0]
+                #            sc2 = list(getattr(sc, 'children', lambda: [])()) if callable(getattr(sc, 'children', None)) else getattr(sc, '_children', [])
+                #            if sc2:
+                #                target = sc2[-1]
+                #        if target is None:
+                #            target = it
+                #        left_tree.selectItem(target, True)
+                #except Exception:
+                #    pass
+                #try:
+                #    if right_tree.hasItems():
+                #        it = right_tree._items[-1]
+                #        children = list(getattr(it, 'children', lambda: [])()) if callable(getattr(it, 'children', None)) else getattr(it, '_children', [])
+                #        target = None
+                #        if children and len(children) >= 2:
+                #            target = children[1]
+                #        elif children:
+                #            target = children[0]
+                #        if target is None:
+                #            target = it
+                #        right_tree.selectItem(target, True)
+                #except Exception:
+                #    pass
 
                 update_labels()
             elif w == quit_btn and reason == yui.YEventReason.Activated:

@@ -67,10 +67,10 @@ def test_two_selectionbox(backend_name=None):
 
         items2 = [
             yui.YItem("Red"),
-            yui.YItem("Green"),
+            yui.YItem("Green", icon_name="protected"),
             yui.YItem("Blue")
         ]
-        items2[1].setSelected(True)
+        items2[2].setSelected(True)
 
         sel1.addItems(items1)
         sel2.addItems(items2)
@@ -83,7 +83,10 @@ def test_two_selectionbox(backend_name=None):
         # OK button to exit
         okButton = factory.createPushButton(label_box, "OK")
 
+        root_logger.debug("Opening dialog to set values into selection boxes")
+        dialog.open()
         # Initial display
+        sel2.selectItem(items2[2])  # trigger event to update label
         try:
             v1 = sel1.value() or (sel1.selectedItem().label() if sel1.selectedItem() else "<none>")
         except Exception:
@@ -93,6 +96,7 @@ def test_two_selectionbox(backend_name=None):
         except Exception:
             v2 = "<none>"
         infoLabel.setText(f"Box1: {v1} | Box2: {v2}")
+        root_logger.debug(f"set values: Box1: {v1} | Box2: {v2}")
 
         # Event loop
         while True:
