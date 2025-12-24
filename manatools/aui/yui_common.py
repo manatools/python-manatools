@@ -410,6 +410,9 @@ class YTreeItem(YItem):
         if parent:
             parent.addChild(self)
     
+    def parentItem(self):
+        return self._parent_item
+    
     def hasChildren(self):
         return len(self._children) > 0
     
