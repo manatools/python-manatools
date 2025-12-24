@@ -562,9 +562,9 @@ class YTreeCurses(YSelectionWidget):
             # Scroll indicators based on actual viewport rows
             try:
                 if self._scroll_offset > 0 and available_rows > 0:
-                    window.addch(y + label_rows, x + max(0, width - 1), '^')
+                    window.addch(y + label_rows, x + max(0, width - 1), '↑', curses.A_REVERSE)
                 if (self._scroll_offset + available_rows) < total and available_rows > 0:
-                    window.addch(y + label_rows + min(available_rows - 1, total - 1), x + max(0, width - 1), 'v')
+                    window.addch(y + label_rows + min(available_rows - 1, total - 1), x + max(0, width - 1), '↓', curses.A_REVERSE)
             except curses.error:
                 pass
         except Exception:
