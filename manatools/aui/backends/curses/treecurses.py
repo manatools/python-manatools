@@ -143,6 +143,30 @@ class YTreeCurses(YSelectionWidget):
             except Exception:
                 pass
 
+    def deleteAllItems(self):
+        """Clear model and all internal state for this tree."""
+        try:
+            try:
+                super().deleteAllItems()
+            except Exception:
+                self._items = []
+        except Exception:
+            pass
+        # Reset selection and visibility state
+        try:
+            self._selected_items = []
+            self._last_selected_ids = set()
+            self._visible_items = []
+            self._hover_index = 0
+            self._scroll_offset = 0
+        except Exception:
+            pass
+        try:
+            # No items to show; nothing else to rebuild but ensure state consistent
+            self._flatten_visible()
+        except Exception:
+            pass
+
     def _collect_all_descendants(self, item):
         out = []
         stack = []
@@ -182,9 +206,67 @@ class YTreeCurses(YSelectionWidget):
         _visit(roots, 0)
 
     def rebuildTree(self):
-        """Recompute visible items and restore selection from item.selected() or last_selected_ids."""
+        """Recompute visible items and restore selection from item.selected() or last_selected_ids.
+
+        Ensures ancestors of selected items are opened so selections are visible.
+        """
         # preserve items selection if any
         try:
+            # collect all nodes and desired selected ids (from last ids or model flags)
+            def _all_nodes(nodes):
+                out = []
+                for n in nodes:
+                    out.append(n)
+                    try:
+                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                    except Exception:
+                        chs = getattr(n, "_children", []) or []
+                    if chs:
+                        out.extend(_all_nodes(chs))
+                return out
+            roots = list(getattr(self, "_items", []) or [])
+            all_nodes = _all_nodes(roots)
+
+            selected_ids = set(self._last_selected_ids) if self._last_selected_ids else set()
+            if not selected_ids:
+                for n in all_nodes:
+                    try:
+                        sel = False
+                        if hasattr(n, "selected") and callable(getattr(n, "selected")):
+                            sel = n.selected()
+                        else:
+                            sel = bool(getattr(n, "_selected", False))
+                        if sel:
+                            selected_ids.add(id(n))
+                    except Exception:
+                        pass
+
+            # open ancestors for any selected node so it becomes visible
+            if selected_ids:
+                for n in list(all_nodes):
+                    try:
+                        if id(n) in selected_ids:
+                            parent = None
+                            try:
+                                parent = n.parentItem() if callable(getattr(n, 'parentItem', None)) else getattr(n, '_parent_item', None)
+                            except Exception:
+                                parent = getattr(n, '_parent_item', None)
+                            while parent:
+                                try:
+                                    try:
+                                        parent.setOpen(True)
+                                    except Exception:
+                                        setattr(parent, '_is_open', True)
+                                except Exception:
+                                    pass
+                                try:
+                                    parent = parent.parentItem() if callable(getattr(parent, 'parentItem', None)) else getattr(parent, '_parent_item', None)
+                                except Exception:
+                                    break
+                    except Exception:
+                        pass
+
+            # now recompute visible list based on possibly opened parents
             self._flatten_visible()
             # if there are previously saved last_selected_ids, prefer them
             selected_ids = set(self._last_selected_ids) if self._last_selected_ids else set()
@@ -224,27 +306,11 @@ class YTreeCurses(YSelectionWidget):
                         sel_items.append(itm)
                 except Exception:
                     pass
-            # also include non-visible selected nodes (descendants) if recursive selection used
+            # also include non-visible selected nodes (descendants) when tracking logic
             if selected_ids:
-                try:
-                    # scan full tree
-                    def _all_nodes(nodes):
-                        out = []
-                        for n in nodes:
-                            out.append(n)
-                            try:
-                                chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
-                            except Exception:
-                                chs = getattr(n, "_children", []) or []
-                            if chs:
-                                out.extend(_all_nodes(chs))
-                        return out
-                    all_nodes = _all_nodes(list(getattr(self, "_items", []) or []))
-                    for n in all_nodes:
-                        if id(n) in selected_ids and n not in sel_items:
-                            sel_items.append(n)
-                except Exception:
-                    pass
+                for n in all_nodes:
+                    if id(n) in selected_ids and n not in sel_items:
+                        sel_items.append(n)
             # apply selected flags to items consistently
             try:
                 # clear all first
@@ -587,6 +653,23 @@ class YTreeCurses(YSelectionWidget):
                                     except Exception:
                                         pass
                                 self._selected_items.append(d)
+                # open parents so programmatically selected items are visible
+                try:
+                    parent = item.parentItem() if callable(getattr(item, 'parentItem', None)) else getattr(item, '_parent_item', None)
+                except Exception:
+                    parent = getattr(item, '_parent_item', None)
+                while parent:
+                    try:
+                        try:
+                            parent.setOpen(True)
+                        except Exception:
+                            setattr(parent, '_is_open', True)
+                    except Exception:
+                        pass
+                    try:
+                        parent = parent.parentItem() if callable(getattr(parent, 'parentItem', None)) else getattr(parent, '_parent_item', None)
+                    except Exception:
+                        break
             else:
                 # deselect
                 if item in self._selected_items:
@@ -620,5 +703,10 @@ class YTreeCurses(YSelectionWidget):
                 self._last_selected_ids = set(id(i) for i in self._selected_items)
             except Exception:
                 self._last_selected_ids = set()
+            # after programmatic selection, rebuild visible list to reflect opened parents
+            try:
+                self.rebuildTree()
+            except Exception:
+                pass
         except Exception:
             pass
