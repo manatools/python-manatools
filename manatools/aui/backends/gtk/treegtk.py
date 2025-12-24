@@ -494,9 +494,7 @@ class YTreeGtk(YSelectionWidget):
                     pass
 
             # restore selection without emitting selection-changed while syncing UI to model
-            # Desired selection source:
-            # 1) If _last_selected_ids set (e.g., after expand/collapse), honor it.
-            # 2) Otherwise, collect all nodes in the tree with selected()==True.
+            # Desired selection source: collect all nodes in the tree with selected()==True.
             self._suppress_selection_handler = True
             try:
                 try:
@@ -518,18 +516,17 @@ class YTreeGtk(YSelectionWidget):
                     return out
                 all_nodes = _collect_all_nodes(roots)
 
-                desired_ids = set(self._last_selected_ids or [])
-                if not desired_ids:
-                    for n in all_nodes:
-                        try:
-                            if callable(getattr(n, 'selected', None)):
-                                if n.selected():
-                                    desired_ids.add(id(n))
-                            else:
-                                if bool(getattr(n, '_selected', False)):
-                                    desired_ids.add(id(n))
-                        except Exception:
-                            pass
+                desired_ids = set()
+                for n in all_nodes:
+                    try:
+                        if callable(getattr(n, 'selected', None)):
+                            if n.selected():
+                                desired_ids.add(id(n))
+                        else:
+                            if bool(getattr(n, '_selected', False)):
+                                desired_ids.add(id(n))
+                    except Exception:
+                        pass
 
                 if desired_ids:
                     # apply to visible rows
@@ -1030,6 +1027,7 @@ class YTreeGtk(YSelectionWidget):
 
     def deleteAllItems(self):
         """Clear model and view rows for this tree."""
+        self._suppress_selection_handler = True
         try:
             super().deleteAllItems()
         except Exception:
@@ -1040,6 +1038,10 @@ class YTreeGtk(YSelectionWidget):
             self._row_to_item.clear()
             self._item_to_row.clear()
             self._visible_items = []
+            try:
+                self._last_selected_ids = set()
+            except Exception:
+                pass
         except Exception:
             pass
         try:
@@ -1059,3 +1061,4 @@ class YTreeGtk(YSelectionWidget):
                     pass
         except Exception:
             pass
+        self._suppress_selection_handler = False
