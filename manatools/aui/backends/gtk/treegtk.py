@@ -374,8 +374,10 @@ class YTreeGtk(YSelectionWidget):
 
     def rebuildTree(self):
         """Flatten visible items according to _is_open and populate the ListBox."""
+        _suppress_selection_handler = True
         if self._backend_widget is None or self._listbox is None:
-            self._create_backend_widget()
+            #self._create_backend_widget()
+            return
         try:
             # clear listbox rows robustly: repeatedly remove first child until none remain
             try:
@@ -517,6 +519,7 @@ class YTreeGtk(YSelectionWidget):
             self._last_selected_ids = set(id(i) for i in self._selected_items)
         except Exception:
             pass
+        _suppress_selection_handler = False
 
     def _row_is_selected(self, r):
         """Robust helper to detect whether a ListBoxRow is selected."""
@@ -612,6 +615,8 @@ class YTreeGtk(YSelectionWidget):
         """
         Handler for row selection in multi-selection mode: for de-selection.
         """
+        if self._suppress_selection_handler:
+            return
         self._logger.debug("_on_row_selected_for_multi called")
         sel_rows = listbox.get_selected_rows()
         it = self._row_to_item.get(row, None)
@@ -952,81 +957,27 @@ class YTreeGtk(YSelectionWidget):
     def selectItem(self, item, selected=True):
         """Select/deselect a logical YTreeItem and reflect changes in the Gtk.ListBox."""
         try:
-            try:
-                item.setSelected(bool(selected))
-            except Exception:
-                pass
-
-            # if no listbox, update model only
-            if getattr(self, '_listbox', None) is None:
-                if selected:
-                    if not self._multi:
-                        self._selected_items = [item]
-                    else:
-                        if item not in self._selected_items:
-                            self._selected_items.append(item)
+            if selected:
+                if not self._multi:
+                    if len(self._selected_items) > 0:
+                        self._selected_items[0].setSelected(False)
+                    self._selected_items = [item]
                 else:
-                    try:
-                        if item in self._selected_items:
-                            self._selected_items.remove(item)
-                    except Exception:
-                        pass
-                return
-
-            # ensure mapping exists
-            row = self._item_to_row.get(item, None)
-            if row is None:
+                    if item not in self._selected_items:
+                        self._selected_items.append(item)
+            else:
                 try:
-                    self.rebuildTree()
-                    row = self._item_to_row.get(item, None)
+                    if item in self._selected_items:
+                        self._selected_items.remove(item)
                 except Exception:
-                    row = None
-            if row is None:
+                    pass
+
+            item.setSelected(bool(selected))
+
+            if getattr(self, '_listbox', None) is None:
                 return
-
-            # apply selection to row; handle single-selection by clearing others
-            try:
-                if not self._multi and selected:
-                    try:
-                        self._listbox.unselect_all()
-                    except Exception:
-                        pass
-                if selected:
-                    try:
-                        self._listbox.select_row(row)
-                    except Exception:
-                        try:
-                            setattr(row, '_selected_flag', True)
-                        except Exception:
-                            pass
-                else:
-                    try:
-                        self._listbox.unselect_row(row)
-                    except Exception:
-                        try:
-                            setattr(row, '_selected_flag', False)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-
-            # update logical selected list
-            try:
-                new_sel = []
-                for r in list(self._rows or []):
-                    try:
-                        if self._row_is_selected(r):
-                            it = self._row_to_item.get(r)
-                            if it is not None:
-                                new_sel.append(it)
-                    except Exception:
-                        pass
-                if not self._multi and len(new_sel) > 1:
-                    new_sel = [new_sel[-1]]
-                self._selected_items = new_sel
-                self._last_selected_ids = set(id(i) for i in self._selected_items)
-            except Exception:
-                pass
+            # ensure mapping exists
+            self.rebuildTree()
         except Exception:
             pass
 
