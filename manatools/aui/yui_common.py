@@ -400,10 +400,10 @@ class YItem:
         self._data = new_data
 
 class YTreeItem(YItem):
-    def __init__(self, label: str, parent: Optional["YTreeItem"] = None, is_open: bool = False, icon_name: str = ""):
+    def __init__(self, label: str, parent: Optional["YTreeItem"] = None, selected: Optional[bool] = False, is_open: bool = False, icon_name: str = ""):
         ''' YTreeItem represents an item in a tree structure.
             It can have child items and can be expanded or collapsed.'''
-        super().__init__(label, False, icon_name)
+        super().__init__(label, selected, icon_name)
         self._children = []
         self._is_open = is_open
         self._parent_item = parent
