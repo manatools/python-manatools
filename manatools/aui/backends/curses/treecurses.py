@@ -132,6 +132,7 @@ class YTreeCurses(YSelectionWidget):
 
     def deleteAllItems(self):
         """Clear model and all internal state for this tree."""
+        self._suppress_selection_handler = True
         try:
             try:
                 super().deleteAllItems()
@@ -153,6 +154,7 @@ class YTreeCurses(YSelectionWidget):
             self._flatten_visible()
         except Exception:
             pass
+        self._suppress_selection_handler = False
 
     def _collect_all_descendants(self, item):
         out = []
@@ -171,6 +173,29 @@ class YTreeCurses(YSelectionWidget):
             except Exception:
                 pass
         return out
+
+    def _clear_all_selected(self):
+        """Clear the selected flag recursively across the entire tree."""
+        try:
+            roots = list(getattr(self, "_items", []) or [])
+        except Exception:
+            roots = []
+        def _clear(nodes):
+            for n in nodes:
+                try:
+                    n.setSelected(False)
+                except Exception:
+                    try:
+                        setattr(n, "_selected", False)
+                    except Exception:
+                        pass
+                try:
+                    chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                except Exception:
+                    chs = getattr(n, "_children", []) or []
+                if chs:
+                    _clear(chs)
+        _clear(roots)
 
     def _flatten_visible(self):
         """Produce self._visible_items = [(item, depth), ...] following _is_open flags."""
@@ -198,6 +223,7 @@ class YTreeCurses(YSelectionWidget):
         Ensures ancestors of selected items are opened so selections are visible.
         """
         # preserve items selection if any
+        self._suppress_selection_handler = True
         try:
             # collect all nodes and desired selected ids (from last ids or model flags)
             def _all_nodes(nodes):
@@ -274,36 +300,34 @@ class YTreeCurses(YSelectionWidget):
                     except Exception:
                         chosen_id = None
                 selected_ids = {chosen_id} if chosen_id is not None else set()
-            # if there are previously saved last_selected_ids, prefer them
-            selected_ids = set(self._last_selected_ids) if self._last_selected_ids else set()
-            # if none, collect from items' selected() property
-            if not selected_ids:
-                try:
-                    def _collect_selected(nodes):
-                        out = []
-                        for n in nodes:
-                            try:
-                                sel = False
-                                if hasattr(n, "selected") and callable(getattr(n, "selected")):
-                                    sel = n.selected()
-                                else:
-                                    sel = bool(getattr(n, "_selected", False))
-                                if sel:
-                                    out.append(n)
-                            except Exception:
-                                pass
-                            try:
-                                chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
-                            except Exception:
-                                chs = getattr(n, "_children", []) or []
-                            if chs:
-                                out.extend(_collect_selected(chs))
-                        return out
-                    pre_selected = _collect_selected(list(getattr(self, "_items", []) or []))
-                    for p in pre_selected:
-                        selected_ids.add(id(p))
-                except Exception:
-                    pass
+            # collect from items' selected() property only (YTreeItem wins)
+            selected_ids = set()
+            try:
+                def _collect_selected(nodes):
+                    out = []
+                    for n in nodes:
+                        try:
+                            sel = False
+                            if hasattr(n, "selected") and callable(getattr(n, "selected")):
+                                sel = n.selected()
+                            else:
+                                sel = bool(getattr(n, "_selected", False))
+                            if sel:
+                                out.append(n)
+                        except Exception:
+                            pass
+                        try:
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                        except Exception:
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            out.extend(_collect_selected(chs))
+                    return out
+                pre_selected = _collect_selected(list(getattr(self, "_items", []) or []))
+                for p in pre_selected:
+                    selected_ids.add(id(p))
+            except Exception:
+                pass
             # build logical selected list and last_selected_ids
             sel_items = []
             for itm, _d in self._visible_items:
@@ -360,6 +384,7 @@ class YTreeCurses(YSelectionWidget):
             self._ensure_hover_visible()
         except Exception:
             pass
+        self._suppress_selection_handler = False
 
     def _ensure_hover_visible(self, height=None):
         """Adjust scroll offset so hover visible in given height area (if None use last draw height)."""
@@ -458,16 +483,9 @@ class YTreeCurses(YSelectionWidget):
                             except Exception:
                                 pass
             else:
-                # single selection: clear all others and set this one
+                # single selection: clear all flags recursively and set this one
                 try:
-                    for it in list(getattr(self, "_items", []) or []):
-                        try:
-                            it.setSelected(False)
-                        except Exception:
-                            try:
-                                setattr(it, "_selected", False)
-                            except Exception:
-                                pass
+                    self._clear_all_selected()
                 except Exception:
                     pass
                 self._selected_items = [item]
@@ -633,16 +651,12 @@ class YTreeCurses(YSelectionWidget):
         try:
             if selected:
                 if not self._multi:
-                    # clear others
+                    # clear others recursively and select only this one
                     try:
-                        for it in list(getattr(self, "_items", []) or []):
-                            try:
-                                it.setSelected(False)
-                            except Exception:
-                                try:
-                                    setattr(it, "_selected", False)
-                                except Exception:
-                                    pass
+                        self._clear_all_selected()
+                    except Exception:
+                        pass
+                    try:
                         item.setSelected(True)
                     except Exception:
                         try:
