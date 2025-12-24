@@ -493,30 +493,77 @@ class YTreeGtk(YSelectionWidget):
                 except Exception:
                     pass
 
-            # restore previous selection (visible rows only)
-            # If caller provided _last_selected_ids (e.g. during toggle), honor that.
-            # Otherwise, honor any items that already have their model-selected flag set.
+            # restore selection without emitting selection-changed while syncing UI to model
+            # Desired selection source:
+            # 1) If _last_selected_ids set (e.g., after expand/collapse), honor it.
+            # 2) Otherwise, collect all nodes in the tree with selected()==True.
             self._suppress_selection_handler = True
             try:
-                self._listbox.unselect_all()
-            except Exception:
-                pass
-            
-            self._selected_items = []
-            for it in list(getattr(self, "_items", []) or []):
                 try:
-                    if it.selected():
-                        row = self._row_to_item.get(it, None)
-                        if row is not None:
-                           self._listbox.select_row(row)
-                        else:
-                           self._logger.debug("rebuildTree: item <%s> not visible yet checking parent", str(it))
-                        self._selected_items.append(it)
+                    self._listbox.unselect_all()
                 except Exception:
                     pass
 
-            self._suppress_selection_handler = False
-            self._last_selected_ids = set(id(i) for i in self._selected_items)
+                # collect all nodes in the current model
+                def _collect_all_nodes(nodes):
+                    out = []
+                    for n in nodes:
+                        out.append(n)
+                        try:
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                        except Exception:
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            out.extend(_collect_all_nodes(chs))
+                    return out
+                all_nodes = _collect_all_nodes(roots)
+
+                desired_ids = set(self._last_selected_ids or [])
+                if not desired_ids:
+                    for n in all_nodes:
+                        try:
+                            if callable(getattr(n, 'selected', None)):
+                                if n.selected():
+                                    desired_ids.add(id(n))
+                            else:
+                                if bool(getattr(n, '_selected', False)):
+                                    desired_ids.add(id(n))
+                        except Exception:
+                            pass
+
+                if desired_ids:
+                    # apply to visible rows
+                    try:
+                        self._apply_desired_ids_to_rows(desired_ids)
+                    except Exception:
+                        # fallback per-row loop
+                        try:
+                            for row, item in list(self._row_to_item.items()):
+                                if id(item) in desired_ids:
+                                    try:
+                                        self._listbox.select_row(row)
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+
+                # mirror selection flags back to items and build logical list
+                self._selected_items = []
+                for n in all_nodes:
+                    try:
+                        sel = id(n) in desired_ids
+                        try:
+                            n.setSelected(sel)
+                        except Exception:
+                            pass
+                        if sel:
+                            self._selected_items.append(n)
+                    except Exception:
+                        pass
+
+                self._last_selected_ids = set(id(i) for i in self._selected_items)
+            finally:
+                self._suppress_selection_handler = False
         except Exception:
             pass
         _suppress_selection_handler = False
