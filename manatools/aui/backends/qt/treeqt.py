@@ -40,6 +40,8 @@ class YTreeQt(YSelectionWidget):
         self._suppress_selection_handler = False
         # remember last selected QTreeWidgetItem set to detect added/removed selections
         self._last_selected_qitems = set()
+        # track logical selected item ids to preserve across rebuilds/swaps
+        self._last_selected_ids = set()
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")            
 
     def widgetClass(self):
@@ -76,9 +78,40 @@ class YTreeQt(YSelectionWidget):
     def rebuildTree(self):
         """Rebuild the QTreeWidget from self._items (calls helper recursively)."""
         self._logger.debug("rebuildTree: rebuilding tree with %d items", len(self._items) if self._items else 0)
+        self._suppress_selection_handler = True
         if self._tree_widget is None:
             # ensure backend exists
             self._create_backend_widget()
+        # Ensure ancestors of any selected items are opened in the model so they will be expanded in the view
+        try:
+            self._logger.debug("rebuildTree: opening ancestors of selected items")
+
+            def _all_nodes(nodes):
+                out = []
+                for n in nodes:
+                    out.append(n)
+                    try:
+                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                    except Exception:
+                        chs = getattr(n, "_children", []) or []
+                    for c in chs:
+                        out.extend(_all_nodes([c]))
+                return out
+            roots = list(getattr(self, "_items", []) or [])
+            for it in _all_nodes(roots):
+                try:
+                    is_sel = it.selected()
+                    if is_sel:
+                        self._logger.debug("rebuildTree: opening ancestors of selected item %s", str(it.label()))
+                        # open parent chain
+                        parent = it.parentItem()                        
+                        while parent:
+                            parent.setOpen(True)                            
+                            parent = parent.parentItem()
+                except Exception:
+                    pass
+        except Exception:
+            pass
         # clear existing
         self._qitem_to_item.clear()
         self._item_to_qitem.clear()
@@ -167,32 +200,97 @@ class YTreeQt(YSelectionWidget):
                 _add_recursive(None, it)
             except Exception:
                 pass
-        # Apply selection state according to collected candidates and selection mode
+        # Apply selection state strictly from items' selected() flags (YTreeItem wins)
         try:
-            self._selected_items = []
-            if self._multi:
-                for qit, it in selected_candidates:
+            # build desired_ids by scanning items' selected flags only
+            roots = list(getattr(self, "_items", []) or [])
+            def _all_nodes(nodes):
+                out = []
+                for n in nodes:
+                    out.append(n)
                     try:
-                        qit.setSelected(True)
-                        if it not in self._selected_items:
-                            self._selected_items.append(it)
+                        chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                    except Exception:
+                        chs = getattr(n, "_children", []) or []
+                    if chs:
+                        out.extend(_all_nodes(chs))
+                return out
+            desired_ids = set()
+            for it in _all_nodes(roots):
+                try:
+                    sel = False
+                    if hasattr(it, 'selected') and callable(getattr(it, 'selected')):
+                        sel = it.selected()
+                    else:
+                        sel = bool(getattr(it, '_selected', False))
+                    if sel:
+                        desired_ids.add(id(it))
+                except Exception:
+                    pass
+
+            # map items to qitems for selection application
+            self._suppress_selection_handler = True
+            try:
+                self._tree_widget.clearSelection()
+            except Exception:
+                pass
+            self._selected_items = []
+            if desired_ids:
+                if self._multi:
+                    for it, qit in list(self._item_to_qitem.items()):
                         try:
-                            it.setSelected(True)
+                            if id(it) in desired_ids:
+                                qit.setSelected(True)
+                                self._selected_items.append(it)
+                                try:
+                                    it.setSelected(True)
+                                except Exception:
+                                    pass
+                                # expand parents in view
+                                try:
+                                    pq = qit.parent()
+                                    while pq is not None:
+                                        pq.setExpanded(True)
+                                        pq = pq.parent()
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
-                    except Exception:
-                        pass
-            else:
-                if selected_candidates:
-                    qit, it = selected_candidates[-1]
-                    try:
-                        qit.setSelected(True)
-                        it.setSelected(True)
-                        self._selected_items = [it]
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                else:
+                    # choose one: prefer a visible item present in the view
+                    chosen_it = None
+                    chosen_q = None
+                    for it, qit in list(self._item_to_qitem.items()):
+                        if id(it) in desired_ids:
+                            chosen_it = it
+                            chosen_q = qit
+                            break
+                    if chosen_q is None:
+                        # fallback to last candidate if any
+                        if selected_candidates:
+                            chosen_q, chosen_it = selected_candidates[-1]
+                    if chosen_q is not None and chosen_it is not None:
+                        try:
+                            chosen_q.setSelected(True)
+                            chosen_it.setSelected(True)
+                            self._selected_items = [chosen_it]
+                            # expand parents
+                            try:
+                                pq = chosen_q.parent()
+                                while pq is not None:
+                                    pq.setExpanded(True)
+                                    pq = pq.parent()
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+            # update preserved ids (not used to drive rebuild, kept for diagnostics)
+            try:
+                self._last_selected_ids = set(id(i) for i in self._selected_items)
+            except Exception:
+                self._last_selected_ids = set()
+        finally:
+            self._suppress_selection_handler = False
 
         # do not call expandAll(); expansion is controlled per-item by _is_open
 
@@ -258,12 +356,15 @@ class YTreeQt(YSelectionWidget):
         # Defensive guard: when we change selection programmatically we don't want to re-enter here.
         if self._suppress_selection_handler:
             return
+        
+        self._logger.debug("_on_selection_changed: handling selection change")
 
         try:
             if not self._tree_widget:
                 return
 
             sel_qitems = list(self._tree_widget.selectedItems())
+            self._logger.debug("_on_selection_changed: %d items selected", len(sel_qitems))
             current_set = set(sel_qitems)
 
             # If recursive selection is enabled and multi-selection is allowed,
@@ -323,15 +424,25 @@ class YTreeQt(YSelectionWidget):
                 if itm is not None:
                     new_selected.append(itm)
 
-            # Update internal selected items list (logical selection used by base class)
+            # Update selected flags across the entire tree (clear all, then set for new_selected)
             try:
-                # clear previous selection flags for all known items
-                for it in list(getattr(self, "_items", []) or []):
+                roots = list(getattr(self, "_items", []) or [])
+                def _all_nodes(nodes):
+                    out = []
+                    for n in nodes:
+                        out.append(n)
+                        try:
+                            chs = callable(getattr(n, "children", None)) and n.children() or getattr(n, "_children", []) or []
+                        except Exception:
+                            chs = getattr(n, "_children", []) or []
+                        if chs:
+                            out.extend(_all_nodes(chs))
+                    return out
+                for it in _all_nodes(roots):
                     try:
                         it.setSelected(False)
                     except Exception:
                         pass
-                # set selection flag for newly selected items
                 for it in new_selected:
                     try:
                         it.setSelected(True)
@@ -341,12 +452,18 @@ class YTreeQt(YSelectionWidget):
                 pass
 
             self._selected_items = new_selected
-
+            self._logger.debug("_on_selection_changed: %d new selected", len(new_selected))
             # remember last selected QTreeWidgetItem set for next invocation
             try:
                 self._last_selected_qitems = set(self._tree_widget.selectedItems())
             except Exception:
                 self._last_selected_qitems = set()
+
+            # preserve logical selected ids for diagnostics
+            try:
+                self._last_selected_ids = set(id(i) for i in self._selected_items)
+            except Exception:
+                self._last_selected_ids = set()
 
             # immediate mode: notify container/dialog
             try:
@@ -361,6 +478,7 @@ class YTreeQt(YSelectionWidget):
 
     # item activated (double click / Enter)
     def _on_item_activated(self, qitem, column):
+        self._logger.debug("_on_item_activated: item activated")
         try:
             # map to logical item
             item = self._qitem_to_item.get(qitem, None)
@@ -476,6 +594,30 @@ class YTreeQt(YSelectionWidget):
 
             # apply selection in view
             try:
+                # expand parents in model and view to ensure visibility
+                try:
+                    # open parent chain in view
+                    pq = qit.parent()
+                    while pq is not None:
+                        pq.setExpanded(True)
+                        pq = pq.parent()
+                except Exception:
+                    pass
+                try:
+                    # also setOpen on logical parents
+                    p = item.parentItem() if hasattr(item, 'parentItem') and callable(getattr(item, 'parentItem')) else getattr(item, '_parent_item', None)
+                    while p is not None:
+                        try:
+                            p.setOpen(True)
+                        except Exception:
+                            try:
+                                setattr(p, '_is_open', True)
+                            except Exception:
+                                pass
+                        p = p.parentItem() if hasattr(p, 'parentItem') and callable(getattr(p, 'parentItem')) else getattr(p, '_parent_item', None)
+                except Exception:
+                    pass
+                self._suppress_selection_handler = True
                 if not self._multi and selected:
                     try:
                         self._tree_widget.clearSelection()
@@ -490,7 +632,10 @@ class YTreeQt(YSelectionWidget):
                         tq.setSelected(bool(selected))
                     except Exception:
                         pass
+                # done applying; release suppression
+                self._suppress_selection_handler = False
             except Exception:
+                self._suppress_selection_handler = False
                 pass
 
             # update internal selected items list
@@ -504,6 +649,11 @@ class YTreeQt(YSelectionWidget):
                 if not self._multi and len(new_selected) > 1:
                     new_selected = [new_selected[-1]]
                 self._selected_items = new_selected
+                # preserve ids for future rebuilds/swaps
+                try:
+                    self._last_selected_ids = set(id(i) for i in self._selected_items)
+                except Exception:
+                    self._last_selected_ids = set()
             except Exception:
                 pass
         except Exception:
@@ -511,11 +661,16 @@ class YTreeQt(YSelectionWidget):
 
     def deleteAllItems(self):
         """Remove all items from model and QTreeWidget view."""
+        self._suppress_selection_handler = True
         try:
             super().deleteAllItems()
         except Exception:
             self._items = []
             self._selected_items = []
+            try:
+                self._last_selected_ids = set()
+            except Exception:
+                pass
         try:
             self._qitem_to_item.clear()
         except Exception:
@@ -532,3 +687,4 @@ class YTreeQt(YSelectionWidget):
                     pass
         except Exception:
             pass
+        self._suppress_selection_handler = False
