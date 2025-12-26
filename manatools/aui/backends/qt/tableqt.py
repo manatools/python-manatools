@@ -467,10 +467,6 @@ class YTableQt(YSelectionWidget):
         except Exception:
             pass
 
-    def addItems(self, items):
-        for it in items:
-            self.addItem(it)
-
     def selectItem(self, item, selected=True):
         # update model and view
         try:
