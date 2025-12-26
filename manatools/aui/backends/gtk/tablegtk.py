@@ -44,6 +44,7 @@ class YTableGtk(YSelectionWidget):
         self._suppress_selection_handler = False
         self._suppress_item_change = False
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        self._old_selected_items = []  # for change detection
         self._changed_item = None
 
     def widgetClass(self):
@@ -121,14 +122,17 @@ class YTableGtk(YSelectionWidget):
         # connect selection handlers
         if self._multi:
             try:
-                self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))
-            except Exception:
+                self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))                    
+                self._listbox.connect("row-activated", lambda lb, row: self._on_row_selected_for_multi(lb, row))
+            except Exception:                   
                 pass
         else:
             try:
                 self._listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
             except Exception:
                 pass
+
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
         # populate if items exist
         try:
@@ -328,6 +332,8 @@ class YTableGtk(YSelectionWidget):
             # clamp single-selection just in case
             if not self._multi and len(new_selected) > 1:
                 new_selected = [new_selected[-1]]
+            
+            self._old_selected_items = self._selected_items
             self._selected_items = new_selected
             # notify
             try:
@@ -339,6 +345,23 @@ class YTableGtk(YSelectionWidget):
                 pass
         except Exception:
             pass
+
+    def _on_row_selected_for_multi(self, listbox, row):
+        """
+        Handler for row selection in multi-selection mode: for de-selection.
+        """
+        if self._suppress_selection_handler:
+            return
+        self._logger.debug("_on_row_selected_for_multi called")
+        sel_rows = listbox.get_selected_rows()
+        it = self._row_to_item.get(row, None)
+        if it is not None:
+            if it in self._old_selected_items:
+                self._listbox.unselect_row( row )
+                it.setSelected( False )
+                self._on_selected_rows_changed(listbox)
+            else:
+                self._old_selected_items = self._selected_items
 
     # API
     def addItem(self, item):
