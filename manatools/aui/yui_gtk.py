@@ -250,6 +250,11 @@ class YWidgetFactoryGtk:
         """Create a Tree widget."""
         return YTreeGtk(parent, label, multiselection, recursiveselection)
 
+    def createTable(self, parent, header: YTableHeader, multiSelection: bool = False):
+        """Create a Table widget."""
+        from .backends.gtk.tablegtk import YTableGtk
+        return YTableGtk(parent, header, multiSelection)
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
