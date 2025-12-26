@@ -429,8 +429,175 @@ class YTreeItem(YItem):
     def isOpen(self):
         return self._is_open
     
-    def setOpen(self, is_open=True):
-        self._is_open = is_open
+
+class YTableHeader:
+    """Helper class for table column properties.
+
+    Tracks columns' header text, alignment and whether a column is a
+    checkbox column.
+    """
+    def __init__(self):
+        self._columns = []  # list of dicts: {'header': str, 'alignment': YAlignmentType, 'checkbox': bool}
+
+    def addColumn(self, header, checkBox : Optional[bool] = False, alignment=YAlignmentType.YAlignBegin):
+        """Add a column with header text and optional alignment (no checkbox)."""
+        self._columns.append({'header': str(header), 'alignment': alignment, 'checkbox': bool(checkBox)})
+
+    def columns(self):
+        return len(self._columns)
+
+    def hasColumn(self, column):
+        return 0 <= int(column) < len(self._columns)
+
+    def header(self, column):
+        try:
+            return self._columns[int(column)]['header']
+        except Exception:
+            return ""
+
+    def isCheckboxColumn(self, column):
+        try:
+            return bool(self._columns[int(column)]['checkbox'])
+        except Exception:
+            return False
+
+    def alignment(self, column):
+        try:
+            return self._columns[int(column)]['alignment']
+        except Exception:
+            return YAlignmentType.YAlignUnchanged
+
+
+class YTableCell:
+    """One cell (one column in one row) of a YTableItem.
+
+    Supports label, optional icon name, optional sort key and an optional
+    checkbox state. Cells can be created detached or with a parent/table
+    assigned via `reparent()`.
+    """
+    def __init__(self, label: str = "", icon_name: str = "", sort_key: str = "", parent: Optional["YTableItem"] = None, column: int = -1, checked: Optional[bool] = None):
+        self._label = label
+        self._icon_name = icon_name
+        self._sort_key = sort_key
+        self._parent = parent
+        self._column = column
+        # checked: None means not-a-checkbox column; True/False represent checkbox state
+        self._checked = checked
+
+    def label(self):
+        return self._label
+
+    def setLabel(self, new_label: str):
+        self._label = new_label
+
+    def iconName(self):
+        return self._icon_name
+
+    def setIconName(self, new_icon_name: str):
+        self._icon_name = new_icon_name
+
+    def hasIconName(self):
+        return bool(self._icon_name)
+
+    def sortKey(self):
+        return self._sort_key
+
+    def hasSortKey(self):
+        return bool(self._sort_key)
+
+    def parent(self):
+        return self._parent
+
+    def column(self):
+        return self._column
+
+    def itemIndex(self):
+        return self._parent.index() if self._parent is not None else -1
+
+    def reparent(self, parent: "YTableItem", column: int):
+        if self._parent is not None:
+            raise Exception("Cell already has a parent")
+        self._parent = parent
+        self._column = column
+
+    # checkbox API
+    def setChecked(self, val: bool = True):
+        self._checked = bool(val)
+
+    def checked(self):
+        return bool(self._checked) if self._checked is not None else False
+
+
+class YTableItem(YTreeItem):
+    """Table item (one row). Each item may contain multiple `YTableCell`.
+
+    Provides convenience constructors and cell management similar to
+    the C++ `YTableItem` while also supporting checkbox cells.
+    """
+    def __init__(self, label: str = "", parent: Optional["YTreeItem"] = None, is_open: bool = False, icon_name: str = ""):
+        super().__init__(label, parent, False, is_open, icon_name)
+        self._cells = []  # list of YTableCell
+
+    def addCell(self, cell_or_label, icon_name: str = "", sort_key: str = ""):
+        """Add a cell instance or create one from label/icon/sort_key.
+        If a boolean is passed as first arg, treat it as a checkbox cell value.
+        """
+        if isinstance(cell_or_label, YTableCell):
+            cell = cell_or_label
+        else:
+            # allow boolean-only constructor for checkbox column
+            if isinstance(cell_or_label, bool):
+                cell = YTableCell("", "", "", parent=self, column=len(self._cells), checked=cell_or_label)
+            else:
+                cell = YTableCell(str(cell_or_label), icon_name, sort_key, parent=self, column=len(self._cells))
+        # set parent/column and append
+        try:
+            cell.reparent(self, len(self._cells))
+        except Exception:
+            # already parented; update column if needed
+            cell._column = len(self._cells)
+            cell._parent = self
+        self._cells.append(cell)
+
+    def addCells(self, *labels):
+        for lbl in labels:
+            self.addCell(lbl)
+
+    def deleteCells(self):
+        self._cells = []
+
+    def cellsBegin(self):
+        return iter(self._cells)
+
+    def cellsEnd(self):
+        return iter([])
+
+    def cell(self, index: int):
+        try:
+            return self._cells[index]
+        except Exception:
+            return None
+
+    def cellCount(self):
+        return len(self._cells)
+
+    def hasCell(self, index: int):
+        return 0 <= index < len(self._cells)
+
+    def label(self, index: int = 0):
+        c = self.cell(index)
+        return c.label() if c is not None else ""
+
+    def iconName(self, index: int = 0):
+        c = self.cell(index)
+        return c.iconName() if c is not None else ""
+
+    def hasIconName(self, index: int = 0):
+        c = self.cell(index)
+        return c.hasIconName() if c is not None else False
+
+    def debugLabel(self):
+        return f"{super().debugLabel()}[cells={self.cellCount()}]"
 
 # Property system
 class YPropertyType(Enum):

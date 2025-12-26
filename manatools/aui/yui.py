@@ -128,7 +128,7 @@ from .yui_common import (
     YEventType, YEventReason, YCheckBoxState, YButtonRole,
     # Base classes
     YWidget, YSingleChildContainerWidget, YSelectionWidget,
-    YSimpleInputField, YItem, YTreeItem,
+    YSimpleInputField, YItem, YTreeItem, YTableHeader, YTableItem, YTableCell,
     # Events
     YEvent, YWidgetEvent, YKeyEvent, YMenuEvent, YCancelEvent,
     # Exceptions
@@ -143,7 +143,7 @@ __all__ = [
     'YUIDimension', 'YAlignmentType', 'YDialogType', 'YDialogColorMode',
     'YEventType', 'YEventReason', 'YCheckBoxState', 'YButtonRole',
     'YWidget', 'YSingleChildContainerWidget', 'YSelectionWidget', 
-    'YSimpleInputField', 'YItem', 'YTreeItem',
+    'YSimpleInputField', 'YItem', 'YTreeItem', 'YTableHeader', 'YTableItem', 'YTableCell',
     'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YCancelEvent',
     'YUIException', 'YUIWidgetNotFoundException', 'YUINoDialogException',
     'YProperty', 'YPropertyValue', 'YPropertySet', 'YShortcut',
