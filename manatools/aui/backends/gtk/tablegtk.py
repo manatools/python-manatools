@@ -122,6 +122,15 @@ class YTableGtk(YSelectionWidget):
             except Exception:
                 pass
 
+        # respect initial enabled state
+        try:
+            if hasattr(self._backend_widget, "set_sensitive"):
+                self._backend_widget.set_sensitive(bool(getattr(self, "_enabled", True)))
+            if hasattr(self._listbox, "set_sensitive"):
+                self._listbox.set_sensitive(bool(getattr(self, "_enabled", True)))
+        except Exception:
+            pass
+
         # connect selection handlers
         if self._multi:
             try:
@@ -452,3 +461,16 @@ class YTableGtk(YSelectionWidget):
 
     def changedItem(self):
         return getattr(self, "_changed_item", None)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the GTK table at runtime."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None and hasattr(self._backend_widget, "set_sensitive"):
+                self._backend_widget.set_sensitive(bool(enabled))
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_listbox", None) is not None and hasattr(self._listbox, "set_sensitive"):
+                self._listbox.set_sensitive(bool(enabled))
+        except Exception:
+            pass

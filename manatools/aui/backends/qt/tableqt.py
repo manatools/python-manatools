@@ -77,6 +77,11 @@ class YTableQt(YSelectionWidget):
         #tbl.itemChanged.connect(self._on_item_changed)
         self._table = tbl
         self._backend_widget = tbl
+        # respect initial enabled state
+        try:
+            self._table.setEnabled(bool(getattr(self, "_enabled", True)))
+        except Exception:
+            pass
         # populate if items already present
         try:
             self.rebuildTable()
@@ -560,3 +565,11 @@ class YTableQt(YSelectionWidget):
 
     def changedItem(self):
         return self._changed_item
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the Qt table at runtime."""
+        try:
+            if getattr(self, "_table", None) is not None:
+                self._table.setEnabled(bool(enabled))
+        except Exception:
+            pass

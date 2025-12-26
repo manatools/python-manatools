@@ -106,6 +106,11 @@ class YTableCurses(YSelectionWidget):
         self._scroll_offset = 0
         self._current_visible_rows = None
         self._logger.debug("_create_backend_widget: items=%d selected=%d", len(self._items) if self._items else 0, len(self._selected_items))
+        # respect initial enabled state
+        try:
+            self._set_backend_enabled(self.isEnabled())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         try:
