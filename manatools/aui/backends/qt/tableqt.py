@@ -13,21 +13,58 @@ import logging
 from ...yui_common import *
 
 
+class YTableWidgetItem(QtWidgets.QTableWidgetItem):
+    """QTableWidgetItem subclass that prefers a stored sort key (UserRole)
+    when comparing for sorting. Falls back to the default behaviour.
+    """
+    def __lt__(self, other):
+        try:
+            my_sort = self.data(QtCore.Qt.UserRole)
+            other_sort = other.data(QtCore.Qt.UserRole)
+            if my_sort is not None and other_sort is not None:
+                return str(my_sort) < str(other_sort)
+        except Exception:
+            pass
+        return super(YTableWidgetItem, self).__lt__(other)
+
+
 class YTableQt(YSelectionWidget):
-    def __init__(self, parent=None, header=None, multiSelection=False):
+    def __init__(self, parent, header: YTableHeader, multiSelection=False):
         super().__init__(parent)
         self._header = header
         self._multi = bool(multiSelection)
-        self._immediate = self.notify()
+        # force single-selection if any checkbox cells present
+        if self._header is not None:
+            try:
+                for c_idx in range(self._header.columns()):
+                    if self._header.isCheckboxColumn(c_idx):
+                        self._multi = False
+                        break
+            except Exception:
+                pass
+        else:
+            raise ValueError("YTableQt requires a YTableHeader")
+
         self._table = None
         self._row_to_item = {}
         self._item_to_row = {}
         self._suppress_selection_handler = False
         self._suppress_item_change = False
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        self._changed_item = None
 
     def widgetClass(self):
         return "YTable"
+
+    def _header_is_checkbox(self, col):
+        try:
+            if getattr(self, '_header', None) is None:
+                return False
+            if hasattr(self._header, 'isCheckboxColumn'):
+                return bool(self._header.isCheckboxColumn(col))
+            return False
+        except Exception:
+            return False
 
     def _create_backend_widget(self):
         tbl = QtWidgets.QTableWidget()
@@ -69,9 +106,25 @@ class YTableQt(YSelectionWidget):
         if self._table is None:
             self._create_backend_widget()
         # determine columns and checkbox usage
-        cols, any_checkbox = self._detect_columns_and_checkboxes()
+        cols = 0
+        any_checkbox = False
+        if getattr(self, '_header', None) is not None and hasattr(self._header, 'columns'):
+            try:
+                cols = int(self._header.columns())
+            except Exception:
+                cols = 0
+            # any_checkbox if header declares any checkbox column
+            try:
+                for c_idx in range(cols):
+                    if self._header_is_checkbox(c_idx):
+                        any_checkbox = True
+                        break
+            except Exception:
+                any_checkbox = False
         if cols <= 0:
-            cols = 1
+            cols, any_checkbox = self._detect_columns_and_checkboxes()
+            if cols <= 0:
+                cols = 1
         # enforce single-selection if checkbox columns used
         if any_checkbox:
             self._multi = False
@@ -81,37 +134,118 @@ class YTableQt(YSelectionWidget):
         except Exception:
             pass
 
+        # set column headers if available
+        try:
+            headers = []
+            for c in range(cols):
+                if getattr(self, '_header', None) is not None and hasattr(self._header, 'hasColumn') and self._header.hasColumn(c):
+                    headers.append(self._header.header(c))
+                else:
+                    headers.append("")
+            try:
+                self._table.setColumnCount(cols)
+                self._table.setHorizontalHeaderLabels(headers)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
         # clear existing
         self._row_to_item.clear()
         self._item_to_row.clear()
-        self._table.clear()
+        # clear contents only to preserve header labels
+        self._table.clearContents()
         self._table.setRowCount(0)
-        self._table.setColumnCount(cols)
+        # ensure column count already set above
 
-        # build rows
-        for row_idx, it in enumerate(list(getattr(self, '_items', []) or [])):
-            try:
-                self._table.insertRow(row_idx)
-                self._row_to_item[row_idx] = it
-                self._item_to_row[it] = row_idx
-                # populate cells
-                for col in range(cols):
-                    cell = it.cell(col) if hasattr(it, 'cell') else None
-                    if cell is None:
-                        qit = QtWidgets.QTableWidgetItem("")
-                    else:
-                        text = cell.label()
-                        qit = QtWidgets.QTableWidgetItem(text)
-                        if getattr(cell, '_checked', None) is not None:
-                            # checkbox column
-                            qit.setFlags(qit.flags() | QtCore.Qt.ItemIsUserCheckable)
-                            qit.setCheckState(QtCore.Qt.Checked if cell.checked() else QtCore.Qt.Unchecked)
-                    try:
-                        self._table.setItem(row_idx, col, qit)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+        # build rows (suppress item change notifications while programmatically populating)
+        try:
+            self._suppress_item_change = True
+            for row_idx, it in enumerate(list(getattr(self, '_items', []) or [])):
+                try:
+                    self._table.insertRow(row_idx)
+                    self._row_to_item[row_idx] = it
+                    self._item_to_row[it] = row_idx
+                    # populate cells: only up to 'cols' columns defined by header/detection
+                    for col in range(cols):
+                        cell = None
+                        try:
+                            cell = it.cell(col) if hasattr(it, 'cell') else None
+                        except Exception:
+                            cell = None
+
+                        text = ""
+                        sort_key = None
+                        if cell is not None:
+                            try:
+                                text = cell.label()
+                            except Exception:
+                                text = ""
+                            try:
+                                if hasattr(cell, 'hasSortKey') and cell.hasSortKey():
+                                    sort_key = cell.sortKey()
+                            except Exception:
+                                sort_key = None
+
+                        # create item that supports sortKey via UserRole
+                        qit = YTableWidgetItem(text)
+                        if sort_key is not None:
+                            try:
+                                qit.setData(QtCore.Qt.UserRole, sort_key)
+                            except Exception:
+                                pass
+
+                        # determine if this column is a checkbox column according to header
+                        is_checkbox_col = False
+                        try:
+                            if getattr(self, '_header', None) is not None:
+                                is_checkbox_col = self._header_is_checkbox(col)
+                            else:
+                                # fallback: treat as checkbox if cell explicitly has _checked
+                                is_checkbox_col = (getattr(cell, '_checked', None) is not None)
+                        except Exception:
+                            is_checkbox_col = (getattr(cell, '_checked', None) is not None)
+
+                        # apply checkbox flags only if header says so
+                        try:
+                            flags = qit.flags() | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled
+                            if is_checkbox_col:
+                                flags |= QtCore.Qt.ItemIsUserCheckable
+                                qit.setFlags(flags)
+                                checked_state = QtCore.Qt.Unchecked
+                                try:
+                                    if cell is not None and getattr(cell, '_checked', None) is not None and cell.checked():
+                                        checked_state = QtCore.Qt.Checked
+                                except Exception:
+                                    checked_state = QtCore.Qt.Unchecked
+                                qit.setCheckState(checked_state)
+                            else:
+                                qit.setFlags(flags)
+                        except Exception:
+                            pass
+
+                        # alignment according to header
+                        try:
+                            if getattr(self, '_header', None) is not None and hasattr(self._header, 'alignment') and self._header.hasColumn(col):
+                                align = self._header.alignment(col)
+                                if align == YAlignmentType.YAlignCenter:
+                                    qit.setTextAlignment(QtCore.Qt.AlignCenter)
+                                elif align == YAlignmentType.YAlignEnd:
+                                    qit.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                                else:
+                                    qit.setTextAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                        except Exception:
+                            pass
+
+                        try:
+                            self._table.setItem(row_idx, col, qit)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+        finally:
+            self._suppress_item_change = False
 
         # apply selection from YTableItem.selected flags
         desired_rows = []
@@ -202,7 +336,7 @@ class YTableQt(YSelectionWidget):
 
             # notify immediate mode
             try:
-                if self._immediate and self.notify():
+                if self.notify():
                     dlg = self.findDialog()
                     if dlg is not None:
                         dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
@@ -216,10 +350,16 @@ class YTableQt(YSelectionWidget):
         if self._suppress_item_change:
             return
         try:
-            if not (qitem.flags() & QtCore.Qt.ItemIsUserCheckable):
+            # Only treat as checkbox change if header declares this column as checkbox
+            col = qitem.column()
+            is_checkbox_col = False
+            try:
+                is_checkbox_col = self._header_is_checkbox(col)
+            except Exception:
+                is_checkbox_col = bool(qitem.flags() & QtCore.Qt.ItemIsUserCheckable)
+            if not is_checkbox_col:
                 return
             row = qitem.row()
-            col = qitem.column()
             it = self._row_to_item.get(row, None)
             if it is None:
                 return
@@ -230,6 +370,7 @@ class YTableQt(YSelectionWidget):
             try:
                 checked = (qitem.checkState() == QtCore.Qt.Checked)
                 cell.setChecked(checked)
+                self._changed_item = it
             except Exception:
                 pass
             # when checkbox is used, assume this is a value change
@@ -336,6 +477,7 @@ class YTableQt(YSelectionWidget):
     def deleteAllItems(self):
         try:
             super().deleteAllItems()
+            self._changed_item = None
         except Exception:
             self._items = []
             self._selected_items = []
@@ -350,6 +492,10 @@ class YTableQt(YSelectionWidget):
         try:
             if getattr(self, '_table', None) is not None:
                 self._table.setRowCount(0)
-                self._table.clear()
+                # keep header labels intact
+                self._table.clearContents()
         except Exception:
             pass
+
+    def changedItem(self):
+        return self._changed_item
