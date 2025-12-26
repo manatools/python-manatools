@@ -13,17 +13,18 @@ Missing Widgets comparing libyui:
     [X] YMultiSelectionBox
     [X] YTree
     [X] YFrame
-    [ ] YTable
+    [X] YTable
     [X] YProgressBar
     [ ] YRichText
     [ ] YMultiLineEdit
     [ ] YIntField
-    [ ] YMenuButton, YMenuBar
-    [ ] YWizard
-    [-] ~~YPackageSelector~~
-    [ ] YSpacing, YAlignment
+    [ ] YMenuBar (YMenuButton?)
+    [ ] YSpacing
+    [X] YAlignment
     [ ] YReplacePoint
     [X] YRadioButton,
+    [ ] YWizard
+    [-] ~~YPackageSelector~~
     [-] ~~YRadioButtonGroup~~
 
 To check how to manage YEvents [X] and YItems [ ] (verify selection attirbute).
