@@ -9,6 +9,7 @@ rendered as checkboxes and the table forces single-selection mode in that
 case (to keep curses/simple-mode compatibility).
 """
 from PySide6 import QtWidgets, QtCore, QtGui
+from functools import partial
 import logging
 from ...yui_common import *
 
@@ -73,7 +74,7 @@ class YTableQt(YSelectionWidget):
         tbl.setSelectionMode(mode)
         tbl.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         tbl.itemSelectionChanged.connect(self._on_selection_changed)
-        tbl.itemChanged.connect(self._on_item_changed)
+        #tbl.itemChanged.connect(self._on_item_changed)
         self._table = tbl
         self._backend_widget = tbl
         # populate if items already present
@@ -206,19 +207,18 @@ class YTableQt(YSelectionWidget):
                         except Exception:
                             is_checkbox_col = (getattr(cell, '_checked', None) is not None)
 
-                        # apply checkbox flags only if header says so
+                        # apply flags and, for checkbox columns, prefer a centered checkbox widget
                         try:
                             flags = qit.flags() | QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled
                             if is_checkbox_col:
-                                flags |= QtCore.Qt.ItemIsUserCheckable
+                                # keep item non-user-checkable; we'll install a centered QCheckBox widget
                                 qit.setFlags(flags)
-                                checked_state = QtCore.Qt.Unchecked
-                                try:
-                                    if cell is not None and getattr(cell, '_checked', None) is not None and cell.checked():
-                                        checked_state = QtCore.Qt.Checked
-                                except Exception:
-                                    checked_state = QtCore.Qt.Unchecked
-                                qit.setCheckState(checked_state)
+                                # set sortable value if no explicit sort key
+                                if sort_key is None:
+                                    try:
+                                        qit.setData(QtCore.Qt.UserRole, 1 if (cell is not None and cell.checked()) else 0)
+                                    except Exception:
+                                        pass
                             else:
                                 qit.setFlags(flags)
                         except Exception:
@@ -239,6 +239,37 @@ class YTableQt(YSelectionWidget):
 
                         try:
                             self._table.setItem(row_idx, col, qit)
+                            # for checkbox columns, install a checkbox widget honoring header alignment and connect
+                            if is_checkbox_col:
+                                try:
+                                    chk = QtWidgets.QCheckBox()
+                                    try:
+                                        chk.setChecked(cell.checked() if cell is not None else False)
+                                    except Exception:
+                                        chk.setChecked(False)
+                                    chk.setFocusPolicy(QtCore.Qt.NoFocus)
+                                    container = QtWidgets.QWidget()
+                                    lay = QtWidgets.QHBoxLayout(container)
+                                    lay.setContentsMargins(0, 0, 0, 0)
+                                    # determine alignment from header
+                                    try:
+                                        align_type = self._header.alignment(col)
+                                    except Exception:
+                                        align_type = YAlignmentType.YAlignBegin
+                                    if align_type == YAlignmentType.YAlignCenter:
+                                        lay.addStretch(1)
+                                        lay.addWidget(chk, alignment=QtCore.Qt.AlignCenter)
+                                        lay.addStretch(1)
+                                    elif align_type == YAlignmentType.YAlignEnd:
+                                        lay.addStretch(1)
+                                        lay.addWidget(chk, alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                                    else:
+                                        lay.addWidget(chk, alignment=QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+                                        lay.addStretch(1)
+                                    self._table.setCellWidget(row_idx, col, container)
+                                    chk.toggled.connect(partial(self._on_checkbox_toggled, row_idx, col))
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
                 except Exception:
@@ -301,6 +332,7 @@ class YTableQt(YSelectionWidget):
     def _on_selection_changed(self):
         if self._suppress_selection_handler:
             return
+        self._logger.debug("_on_selection_changed") 
         try:
             sel_ranges = self._table.selectionModel().selectedRows()
             new_selected = []
@@ -349,6 +381,7 @@ class YTableQt(YSelectionWidget):
         # handle checkbox toggles
         if self._suppress_item_change:
             return
+        self._logger.debug("_on_item_changed: row=%d col=%d", qitem.row(), qitem.column())
         try:
             # Only treat as checkbox change if header declares this column as checkbox
             col = qitem.column()
@@ -374,6 +407,38 @@ class YTableQt(YSelectionWidget):
             except Exception:
                 pass
             # when checkbox is used, assume this is a value change
+            try:
+                dlg = self.findDialog()
+                if dlg is not None and self.notify():
+                    dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _on_checkbox_toggled(self, row, col, checked):
+        # update model and sort role when the embedded checkbox widget toggles
+        self._logger.debug("_on_checkbox_toggled: row=%d col=%d checked=%s", row, col, checked)
+        try:
+            it = self._row_to_item.get(row, None)
+            if it is None:
+                return
+            cell = it.cell(col)
+            if cell is None:
+                return
+            try:
+                cell.setChecked(bool(checked))
+                self._changed_item = it
+            except Exception:
+                pass
+            # keep sorting role consistent if no explicit sort key
+            try:
+                qit = self._table.item(row, col)
+                if qit is not None and (cell is not None) and not (hasattr(cell, 'hasSortKey') and cell.hasSortKey()):
+                    qit.setData(QtCore.Qt.UserRole, 1 if checked else 0)
+            except Exception:
+                pass
+            # notify value change
             try:
                 dlg = self.findDialog()
                 if dlg is not None and self.notify():
