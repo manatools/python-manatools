@@ -177,6 +177,14 @@ class YTableCurses(YSelectionWidget):
                 # fallback single empty header
                 headers = [" ".ljust(widths[0])]
             header_line = (" " * sep).join(headers)
+            # If multi-selection without checkbox columns, reserve left space for selection marker
+            use_selection_marker = False
+            try:
+                use_selection_marker = self._multi and (self._first_checkbox_col() is None)
+            except Exception:
+                use_selection_marker = False
+            if use_selection_marker:
+                header_line = "    " + header_line
             try:
                 window.addstr(line, x, header_line[:width], curses.A_BOLD)
             except curses.error:
@@ -228,6 +236,13 @@ class YTableCurses(YSelectionWidget):
                             txt = ""
                     cells.append(self._align_text(txt, widths[c], align))
                 row_text = (" " * sep).join(cells)
+                # selection marker for multi-selection without checkbox columns
+                if use_selection_marker:
+                    try:
+                        marker = "[x] " if (it in self._selected_items) else "[ ] "
+                    except Exception:
+                        marker = "[ ] "
+                    row_text = marker + row_text
                 attr = curses.A_NORMAL
                 if not self.isEnabled():
                     attr |= curses.A_DIM
@@ -276,26 +291,52 @@ class YTableCurses(YSelectionWidget):
         elif key == curses.KEY_END:
             self._hover_row = max(0, len(self._items) - 1)
             self._ensure_hover_visible()
-        elif key in (ord(' '),):  # toggle checkbox in the first checkbox column
+        elif key in (ord(' '),):  # toggle checkbox or selection if no checkbox columns
             col = self._first_checkbox_col()
-            if col is not None and 0 <= self._hover_row < len(self._items):
+            if 0 <= self._hover_row < len(self._items):
                 it = self._items[self._hover_row]
-                cell = None
-                try:
-                    cell = it.cell(col)
-                except Exception:
+                if col is not None:
+                    # Toggle checkbox value
                     cell = None
-                if cell is not None:
                     try:
-                        cell.setChecked(not bool(cell.checked()))
-                        self._changed_item = it
+                        cell = it.cell(col)
                     except Exception:
-                        pass
-                    # notify value changed
-                    if self.notify():
-                        dlg = self.findDialog()
-                        if dlg is not None:
-                            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+                        cell = None
+                    if cell is not None:
+                        try:
+                            cell.setChecked(not bool(cell.checked()))
+                            self._changed_item = it
+                        except Exception:
+                            pass
+                        # notify value changed
+                        if self.notify():
+                            dlg = self.findDialog()
+                            if dlg is not None:
+                                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+                else:
+                    # Use SPACE to toggle row selection in multi-selection mode
+                    if self._multi:
+                        was_selected = it in self._selected_items
+                        if was_selected:
+                            try:
+                                it.setSelected(False)
+                            except Exception:
+                                pass
+                            try:
+                                self._selected_items.remove(it)
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                it.setSelected(True)
+                            except Exception:
+                                pass
+                            self._selected_items.append(it)
+                        # notify selection change
+                        if self.notify():
+                            dlg = self.findDialog()
+                            if dlg is not None:
+                                dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
         elif key in (ord('\n'),):  # toggle row selection
             if 0 <= self._hover_row < len(self._items):
                 it = self._items[self._hover_row]
