@@ -573,6 +573,8 @@ class YTableItem(YTreeItem):
         return iter([])
 
     def cell(self, index: int):
+        if not self.hasCell(index):
+            return None
         try:
             return self._cells[index]
         except Exception:
@@ -585,8 +587,16 @@ class YTableItem(YTreeItem):
         return 0 <= index < len(self._cells)
 
     def label(self, index: int = 0):
+        if not self.hasCell(index):
+            return ""
         c = self.cell(index)
         return c.label() if c is not None else ""
+    
+    def checked(self, index: int = 0):
+        if not self.hasCell(index):
+            return False
+        c = self.cell(index)
+        return c.checked() if c is not None else False
 
     def iconName(self, index: int = 0):
         c = self.cell(index)
