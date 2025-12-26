@@ -98,10 +98,13 @@ class YTableGtk(YSelectionWidget):
         try:
             vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
             vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+            vbox.set_valign(Gtk.Align.FILL)
             listbox.set_hexpand(True)
             listbox.set_vexpand(True)
+            listbox.set_valign(Gtk.Align.FILL)
             sw.set_hexpand(True)
             sw.set_vexpand(True)
+            sw.set_valign(Gtk.Align.FILL)
         except Exception:
             pass
 
