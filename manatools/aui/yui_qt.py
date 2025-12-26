@@ -222,3 +222,7 @@ class YWidgetFactoryQt:
     def createRadioButton(self, parent, label:str = "", isChecked:bool = False):    
         """Create a Radio Button widget."""
         return YRadioButtonQt(parent, label, isChecked)
+    
+    def createTable(self, parent, header: YTableHeader, multiSelection: bool = False):
+        """Create a Table widget."""
+        return YTableQt(parent, header, multiSelection)   

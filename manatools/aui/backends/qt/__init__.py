@@ -13,6 +13,7 @@ from .selectionboxqt import YSelectionBoxQt
 from .checkboxframeqt import YCheckBoxFrameQt
 from .progressbarqt import YProgressBarQt
 from .radiobuttonqt import YRadioButtonQt
+from .tableqt import YTableQt
 
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "YCheckBoxFrameQt",
     "YProgressBarQt",
     "YRadioButtonQt",
+    "YTableQt",
     # ...
 ]
