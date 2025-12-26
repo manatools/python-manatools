@@ -213,3 +213,7 @@ class YWidgetFactoryCurses:
     def createRadioButton(self, parent, label="", isChecked=False):
         """Create a Radio Button widget."""
         return YRadioButtonCurses(parent, label, isChecked)
+
+    def createTable(self, parent, header: YTableHeader, multiSelection=False):
+        """Create a Table widget (curses backend)."""
+        return YTableCurses(parent, header, multiSelection)

@@ -13,6 +13,7 @@ from .selectionboxcurses import YSelectionBoxCurses
 from .checkboxframecurses import YCheckBoxFrameCurses
 from .progressbarcurses import YProgressBarCurses
 from .radiobuttoncurses import YRadioButtonCurses
+from .tablecurses import YTableCurses
 
 __all__ = [
     "YDialogCurses",
@@ -30,5 +31,6 @@ __all__ = [
     "YCheckBoxFrameCurses",
     "YProgressBarCurses",
     "YRadioButtonCurses",
+    "YTableCurses",
     # ...
 ]
