@@ -6,30 +6,63 @@ As this is a non-profit project, we rely on developers who are contributing in t
 
 Next is the starting todo list.
 
-Missing Widgets comparing libyui:
+Missing Widgets comparing libyui original factory:
 
     [X] YComboBox
-    [X] YSelectionBox
-    [X] YMultiSelectionBox
+    [X] YSelectionBox    
+    [X] YPushButton
+    [X] YLabel
+    [X] YInputField
+    [X] YCheckBox
     [X] YTree
     [X] YFrame
     [X] YTable
     [X] YProgressBar
-    [ ] YRichText
+    [X] YRichText
     [ ] YMultiLineEdit
     [ ] YIntField
-    [ ] YMenuBar (YMenuButton?)
-    [ ] YSpacing
-    [X] YAlignment
+    [ ] YMenuBar
+    [ ] YMenuButton
+    [ ] YSpacing (detailed variants: createHStretch/createVStretch/createHSpacing/createVSpacing/createSpacing)
+    [X] YAlignment helpers (createLeft/createRight/createTop/createBottom/createHCenter/createVCenter/createHVCenter)
     [ ] YReplacePoint
-    [X] YRadioButton,
+    [X] YRadioButton
     [ ] YWizard
-    [-] ~~YPackageSelector~~
-    [-] ~~YRadioButtonGroup~~
+    [ ] YBusyIndicator
+    [ ] YImage
+    [ ] YLogView
+    [ ] YItemSelector
+    [ ] YEmpty    
+    [ ] YSquash / createSquash
 
-To check how to manage YEvents [X] and YItems [ ] (verify selection attirbute).
+Skipped widgets:
+    [-] YMultiSelectionBox (implemented as YSelectionBox + multiselection enabled)
+    [-] YPackageSelector (not ported)
+    [-] YRadioButtonGroup (not ported)
+
+Optional/special widgets (from `YOptionalWidgetFactory`):
+
+    [ ] YWizard
+    [ ] YDumbTab
+    [ ] YSlider
+    [ ] YDateField
+    [ ] YTimeField
+    [ ] YBarGraph
+    [ ] YPatternSelector (createPatternSelector)
+    [ ] YSimplePatchSelector (createSimplePatchSelector)
+    [ ] YMultiProgressMeter
+    [ ] YPartitionSplitter
+    [ ] YDownloadProgress
+    [ ] YDummySpecialWidget
+    [ ] YTimezoneSelector
+    [ ] YGraph
+    [ ] Context menu support / hasContextMenu
+
+To check how to manage YEvents [X] and YItems [X] (verify selection attirbute).
 
 Nice to have: improvements outside YUI API
     [ ] window title
     [ ] window icons
     [ ] selected YItem(s) in event
+    [ ] Improving YEvents management (adding info on widget event containing data
+        such as item selection/s, checked item, rich text url, etc.)
