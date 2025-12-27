@@ -9,6 +9,7 @@ Curses backend RichText widget.
 '''
 import curses
 import re
+from html.parser import HTMLParser
 import logging
 from ...yui_common import *
 
@@ -38,6 +39,9 @@ class YRichTextCurses(YWidget):
         self._heading_lines = set()
         self._color_link = None
         self._color_link_armed = None
+        self._parsed_lines = None
+        self._named_color_pairs = {}
+        self._next_color_pid = 20
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
@@ -136,104 +140,163 @@ class YRichTextCurses(YWidget):
         return lines
 
     def _parse_anchors(self, s: str):
-        """Parse <a href> anchors into line/column positions and targets.
-        Returns a list of anchors with screen-relative positions based on current text conversion.
-        """
+        # New parser-based implementation
         anchors = []
         try:
-            # Build a text version while tracking anchors
-            text = s
-            # Normalize breaks the same way as in _strip_tags
-            text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"</p\s*>", "\n\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"<p\s*>", "", text, flags=re.IGNORECASE)
-            text = re.sub(r"<ul\s*>", "\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"</ul\s*>", "\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"<ol\s*>", "\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"</ol\s*>", "\n", text, flags=re.IGNORECASE)
-            text = re.sub(r"<li\s*>", "• ", text, flags=re.IGNORECASE)
-            text = re.sub(r"</li\s*>", "\n", text, flags=re.IGNORECASE)
-            # Find anchors and replace with inner text while recording positions
-            pos = 0
-            lines = []
-            current_line = ""
-            pattern = re.compile(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>|<a\s+[^>]*href='([^']+)'[^>]*>(.*?)</a>|<br\s*/?>|</p\s*>|<p\s*>|</?ul\s*>|</?ol\s*>|<li\s*>|</li\s*>|<h([1-6])\s*>(.*?)</h\1>", re.IGNORECASE|re.DOTALL)
-            for m in pattern.finditer(text):
-                start, end = m.span()
-                # Add text before match
-                before = re.sub(r"<[^>]+>", "", text[pos:start])
-                for ch in before:
-                    if ch == '\n':
-                        lines.append(current_line)
-                        current_line = ""
-                    else:
-                        current_line += ch
-                if m.group(1) is not None:
-                    url = m.group(1)
-                    inner = m.group(2) or url
-                    sline = len(lines)
-                    scol = len(current_line)
-                    current_line += inner
-                    eline = len(lines)
-                    ecol = len(current_line)
-                    anchors.append({"sline": sline, "scol": scol, "eline": eline, "ecol": ecol, "target": url})
-                elif m.group(3) is not None:
-                    url = m.group(3)
-                    inner = m.group(4) or url
-                    sline = len(lines)
-                    scol = len(current_line)
-                    current_line += inner
-                    eline = len(lines)
-                    ecol = len(current_line)
-                    anchors.append({"sline": sline, "scol": scol, "eline": eline, "ecol": ecol, "target": url})
-                elif m.group(5) is not None:
-                    # heading level and inner text
-                    level = int(m.group(5))
-                    inner = m.group(6) or ""
-                    sline = len(lines)
-                    scol = len(current_line)
-                    current_line += inner
-                    eline = len(lines)
-                    ecol = len(current_line)
-                    # mark whole line as heading for simple bold style
-                    self._heading_lines.add(sline)
-                else:
-                    tagtxt = text[start:end]
-                    # handle structural tags resulting in newlines/bullets
-                    if re.match(r"<br\s*/?>", tagtxt, flags=re.IGNORECASE):
-                        lines.append(current_line)
-                        current_line = ""
-                    elif re.match(r"</p\s*>", tagtxt, flags=re.IGNORECASE):
-                        lines.append(current_line)
-                        lines.append("")
-                        current_line = ""
-                    elif re.match(r"<p\s*>", tagtxt, flags=re.IGNORECASE):
-                        pass
-                    elif re.match(r"<ul\s*>|<ol\s*>", tagtxt, flags=re.IGNORECASE):
-                        lines.append(current_line)
-                        current_line = ""
-                    elif re.match(r"</ul\s*>|</ol\s*>", tagtxt, flags=re.IGNORECASE):
-                        lines.append(current_line)
-                        current_line = ""
-                    elif re.match(r"<li\s*>", tagtxt, flags=re.IGNORECASE):
-                        current_line += "• "
-                    elif re.match(r"</li\s*>", tagtxt, flags=re.IGNORECASE):
-                        lines.append(current_line)
-                        current_line = ""
-                pos = end
-            # trailing text
-            trailing = re.sub(r"<[^>]+>", "", text[pos:])
-            for ch in trailing:
-                if ch == '\n':
-                    lines.append(current_line)
-                    current_line = ""
-                else:
-                    current_line += ch
-            lines.append(current_line)
-            # store parsed lines for rendering
+            class Parser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.lines = [[]]
+                    self.styles = []
+                    self.anchor = None
+                    self.buf = ""
+                    self.heading_lines = set()
+
+                def _flush(self):
+                    if not self.buf:
+                        return
+                    seg = {
+                        'text': self.buf,
+                        'bold': any(s == 'b' for s in self.styles),
+                        'italic': any(s == 'i' for s in self.styles),
+                        'underline': any(s == 'u' for s in self.styles) or (self.anchor is not None),
+                        'color': None,
+                        'anchor': self.anchor
+                    }
+                    for s in self.styles:
+                        if isinstance(s, dict) and 'color' in s:
+                            seg['color'] = s['color']
+                    self.lines[-1].append(seg)
+                    self.buf = ""
+
+                def handle_starttag(self, tag, attrs):
+                    at = dict(attrs)
+                    if tag == 'br':
+                        self._flush()
+                        self.lines.append([])
+                    elif tag == 'p':
+                        self._flush()
+                        self.lines.append([])
+                    elif tag in ('ul','ol'):
+                        self._flush()
+                        self.lines.append([])
+                    elif tag == 'li':
+                        self._flush()
+                        self.buf += '• '
+                    elif tag in ('h1','h2','h3','h4','h5','h6'):
+                        # flush previous text, then mark heading as bold
+                        self._flush()
+                        self.styles.append('b')
+                    elif tag == 'a':
+                        href = at.get('href') or at.get('HREF')
+                        self._flush()
+                        self.anchor = href
+                    elif tag == 'span':
+                        # flush previous text, then push color/style
+                        self._flush()
+                        color = at.get('foreground') or None
+                        if not color and 'style' in at:
+                            m = re.search(r'color:\s*([^;]+)', at.get('style'))
+                            if m:
+                                color = m.group(1)
+                        if color:
+                            self.styles.append({'color': color})
+                        else:
+                            self.styles.append('span')
+                    elif tag == 'b':
+                        self._flush()
+                        self.styles.append('b')
+                    elif tag in ('i','em'):
+                        self._flush()
+                        self.styles.append('i')
+                    elif tag == 'u':
+                        self._flush()
+                        self.styles.append('u')
+
+                def handle_endtag(self, tag):
+                    if tag == 'br':
+                        self._flush()
+                        self.lines.append([])
+                    elif tag == 'p':
+                        self._flush()
+                        self.lines.append([])
+                    elif tag in ('ul','ol'):
+                        self._flush()
+                        self.lines.append([])
+                    elif tag == 'li':
+                        self._flush()
+                        self.lines.append([])
+                    elif tag in ('h1','h2','h3','h4','h5','h6'):
+                        try:
+                            self.styles.remove('b')
+                        except ValueError:
+                            pass
+                        self._flush()
+                        # mark current line as heading
+                        try:
+                            self.heading_lines.add(len(self.lines)-1)
+                        except Exception:
+                            pass
+                        self.lines.append([])
+                    elif tag == 'a':
+                        self._flush()
+                        self.anchor = None
+                    elif tag == 'span':
+                        # pop last color dict if present
+                        for i in range(len(self.styles)-1, -1, -1):
+                            if isinstance(self.styles[i], dict) and 'color' in self.styles[i]:
+                                del self.styles[i]
+                                break
+                        else:
+                            if self.styles:
+                                self.styles.pop()
+                        self._flush()
+                    elif tag == 'b':
+                        try:
+                            self.styles.remove('b')
+                        except ValueError:
+                            pass
+                        self._flush()
+                    elif tag in ('i','em'):
+                        try:
+                            self.styles.remove('i')
+                        except ValueError:
+                            pass
+                        self._flush()
+                    elif tag == 'u':
+                        try:
+                            self.styles.remove('u')
+                        except ValueError:
+                            pass
+                        self._flush()
+
+                def handle_data(self, data):
+                    parts = data.split('\n')
+                    for idx, part in enumerate(parts):
+                        if idx > 0:
+                            self._flush()
+                            self.lines.append([])
+                        self.buf += part
+
+            p = Parser()
+            p.feed(s)
+            p._flush()
+            lines = p.lines
+            # collect anchors and heading lines from parser
+            anchors = []
+            self._heading_lines = set(p.heading_lines)
+            for ln_idx, segs in enumerate(lines):
+                col = 0
+                for seg_idx, seg in enumerate(segs):
+                    text = seg.get('text','')
+                    length = len(text)
+                    if seg.get('anchor'):
+                        anchors.append({'sline': ln_idx, 'scol': col, 'eline': ln_idx, 'ecol': col + length, 'target': seg.get('anchor'), 'seg_idx': seg_idx})
+                    col += length
             self._parsed_lines = lines
         except Exception:
             self._parsed_lines = None
+            anchors = []
         return anchors
 
     def _visible_row_count(self):
@@ -275,73 +338,118 @@ class YRichTextCurses(YWidget):
             self._last_width = width
 
             # draw content with horizontal scrolling
+            segmented = bool(lines and isinstance(lines[0], list))
             for i in range(visible):
                 idx = self._scroll_offset + i
                 if idx >= total_rows:
                     break
-                txt = lines[idx]
-                # horizontal slice
-                start_col = self._hscroll_offset
-                end_col = self._hscroll_offset + content_w
-                segment = txt[start_col:end_col]
                 attr_default = curses.A_NORMAL
                 if not self.isEnabled():
                     attr_default |= curses.A_DIM
                 # apply heading style when applicable
-                if (not self._plain) and (idx in self._heading_lines):
+                is_heading = (not self._plain) and (idx in getattr(self, '_heading_lines', set()))
+                if is_heading:
                     attr_default |= curses.A_BOLD
                 # highlight hover line only in plain mode or without anchors
                 if (self._plain or not self._anchors) and self._focused and idx == self._hover_line and self.isEnabled():
                     attr_default |= curses.A_REVERSE
-                # draw with anchor highlighting (underline)
+
+                start_col = self._hscroll_offset
+                end_col = self._hscroll_offset + content_w
+
                 try:
-                    # build segments around anchors
                     line_x = inner_x
-                    consumed = 0
-                    # anchors on this line
-                    alist = [a for a in self._anchors if a['sline'] == idx]
-                    if not alist:
-                        window.addstr(inner_y + i, inner_x, segment.ljust(content_w), attr_default)
+                    if not segmented:
+                        txt = lines[idx]
+                        segment = txt[start_col:end_col]
+                        if is_heading:
+                            # bold + red for headings
+                            a = attr_default
+                            red_pid = self._get_named_color_pair('red')
+                            if red_pid is not None:
+                                try:
+                                    a |= curses.color_pair(red_pid)
+                                except Exception:
+                                    pass
+                            window.addstr(inner_y + i, inner_x, segment.ljust(content_w), a)
+                        else:
+                            window.addstr(inner_y + i, inner_x, segment.ljust(content_w), attr_default)
                     else:
-                        # draw piecewise
-                        cursor = start_col
-                        for a in alist:
-                            a_start = a['scol']
-                            a_end = a['ecol']
-                            # draw text before anchor
-                            if a_start > cursor:
-                                pre = txt[cursor:min(a_start, end_col)]
-                                if pre:
-                                    window.addstr(inner_y + i, line_x, pre, attr_default)
-                                    line_x += len(pre)
-                                    cursor += len(pre)
-                            # draw anchor segment
-                            if a_end > cursor and cursor < end_col:
-                                anc_seg = txt[max(cursor, a_start):min(a_end, end_col)]
-                                if anc_seg:
-                                    attr_anchor = attr_default | curses.A_UNDERLINE
-                                    # colorize links
+                        segs = lines[idx]
+                        # iterate segments and draw visible portion
+                        char_cursor = 0
+                        for seg in segs:
+                            text = seg.get('text', '')
+                            if not text:
+                                continue
+                            seg_len = len(text)
+                            seg_start = char_cursor
+                            seg_end = char_cursor + seg_len
+                            # no overlap with visible window?
+                            if seg_end <= start_col:
+                                char_cursor += seg_len
+                                continue
+                            if seg_start >= end_col:
+                                break
+                            # compute visible slice within this segment
+                            vis_lo = max(start_col, seg_start) - seg_start
+                            vis_hi = min(end_col, seg_end) - seg_start
+                            piece = text[vis_lo:vis_hi]
+                            if not piece:
+                                char_cursor += seg_len
+                                continue
+                            # determine attributes for this piece
+                            a = attr_default
+                            if is_heading:
+                                # headings: bold + red
+                                red_pid = self._get_named_color_pair('red')
+                                if red_pid is not None:
+                                    try:
+                                        a |= curses.color_pair(red_pid)
+                                    except Exception:
+                                        pass
+                            else:
+                                # unify bold/italic/underline and anchors to bold gray
+                                if seg.get('bold') or seg.get('italic') or seg.get('underline') or seg.get('anchor'):
+                                    a |= curses.A_BOLD
+                                    gray_pid = self._get_named_color_pair('gray')
+                                    if gray_pid is not None:
+                                        try:
+                                            a |= curses.color_pair(gray_pid)
+                                        except Exception:
+                                            pass
+                                else:
+                                    # optional explicit color spans for normal text
                                     self._ensure_color_pairs()
-                                    if self._color_link is not None:
-                                        attr_anchor |= curses.color_pair(self._color_link)
-                                    # extra highlight if armed
-                                    if self._armed_index != -1 and self._anchors[self._armed_index] is a:
-                                        if self._color_link_armed is not None:
-                                            attr_anchor = (attr_anchor & ~curses.A_UNDERLINE) | curses.color_pair(self._color_link_armed) | curses.A_UNDERLINE | curses.A_BOLD
-                                        else:
-                                            attr_anchor |= curses.A_BOLD
-                                    window.addstr(inner_y + i, line_x, anc_seg, attr_anchor)
-                                    line_x += len(anc_seg)
-                                    cursor += len(anc_seg)
-                        # draw trailing text
-                        if cursor < end_col:
-                            tail = txt[cursor:end_col]
-                            if tail:
-                                window.addstr(inner_y + i, line_x, tail, attr_default)
+                                    color_id = None
+                                    if isinstance(seg.get('color'), int):
+                                        color_id = seg.get('color')
+                                    elif seg.get('color'):
+                                        color_id = self._get_named_color_pair(seg.get('color'))
+                                    if color_id is not None:
+                                        try:
+                                            a |= curses.color_pair(color_id)
+                                        except Exception:
+                                            pass
+                                # armed anchor: add reverse for visibility
+                                if seg.get('anchor') and self._armed_index != -1 and 0 <= self._armed_index < len(self._anchors):
+                                    a_active = self._anchors[self._armed_index]
+                                    if a_active and a_active['sline'] == idx and a_active['scol'] <= seg_start and a_active['ecol'] >= seg_end:
+                                        a |= curses.A_REVERSE
+
+                            try:
+                                window.addstr(inner_y + i, line_x, piece, a)
+                            except curses.error:
+                                pass
+                            line_x += len(piece)
+                            char_cursor += seg_len
                         # pad remainder
                         rem = content_w - (line_x - inner_x)
                         if rem > 0:
-                            window.addstr(inner_y + i, line_x, " " * rem, attr_default)
+                            try:
+                                window.addstr(inner_y + i, line_x, " " * rem, attr_default)
+                            except curses.error:
+                                pass
                 except curses.error:
                     pass
 
@@ -517,6 +625,12 @@ class YRichTextCurses(YWidget):
             if curses.has_colors():
                 try:
                     curses.start_color()
+                    # prefer default background where supported
+                    if hasattr(curses, 'use_default_colors'):
+                        try:
+                            curses.use_default_colors()
+                        except Exception:
+                            pass
                 except Exception:
                     pass
                 pid_link = 10
@@ -533,3 +647,50 @@ class YRichTextCurses(YWidget):
                     self._color_link_armed = None
         except Exception:
             pass
+
+    def _get_named_color_pair(self, name: str):
+        try:
+            if not name:
+                return None
+            if not curses.has_colors():
+                return None
+            # normalize name
+            nm = str(name).strip().lower()
+            # map common color names
+            cmap = {
+                'black': curses.COLOR_BLACK,
+                'red': curses.COLOR_RED,
+                'green': curses.COLOR_GREEN,
+                'yellow': curses.COLOR_YELLOW,
+                'blue': curses.COLOR_BLUE,
+                'magenta': curses.COLOR_MAGENTA,
+                'purple': curses.COLOR_MAGENTA,
+                'cyan': curses.COLOR_CYAN,
+                'white': curses.COLOR_WHITE,
+                'gray': curses.COLOR_WHITE,
+                'grey': curses.COLOR_WHITE,
+            }
+            fg = cmap.get(nm)
+            if fg is None:
+                return None
+            # reuse if exists
+            if nm in self._named_color_pairs:
+                return self._named_color_pairs[nm]
+            # init colors if needed
+            try:
+                curses.start_color()
+                if hasattr(curses, 'use_default_colors'):
+                    curses.use_default_colors()
+            except Exception:
+                pass
+            pid = self._next_color_pid
+            # advance, avoid collisions with link pairs
+            self._next_color_pid = pid + 1
+            try:
+                curses.init_pair(pid, fg, -1)
+                self._named_color_pairs[nm] = pid
+                return pid
+            except Exception:
+                return None
+        except Exception:
+            return None
