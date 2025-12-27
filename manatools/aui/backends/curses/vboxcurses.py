@@ -94,6 +94,14 @@ class YVBoxCurses(YWidget):
         for i, child in enumerate(self._children):
             # Use recursive min height for containers and frames
             child_min = max(1, _curses_recursive_min_height(child))
+            # If child can compute desired height for the current width, honor it
+            try:
+                if hasattr(child, "_desired_height_for_width"):
+                    dh = int(child._desired_height_for_width(width))
+                    if dh > child_min:
+                        child_min = dh
+            except Exception:
+                pass
             child_min_heights.append(child_min)
 
             is_stretch = bool(child.stretchable(YUIDimension.YD_VERT))
