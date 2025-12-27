@@ -69,18 +69,31 @@ def test_richtext_example(backend_name=None):
         "<h4>Heading 4</h4>"
         "<h5>Heading 5</h5>"
         "<h6>Heading 6</h6>"
+        "<br/>"
         "<h2>Welcome to <i>RichText</i></h2>"
+        "<br/>"
         "<p>This is a paragraph with <b>bold</b>, <i>italic</i>, and <u>underlined</u> text.</p>"
-        "<p>Click the <a href='https://example.com'>example.com</a> link to emit an activation event.</p>"
+        "<p>Click the <a href='https://example.com'>example.com</a> or <a href='HomePage'>go home</a> link to emit an activation event.</p>"
+        "<p style=\"color:blue;\">Colored text:</p>"
+        "<ul><li><span foreground=\"red\"><a href='red'>Red element</a></span></li>"
+        "<li><span foreground=\"green\"><a href='green'>Green element</a></span></li>"
+        "<li><span foreground=\"purple\"><a href='purple'>Purple element</a></span></li></ul>"
         "<p>Lists:</p>"
         "<ul><li>Alpha</li><li>Beta</li><li>Gamma</li></ul>"
     )
-    rich = factory.createRichText(vbox, html, False)
+    # Two RichText widgets side-by-side: left=rich HTML, right=plain text (10 lines)
+    h = factory.createHBox(vbox)
+    rich_left = factory.createRichText(h, html, False)
+    #rich_left.setAutoScrollDown(True)
+    
+    # Plain text with 10 lines on the right
+    plain_lines = "\n".join([f"Line {i+1}: This is a sample plain text line." for i in range(10)])
+    rich_right = factory.createRichText(h, plain_lines, True)
     try:
-        # Enable auto scroll to demonstrate API
-        rich.setAutoScrollDown(True)
+        rich_right.setValue(plain_lines)
     except Exception:
         pass
+    #rich_right.setEnabled(False)
 
     # Status label for last activated link
     status_label = factory.createLabel(vbox, "Last link: (none)")
