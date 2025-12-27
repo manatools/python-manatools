@@ -51,6 +51,12 @@ class YLabelCurses(YWidget):
     def setText(self, new_text):
         self._text = new_text
     
+    def setValue(self, newValue):
+        self.setText(newValue)
+
+    def setLabel(self, newLabel):
+        self.setText(newLabel)
+    
     def _create_backend_widget(self):
         try:
             self._backend_widget = self

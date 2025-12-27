@@ -43,6 +43,12 @@ class YLabelGtk(YWidget):
             except Exception:
                 pass
     
+    def setValue(self, newValue):
+        self.setText(newValue)
+
+    def setLabel(self, newLabel):
+        self.setText(newLabel)
+
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Label(label=self._text)
         try:

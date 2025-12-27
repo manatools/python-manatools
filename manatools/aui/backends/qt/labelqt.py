@@ -32,6 +32,12 @@ class YLabelQt(YWidget):
         if self._backend_widget:
             self._backend_widget.setText(new_text)
     
+    def setValue(self, newValue):
+        self.setText(newValue)
+
+    def setLabel(self, newLabel):
+        self.setText(newLabel)
+    
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QLabel(self._text)
         if self._is_heading:
