@@ -217,3 +217,7 @@ class YWidgetFactoryCurses:
     def createTable(self, parent, header: YTableHeader, multiSelection=False):
         """Create a Table widget (curses backend)."""
         return YTableCurses(parent, header, multiSelection)
+
+    def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
+        """Create a RichText widget (curses backend)."""
+        return YRichTextCurses(parent, text, plainTextMode)
