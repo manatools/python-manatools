@@ -399,6 +399,71 @@ class YItem:
     def setData(self, new_data):
         self._data = new_data
 
+class YMenuItem:
+    """Lightweight menu item model for backend-agnostic use.
+
+    Supports label, icon name, enabled state and hierarchical children
+    (submenus and items). Backends may attach platform-specific references
+    via `_backend_ref` for synchronization.
+    """
+    def __init__(self, label: str, icon_name: str = "", enabled: bool = True, is_menu: bool = False):
+        self._label = str(label)
+        self._icon_name = str(icon_name) if icon_name else ""
+        self._enabled = bool(enabled)
+        self._is_menu = bool(is_menu)
+        self._children = []  # list of YMenuItem
+        self._parent = None
+        self._backend_ref = None  # optional backend-specific handle
+
+    def label(self) -> str:
+        return self._label
+
+    def setLabel(self, new_label: str):
+        self._label = str(new_label)
+
+    def iconName(self) -> str:
+        return self._icon_name
+
+    def setIconName(self, new_icon_name: str):
+        self._icon_name = str(new_icon_name) if new_icon_name else ""
+
+    def enabled(self) -> bool:
+        return bool(self._enabled)
+
+    def setEnabled(self, on: bool = True):
+        self._enabled = bool(on)
+
+    def isMenu(self) -> bool:
+        return bool(self._is_menu)
+
+    def childrenBegin(self):
+        return iter(self._children)
+
+    def childrenEnd(self):
+        return iter([])
+
+    def hasChildren(self) -> bool:
+        return len(self._children) > 0
+
+    def addItem(self, label: str, icon_name: str = ""):
+        child = YMenuItem(label, icon_name, enabled=True, is_menu=False)
+        child._parent = self
+        self._children.append(child)
+        return child
+
+    def addMenu(self, label: str, icon_name: str = ""):
+        child = YMenuItem(label, icon_name, enabled=True, is_menu=True)
+        child._parent = self
+        self._children.append(child)
+        return child
+
+    def addSeparator(self):
+        # Represent separator as a disabled item with label "-"; backends can special-case it.
+        sep = YMenuItem("-", "", enabled=False, is_menu=False)
+        sep._parent = self
+        self._children.append(sep)
+        return sep
+
 class YTreeItem(YItem):
     def __init__(self, label: str, parent: Optional["YTreeItem"] = None, selected: Optional[bool] = False, is_open: bool = False, icon_name: str = ""):
         ''' YTreeItem represents an item in a tree structure.
