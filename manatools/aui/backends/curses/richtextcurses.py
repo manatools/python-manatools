@@ -35,6 +35,9 @@ class YRichTextCurses(YWidget):
         self._hover_line = 0
         self._anchors = []  # list of dicts: {sline, scol, eline, ecol, target}
         self._armed_index = -1
+        self._heading_lines = set()
+        self._color_link = None
+        self._color_link_armed = None
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
@@ -49,6 +52,13 @@ class YRichTextCurses(YWidget):
         try:
             self._backend_widget = self
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            # initial parse for rich mode
+            if not self._plain:
+                try:
+                    self._anchors = self._parse_anchors(self._text)
+                    self._anchors.sort(key=lambda a: (a['sline'], a['scol']))
+                except Exception:
+                    self._anchors = []
         except Exception as e:
             try:
                 self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
@@ -61,6 +71,7 @@ class YRichTextCurses(YWidget):
         if not self._plain:
             try:
                 self._anchors = self._parse_anchors(self._text)
+                self._anchors.sort(key=lambda a: (a['sline'], a['scol']))
             except Exception:
                 self._anchors = []
         # autoscroll: move hover to last line
@@ -110,9 +121,9 @@ class YRichTextCurses(YWidget):
             for n in range(1,7):
                 t = re.sub(fr"<h{n}\s*>", "", t, flags=re.IGNORECASE)
                 t = re.sub(fr"</h{n}\s*>", "\n", t, flags=re.IGNORECASE)
-            # anchors: keep inner text and preserve URL text if no inner
-            t = re.sub(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", r"\2 (\1)", t, flags=re.IGNORECASE|re.DOTALL)
-            t = re.sub(r"<a\s+[^>]*href='([^']+)'[^>]*>(.*?)</a>", r"\2 (\1)", t, flags=re.IGNORECASE|re.DOTALL)
+            # anchors: keep inner text only; URLs handled via anchor list
+            t = re.sub(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", r"\2", t, flags=re.IGNORECASE|re.DOTALL)
+            t = re.sub(r"<a\s+[^>]*href='([^']+)'[^>]*>(.*?)</a>", r"\2", t, flags=re.IGNORECASE|re.DOTALL)
             return re.sub(r"<[^>]+>", "", t)
         except Exception:
             return s
@@ -146,7 +157,8 @@ class YRichTextCurses(YWidget):
             pos = 0
             lines = []
             current_line = ""
-            for m in re.finditer(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>|<a\s+[^>]*href='([^']+)'[^>]*>(.*?)</a>|<br\s*/?>|</p\s*>|<p\s*>|</?ul\s*>|</?ol\s*>|<li\s*>|</li\s*>", text, flags=re.IGNORECASE|re.DOTALL):
+            pattern = re.compile(r"<a\s+[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>|<a\s+[^>]*href='([^']+)'[^>]*>(.*?)</a>|<br\s*/?>|</p\s*>|<p\s*>|</?ul\s*>|</?ol\s*>|<li\s*>|</li\s*>|<h([1-6])\s*>(.*?)</h\1>", re.IGNORECASE|re.DOTALL)
+            for m in pattern.finditer(text):
                 start, end = m.span()
                 # Add text before match
                 before = re.sub(r"<[^>]+>", "", text[pos:start])
@@ -174,6 +186,17 @@ class YRichTextCurses(YWidget):
                     eline = len(lines)
                     ecol = len(current_line)
                     anchors.append({"sline": sline, "scol": scol, "eline": eline, "ecol": ecol, "target": url})
+                elif m.group(5) is not None:
+                    # heading level and inner text
+                    level = int(m.group(5))
+                    inner = m.group(6) or ""
+                    sline = len(lines)
+                    scol = len(current_line)
+                    current_line += inner
+                    eline = len(lines)
+                    ecol = len(current_line)
+                    # mark whole line as heading for simple bold style
+                    self._heading_lines.add(sline)
                 else:
                     tagtxt = text[start:end]
                     # handle structural tags resulting in newlines/bullets
@@ -247,6 +270,9 @@ class YRichTextCurses(YWidget):
             lines = self._parsed_lines if (not self._plain and getattr(self, '_parsed_lines', None)) else self._lines()
             total_rows = len(lines)
             visible = min(total_rows, max(1, content_h))
+            # remember for visibility calculations
+            self._last_content_w = content_w
+            self._last_width = width
 
             # draw content with horizontal scrolling
             for i in range(visible):
@@ -261,8 +287,11 @@ class YRichTextCurses(YWidget):
                 attr_default = curses.A_NORMAL
                 if not self.isEnabled():
                     attr_default |= curses.A_DIM
-                # highlight hover line background
-                if self._focused and idx == self._hover_line and self.isEnabled():
+                # apply heading style when applicable
+                if (not self._plain) and (idx in self._heading_lines):
+                    attr_default |= curses.A_BOLD
+                # highlight hover line only in plain mode or without anchors
+                if (self._plain or not self._anchors) and self._focused and idx == self._hover_line and self.isEnabled():
                     attr_default |= curses.A_REVERSE
                 # draw with anchor highlighting (underline)
                 try:
@@ -291,9 +320,16 @@ class YRichTextCurses(YWidget):
                                 anc_seg = txt[max(cursor, a_start):min(a_end, end_col)]
                                 if anc_seg:
                                     attr_anchor = attr_default | curses.A_UNDERLINE
+                                    # colorize links
+                                    self._ensure_color_pairs()
+                                    if self._color_link is not None:
+                                        attr_anchor |= curses.color_pair(self._color_link)
                                     # extra highlight if armed
                                     if self._armed_index != -1 and self._anchors[self._armed_index] is a:
-                                        attr_anchor |= curses.A_BOLD
+                                        if self._color_link_armed is not None:
+                                            attr_anchor = (attr_anchor & ~curses.A_UNDERLINE) | curses.color_pair(self._color_link_armed) | curses.A_UNDERLINE | curses.A_BOLD
+                                        else:
+                                            attr_anchor |= curses.A_BOLD
                                     window.addstr(inner_y + i, line_x, anc_seg, attr_anchor)
                                     line_x += len(anc_seg)
                                     cursor += len(anc_seg)
@@ -317,8 +353,8 @@ class YRichTextCurses(YWidget):
                         window.addch(inner_y + r, inner_x + content_w, '|')
                     # draw slider position
                     pos = 0
-                    if total_rows > 0:
-                        pos = int((self._scroll_offset / max(1, total_rows)) * content_h)
+                    if total_rows > visible:
+                        pos = int((self._scroll_offset / max(1, total_rows - visible)) * (content_h - 1))
                     pos = max(0, min(content_h - 1, pos))
                     window.addch(inner_y + pos, inner_x + content_w, '#')
                 except curses.error:
@@ -333,7 +369,7 @@ class YRichTextCurses(YWidget):
                     # slider position relative to max line length
                     maxlen = max((len(l) for l in lines), default=0)
                     if maxlen > content_w:
-                        hpos = int((self._hscroll_offset / max(1, maxlen - content_w)) * content_w)
+                        hpos = int((self._hscroll_offset / max(1, maxlen - content_w)) * (content_w - 1))
                         hpos = max(0, min(content_w - 1, hpos))
                         window.addch(inner_y + content_h, inner_x + hpos, '=')
                 except curses.error:
@@ -345,33 +381,47 @@ class YRichTextCurses(YWidget):
         if not self._focused or not self.isEnabled():
             return False
         handled = True
-        lines = self._lines()
+        lines = self._parsed_lines if (not self._plain and getattr(self, '_parsed_lines', None)) else self._lines()
         if key == curses.KEY_UP:
-            if self._hover_line > 0:
-                self._hover_line -= 1
-                self._ensure_hover_visible()
-        elif key == curses.KEY_DOWN:
-            if self._hover_line < max(0, len(lines) - 1):
-                self._hover_line += 1
-                self._ensure_hover_visible()
-        elif key == curses.KEY_LEFT:
-            # horizontal scroll or move to previous anchor
-            if self._armed_index != -1:
+            if self._anchors:
                 if self._armed_index > 0:
                     self._armed_index -= 1
                     a = self._anchors[self._armed_index]
                     self._hover_line = a['sline']
-                    self._ensure_hover_visible()
-            else:
-                if self._hscroll_offset > 0:
-                    self._hscroll_offset = max(0, self._hscroll_offset - max(1, (self._visible_row_count() // 2)))
-        elif key == curses.KEY_RIGHT:
-            if self._armed_index != -1:
+                    self._ensure_anchor_visible(a)
+                else:
+                    if self._hover_line > 0:
+                        self._hover_line -= 1
+                        self._ensure_hover_visible()
+        elif key == curses.KEY_DOWN:
+            if self._anchors:
                 if self._armed_index + 1 < len(self._anchors):
                     self._armed_index += 1
                     a = self._anchors[self._armed_index]
                     self._hover_line = a['sline']
-                    self._ensure_hover_visible()
+                    self._ensure_anchor_visible(a)
+                else:
+                    if self._hover_line < max(0, len(lines) - 1):
+                        self._hover_line += 1
+                        self._ensure_hover_visible()
+        elif key == curses.KEY_LEFT:
+            # horizontal scroll or move to previous anchor
+            if self._anchors:
+                if self._armed_index > 0:
+                    self._armed_index -= 1
+                    a = self._anchors[self._armed_index]
+                    self._hover_line = a['sline']
+                    self._ensure_anchor_visible(a)
+            else:
+                if self._hscroll_offset > 0:
+                    self._hscroll_offset = max(0, self._hscroll_offset - max(1, (self._visible_row_count() // 2)))
+        elif key == curses.KEY_RIGHT:
+            if self._anchors:
+                if self._armed_index + 1 < len(self._anchors):
+                    self._armed_index += 1
+                    a = self._anchors[self._armed_index]
+                    self._hover_line = a['sline']
+                    self._ensure_anchor_visible(a)
             else:
                 maxlen = max((len(l) for l in lines), default=0)
                 if maxlen > self._hscroll_offset:
@@ -393,7 +443,7 @@ class YRichTextCurses(YWidget):
         elif key in (ord('\n'),):
             # Try to detect a URL in the current line and emit a menu event
             try:
-                if self._armed_index != -1 and 0 <= self._armed_index < len(self._anchors):
+                if self._anchors and self._armed_index != -1 and 0 <= self._armed_index < len(self._anchors):
                     url = self._anchors[self._armed_index]['target']
                     self._last_url = url
                     if self.notify():
@@ -440,3 +490,46 @@ class YRichTextCurses(YWidget):
             else:
                 self._armed_index = 0
                 self._hover_line = self._anchors[0]['sline']
+                self._ensure_anchor_visible(self._anchors[0])
+
+    def _ensure_anchor_visible(self, a):
+        try:
+            # vertical
+            self._hover_line = a['sline']
+            self._ensure_hover_visible()
+            # horizontal: use last known content width
+            visible_w = max(1, getattr(self, '_last_content_w', 0))
+            if visible_w <= 0:
+                visible_w = 40
+            start_col = self._hscroll_offset
+            end_col = start_col + visible_w
+            if a['scol'] < start_col:
+                self._hscroll_offset = max(0, a['scol'])
+            elif a['ecol'] > end_col:
+                self._hscroll_offset = max(0, a['ecol'] - visible_w)
+        except Exception:
+            pass
+
+    def _ensure_color_pairs(self):
+        try:
+            if self._color_link is not None and self._color_link_armed is not None:
+                return
+            if curses.has_colors():
+                try:
+                    curses.start_color()
+                except Exception:
+                    pass
+                pid_link = 10
+                pid_link_armed = 11
+                try:
+                    curses.init_pair(pid_link, curses.COLOR_BLUE, -1)
+                    self._color_link = pid_link
+                except Exception:
+                    self._color_link = None
+                try:
+                    curses.init_pair(pid_link_armed, curses.COLOR_CYAN, -1)
+                    self._color_link_armed = pid_link_armed
+                except Exception:
+                    self._color_link_armed = None
+        except Exception:
+            pass
