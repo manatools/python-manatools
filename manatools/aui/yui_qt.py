@@ -226,3 +226,7 @@ class YWidgetFactoryQt:
     def createTable(self, parent, header: YTableHeader, multiSelection: bool = False):
         """Create a Table widget."""
         return YTableQt(parent, header, multiSelection)   
+
+    def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
+        """Create a RichText widget (Qt backend)."""
+        return YRichTextQt(parent, text, plainTextMode)

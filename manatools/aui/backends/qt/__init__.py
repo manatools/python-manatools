@@ -14,6 +14,7 @@ from .checkboxframeqt import YCheckBoxFrameQt
 from .progressbarqt import YProgressBarQt
 from .radiobuttonqt import YRadioButtonQt
 from .tableqt import YTableQt
+from .richtextqt import YRichTextQt
 
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "YProgressBarQt",
     "YRadioButtonQt",
     "YTableQt",
+    "YRichTextQt",
     # ...
 ]
