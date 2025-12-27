@@ -259,6 +259,11 @@ class YWidgetFactoryGtk:
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
 
+    def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
+        """Create a RichText widget (GTK backend)."""
+        from .backends.gtk.richtextgtk import YRichTextGtk
+        return YRichTextGtk(parent, text, plainTextMode)
+
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)

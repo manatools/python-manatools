@@ -14,6 +14,7 @@ from .checkboxframegtk import YCheckBoxFrameGtk
 from .progressbargtk import YProgressBarGtk
 from .radiobuttongtk import YRadioButtonGtk
 from .tablegtk import YTableGtk
+from .richtextgtk import YRichTextGtk
 
 __all__ = [
     "YDialogGtk",
@@ -32,5 +33,6 @@ __all__ = [
     "YProgressBarGtk",
     "YRadioButtonGtk",
     "YTableGtk",
+    "YRichTextGtk",
     # ...
 ]
