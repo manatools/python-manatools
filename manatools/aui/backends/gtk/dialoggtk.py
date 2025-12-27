@@ -148,8 +148,35 @@ class YDialogGtk(YSingleChildContainerWidget):
         if timeout_millisec and timeout_millisec > 0:
             self._timeout_id = GLib.timeout_add(timeout_millisec, on_timeout)
 
-        # run nested loop
-        self._glib_loop.run()
+        # Handle Ctrl-C gracefully: add a GLib SIGINT source to quit the loop and post CancelEvent
+        self._sigint_source_id = None
+        try:
+            def _on_sigint(*_args):
+                try:
+                    self._post_event(YCancelEvent())
+                except Exception:
+                    pass
+                try:
+                    if self._glib_loop.is_running():
+                        self._glib_loop.quit()
+                except Exception:
+                    pass
+                return True
+            # GLib.unix_signal_add is available on Linux; use default priority
+            if hasattr(GLib, 'unix_signal_add'):
+                self._sigint_source_id = GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, 2, _on_sigint)  # 2 = SIGINT
+        except Exception:
+            self._sigint_source_id = None
+
+        # run nested loop; suppress KeyboardInterrupt raised by GI fallback on exit
+        try:
+            self._glib_loop.run()
+        except KeyboardInterrupt:
+            # Convert to a cancel event and continue cleanup
+            try:
+                self._event_result = YCancelEvent()
+            except Exception:
+                pass
 
         # cleanup
         if self._timeout_id:
@@ -158,6 +185,13 @@ class YDialogGtk(YSingleChildContainerWidget):
             except Exception:
                 pass
             self._timeout_id = None
+        # remove SIGINT source if installed
+        try:
+            if self._sigint_source_id:
+                GLib.source_remove(self._sigint_source_id)
+        except Exception:
+            pass
+        self._sigint_source_id = None
         self._glib_loop = None
         return self._event_result if self._event_result is not None else YEvent()
 

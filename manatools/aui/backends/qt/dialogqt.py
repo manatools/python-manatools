@@ -16,6 +16,8 @@ from .commonqt import _resolve_icon
 from ... import yui as yui_mod
 import os
 import logging
+import signal
+import fcntl
 
 class YDialogQt(YSingleChildContainerWidget):
     _open_dialogs = []
@@ -28,6 +30,12 @@ class YDialogQt(YSingleChildContainerWidget):
         self._qwidget = None
         self._event_result = None
         self._qt_event_loop = None
+        # SIGINT handling state
+        self._sigint_r = None
+        self._sigint_w = None
+        self._sigint_notifier = None
+        self._prev_wakeup_fd = None
+        self._prev_sigint_handler = None
         YDialogQt._open_dialogs.append(self)
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
@@ -224,11 +232,150 @@ class YDialogQt(YSingleChildContainerWidget):
             timer.timeout.connect(on_timeout)
             timer.start(timeout_millisec)
 
+        # Robust SIGINT (Ctrl-C) handling: use wakeup fd + QSocketNotifier to exit loop
+        self._setup_sigint_notifier(loop)
+
         # PySide6 / Qt6 uses exec()
         loop.exec()
 
         # cleanup
         if timer and timer.isActive():
             timer.stop()
+        # teardown SIGINT notifier and restore previous wakeup fd
+        self._teardown_sigint_notifier()
         self._qt_event_loop = None
         return self._event_result if self._event_result is not None else YEvent()
+
+    def _setup_sigint_notifier(self, loop):
+        """Install a wakeup fd and QSocketNotifier to gracefully quit on Ctrl-C."""
+        try:
+            # create non-blocking pipe
+            rfd, wfd = os.pipe()
+            for fd in (rfd, wfd):
+                try:
+                    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+                except Exception:
+                    pass
+            prev = None
+            try:
+                # store previous wakeup fd to restore later
+                prev = signal.set_wakeup_fd(wfd)
+            except Exception:
+                prev = None
+            self._sigint_r = rfd
+            self._sigint_w = wfd
+            self._prev_wakeup_fd = prev
+            # install a noop SIGINT handler to prevent KeyboardInterrupt
+            try:
+                self._prev_sigint_handler = signal.getsignal(signal.SIGINT)
+            except Exception:
+                self._prev_sigint_handler = None
+            try:
+                def _noop_sigint(_sig, _frm):
+                    # no-op; wakeup fd + notifier will handle termination
+                    pass
+                signal.signal(signal.SIGINT, _noop_sigint)
+            except Exception:
+                pass
+            # notifier to watch read end
+            notifier = QtCore.QSocketNotifier(self._sigint_r, QtCore.QSocketNotifier.Read)
+            def _on_readable():
+                try:
+                    # drain bytes written by signal module
+                    while True:
+                        try:
+                            os.read(self._sigint_r, 1024)
+                        except BlockingIOError:
+                            break
+                        except KeyboardInterrupt:
+                            # suppress default Ctrl-C exception; we'll quit gracefully
+                            break
+                        except Exception:
+                            break
+                except Exception:
+                    pass
+                # Post cancel event and quit the loop
+                try:
+                    self._post_event(YCancelEvent())
+                except Exception:
+                    pass
+                try:
+                    if loop is not None and loop.isRunning():
+                        loop.quit()
+                except Exception:
+                    pass
+            notifier.activated.connect(_on_readable)
+            self._sigint_notifier = notifier
+        except Exception:
+            # fall back: plain signal handler attempting to quit
+            def _on_sigint(_sig, _frm):
+                try:
+                    self._post_event(YCancelEvent())
+                except Exception:
+                    pass
+                try:
+                    if loop is not None and loop.isRunning():
+                        loop.quit()
+                except Exception:
+                    pass
+            try:
+                signal.signal(signal.SIGINT, _on_sigint)
+            except Exception:
+                pass
+
+    def _teardown_sigint_notifier(self):
+        """Remove SIGINT notifier and restore previous wakeup fd."""
+        try:
+            if self._sigint_notifier is not None:
+                try:
+                    self._sigint_notifier.setEnabled(False)
+                except Exception:
+                    pass
+                self._sigint_notifier = None
+        except Exception:
+            pass
+        try:
+            if self._sigint_r is not None:
+                try:
+                    os.close(self._sigint_r)
+                except Exception:
+                    pass
+                self._sigint_r = None
+            if self._sigint_w is not None:
+                try:
+                    os.close(self._sigint_w)
+                except Exception:
+                    pass
+                self._sigint_w = None
+        except Exception:
+            pass
+        try:
+            # restore previous wakeup fd
+            if self._prev_wakeup_fd is not None:
+                try:
+                    signal.set_wakeup_fd(self._prev_wakeup_fd)
+                except Exception:
+                    pass
+            else:
+                # reset to default (no wakeup fd)
+                try:
+                    signal.set_wakeup_fd(-1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # restore previous SIGINT handler
+        try:
+            if self._prev_sigint_handler is not None:
+                try:
+                    signal.signal(signal.SIGINT, self._prev_sigint_handler)
+                except Exception:
+                    pass
+            else:
+                try:
+                    signal.signal(signal.SIGINT, signal.default_int_handler)
+                except Exception:
+                    pass
+        except Exception:
+            pass
