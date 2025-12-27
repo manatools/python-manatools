@@ -6,6 +6,7 @@ Qt backend: YMenuBar implementation using QMenuBar.
 from PySide6 import QtWidgets, QtCore, QtGui
 import logging
 from ...yui_common import YWidget, YMenuEvent, YMenuItem
+from .commonqt import _resolve_icon
 
 
 class YMenuBarQt(YWidget):
@@ -64,22 +65,40 @@ class YMenuBarQt(YWidget):
             qmenu = QtWidgets.QMenu(menu.label(), self._backend_widget)
             # icon via theme
             if menu.iconName():
-                icon = QtGui.QIcon.fromTheme(menu.iconName())
-                if not icon.isNull():
+                try:
+                    icon = _resolve_icon(menu.iconName())
+                except Exception:
+                    icon = QtGui.QIcon.fromTheme(menu.iconName())
+                if icon and not icon.isNull():
                     qmenu.setIcon(icon)
             self._backend_widget.addMenu(qmenu)
             self._menu_to_qmenu[menu] = qmenu
-            # render children if any
-            for child in list(menu._children):
-                if child.isMenu():
-                    sub = qmenu.addMenu(child.label())
+            # render children recursively
+            self._render_menu_children(menu)
+
+    def _render_menu_children(self, menu: YMenuItem):
+        """Render all children (items and submenus) of a menu recursively."""
+        parent_qmenu = self._menu_to_qmenu.get(menu)
+        if parent_qmenu is None:
+            return
+        for child in list(menu._children):
+            if child.isMenu():
+                sub_qmenu = self._menu_to_qmenu.get(child)
+                if sub_qmenu is None:
+                    sub_qmenu = parent_qmenu.addMenu(child.label())
+                    # icon for submenu
                     if child.iconName():
-                        icon = QtGui.QIcon.fromTheme(child.iconName())
-                        if not icon.isNull():
-                            sub.setIcon(icon)
-                    self._menu_to_qmenu[child] = sub
-                else:
-                    self._ensure_item_rendered(menu, child)
+                        try:
+                            icon = _resolve_icon(child.iconName())
+                        except Exception:
+                            icon = QtGui.QIcon.fromTheme(child.iconName())
+                        if icon and not icon.isNull():
+                            sub_qmenu.setIcon(icon)
+                    self._menu_to_qmenu[child] = sub_qmenu
+                # recurse into submenu
+                self._render_menu_children(child)
+            else:
+                self._ensure_item_rendered(menu, child)
 
     def _ensure_item_rendered(self, menu: YMenuItem, item: YMenuItem):
         qmenu = self._menu_to_qmenu.get(menu)
@@ -91,8 +110,13 @@ class YMenuBarQt(YWidget):
             return
         act = self._item_to_qaction.get(item)
         if act is None:
-            #TODO use _resolve_icon from commonqt.py
-            icon = QtGui.QIcon.fromTheme(item.iconName()) if item.iconName() else QtGui.QIcon()
+            # Resolve icon using common helper (theme or path)
+            icon = QtGui.QIcon()
+            if item.iconName():
+                try:
+                    icon = _resolve_icon(item.iconName()) or QtGui.QIcon()
+                except Exception:
+                    icon = QtGui.QIcon.fromTheme(item.iconName())
             act = QtGui.QAction(icon, item.label(), self._backend_widget)
             act.setEnabled(item.enabled())
             def on_triggered():
@@ -104,6 +128,18 @@ class YMenuBarQt(YWidget):
     def _create_backend_widget(self):
         mb = QtWidgets.QMenuBar()
         self._backend_widget = mb
+        try:
+            # Prevent vertical stretching: fix height to size hint and set fixed vertical size policy
+            h = mb.sizeHint().height()
+            if h and h > 0:
+                mb.setMinimumHeight(h)
+                mb.setMaximumHeight(h)
+            sp = mb.sizePolicy()
+            sp.setVerticalPolicy(QtWidgets.QSizePolicy.Fixed)
+            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+            mb.setSizePolicy(sp)
+        except Exception:
+            pass
         # render any menus added before creation
         for m in self._menus:
             self._ensure_menu_rendered(m)
