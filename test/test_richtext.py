@@ -20,24 +20,19 @@ import logging
 # Configure file logger for this test: write DEBUG logs to '<testname>.log' in cwd
 try:
   log_name = os.path.splitext(os.path.basename(__file__))[0] + '.log'
-  fh = logging.FileHandler(log_name, mode='w')
-  fh.setLevel(logging.DEBUG)
-  fh.setFormatter(logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s'))
-  root_logger = logging.getLogger()
+
+  logFormatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s')
+  root_logger = logging.getLogger()  
+  fileHandler = logging.FileHandler(log_name, mode='w')
+  fileHandler.setFormatter(logFormatter)
+  root_logger.addHandler(fileHandler)  
+  consoleHandler = logging.StreamHandler()
+  consoleHandler.setFormatter(logFormatter)
+  root_logger.addHandler(consoleHandler)
+  consoleHandler.setLevel(logging.INFO)
   root_logger.setLevel(logging.DEBUG)
-  existing = False
-  for h in list(root_logger.handlers):
-    try:
-      if isinstance(h, logging.FileHandler) and os.path.abspath(getattr(h, 'baseFilename', '')) == os.path.abspath(log_name):
-        existing = True
-        break
-    except Exception:
-      pass
-  if not existing:
-    root_logger.addHandler(fh)
-  print(f"Logging test output to: {os.path.abspath(log_name)}")
 except Exception as _e:
-  print(f"Failed to configure file logger: {_e}")
+    logging.getLogger().exception("Failed to configure file logger: %s", _e)
 
 from manatools.aui.yui import YUI, YUI_ui
 import manatools.aui.yui_common as yui
@@ -57,9 +52,9 @@ def test_richtext_example(backend_name=None):
     # Log program name and detected backend
     try:
         backend = YUI.backend()
-        logging.getLogger().debug("test_richtext_example: program=%s backend=%s", os.path.basename(sys.argv[0]), getattr(backend, 'value', str(backend)))
+        root_logger.debug("test_richtext_example: program=%s backend=%s", os.path.basename(sys.argv[0]), getattr(backend, 'value', str(backend)))
     except Exception:
-        logging.getLogger().debug("test_richtext_example: program=%s backend=unknown", os.path.basename(sys.argv[0]))
+        root_logger.debug("test_richtext_example: program=%s backend=unknown", os.path.basename(sys.argv[0]))
 
     dlg = factory.createMainDialog()
     vbox = factory.createVBox(dlg)
@@ -68,8 +63,14 @@ def test_richtext_example(backend_name=None):
 
     # Rich text content (HTML)
     html = (
+        "<h1>Heading 1</h1>"
+        "<h2>Heading 2</h2>"
+        "<h3>Heading 3</h3>"
+        "<h4>Heading 4</h4>"
+        "<h5>Heading 5</h5>"
+        "<h6>Heading 6</h6>"
         "<h2>Welcome to <i>RichText</i></h2>"
-        "<p>This is <b>bold</b>, <i>italic</i>, and <u>underlined</u> text.</p>"
+        "<p>This is a paragraph with <b>bold</b>, <i>italic</i>, and <u>underlined</u> text.</p>"
         "<p>Click the <a href='https://example.com'>example.com</a> link to emit an activation event.</p>"
         "<p>Lists:</p>"
         "<ul><li>Alpha</li><li>Beta</li><li>Gamma</li></ul>"
@@ -88,7 +89,7 @@ def test_richtext_example(backend_name=None):
     ctrl_h = factory.createHBox(vbox)
     ok_btn = factory.createPushButton(ctrl_h, "OK")
 
-    print("Opening RichText example dialog...")
+    root_logger.info("Opening RichText example dialog...")
 
     while True:
         ev = dlg.waitForEvent()
@@ -96,25 +97,18 @@ def test_richtext_example(backend_name=None):
         if et == yui.YEventType.CancelEvent:
             dlg.destroy()
             break
-        if et == yui.YEventType.WidgetEvent:
+        elif et == yui.YEventType.WidgetEvent:
             w = ev.widget()
             reason = ev.reason()
-            if w == rich and reason == yui.YEventReason.Activated:
-                try:
-                    # YRichTextQt exposes lastActivatedUrl(); fall back gracefully if not available
-                    url = None
-                    try:
-                        url = rich.lastActivatedUrl()
-                    except Exception:
-                        url = None
-                    status_label.setText(f"Last link: {url if url else '(unknown)'}")
-                except Exception:
-                    pass
-            elif w == ok_btn and reason == yui.YEventReason.Activated:
+            if w == ok_btn and reason == yui.YEventReason.Activated:
                 dlg.destroy()
                 break
+        elif et == yui.YEventType.MenuEvent:
+            url = ev.id() if ev.id() else '(none)'
+            status_label.setValue(f"Last link: {url}")
+            root_logger.info("Link activated: %s", url)
 
-    print("Dialog closed")
+    root_logger.info("Dialog closed")
 
 
 if __name__ == '__main__':
