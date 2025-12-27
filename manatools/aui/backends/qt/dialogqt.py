@@ -152,6 +152,8 @@ class YDialogQt(YSingleChildContainerWidget):
         if self.child():
             layout = QtWidgets.QVBoxLayout(central_widget)
             layout.addWidget(self.child().get_backend_widget())
+            # If the child is a layout box with a menubar as first child, Qt can display QMenuBar inline.
+            # Alternatively, backends may add YMenuBarQt directly to layout.
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event

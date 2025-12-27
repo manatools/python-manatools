@@ -230,3 +230,7 @@ class YWidgetFactoryQt:
     def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
         """Create a RichText widget (Qt backend)."""
         return YRichTextQt(parent, text, plainTextMode)
+
+    def createMenuBar(self, parent):
+        """Create a MenuBar widget (Qt backend)."""
+        return YMenuBarQt(parent)

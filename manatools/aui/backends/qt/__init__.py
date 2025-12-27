@@ -15,6 +15,7 @@ from .progressbarqt import YProgressBarQt
 from .radiobuttonqt import YRadioButtonQt
 from .tableqt import YTableQt
 from .richtextqt import YRichTextQt
+from .menubarqt import YMenuBarQt
 
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "YRadioButtonQt",
     "YTableQt",
     "YRichTextQt",
+    "YMenuBarQt",
     # ...
 ]
