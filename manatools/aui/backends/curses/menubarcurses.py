@@ -51,6 +51,20 @@ class YMenuBarCurses(YWidget):
 
     def setItemEnabled(self, item: YMenuItem, on: bool = True):
         item.setEnabled(on)
+        # If current selection becomes disabled while expanded, move to next selectable
+        try:
+            if self._expanded and self._menu_path:
+                cur_menu = self._menu_path[-1]
+                idx = self._menu_indices[-1] if self._menu_indices else 0
+                items = list(cur_menu._children)
+                if 0 <= idx < len(items) and items[idx] == item and not item.enabled():
+                    nxt = self._next_selectable_index(items, idx, +1)
+                    if nxt is None:
+                        nxt = self._next_selectable_index(items, idx, -1)
+                    if nxt is not None:
+                        self._menu_indices[-1] = nxt
+        except Exception:
+            pass
 
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
@@ -67,6 +81,40 @@ class YMenuBarCurses(YWidget):
                 dlg._post_event(YMenuEvent(item=item, id=self._path_for_item(item)))
         except Exception:
             pass
+
+    def _is_separator(self, item: YMenuItem) -> bool:
+        try:
+            return item.label() == "-"
+        except Exception:
+            return False
+
+    def _is_selectable(self, item: YMenuItem) -> bool:
+        try:
+            if self._is_separator(item):
+                return False
+            return bool(item.enabled())
+        except Exception:
+            return False
+
+    def _first_selectable_index(self, items):
+        for i, it in enumerate(items):
+            if self._is_selectable(it):
+                return i
+        return None
+
+    def _next_selectable_index(self, items, start_idx, direction):
+        """Return next selectable index from start_idx stepping by direction; None if none."""
+        if not items:
+            return None
+        if direction > 0:
+            rng = range(start_idx + 1, len(items))
+        else:
+            rng = range(start_idx - 1, -1, -1)
+        for i in rng:
+            it = items[i]
+            if self._is_selectable(it):
+                return i
+        return None
 
     def _draw(self, window, y, x, width, height):
         try:
@@ -235,33 +283,55 @@ class YMenuBarCurses(YWidget):
                 # initialize path to current top menu
                 if 0 <= self._current_menu_index < len(self._menus):
                     self._menu_path = [self._menus[self._current_menu_index]]
-                    self._menu_indices = [0]
+                    # start at first selectable item
+                    items = list(self._menu_path[0]._children)
+                    first = self._first_selectable_index(items)
+                    if first is None:
+                        # no selectable items -> keep expanded false
+                        self._expanded = False
+                        self._menu_path = []
+                        self._menu_indices = []
+                        self._scroll_offsets = []
+                        return True
+                    self._menu_indices = [first]
                     self._scroll_offsets = [0]
             else:
                 # move down in current popup
                 cur_idx = self._menu_indices[-1]
                 cur_menu = self._menu_path[-1]
-                if cur_menu._children:
-                    new_idx = min(len(cur_menu._children) - 1, cur_idx + 1)
-                    self._menu_indices[-1] = new_idx
-                    # adjust scroll offset
-                    level = len(self._menu_indices) - 1
-                    # compute visible rows similarly to draw
-                    # assume default max
-                    visible_rows = self._visible_rows_max
-                    offset = self._scroll_offsets[level] if level < len(self._scroll_offsets) else 0
-                    if new_idx >= offset + visible_rows:
-                        self._scroll_offsets[level] = max(0, new_idx - visible_rows + 1)
+                items = list(cur_menu._children)
+                if items:
+                    nxt = self._next_selectable_index(items, cur_idx, +1)
+                    if nxt is not None:
+                        self._menu_indices[-1] = nxt
+                        # adjust scroll offset
+                        level = len(self._menu_indices) - 1
+                        visible_rows = self._visible_rows_max
+                        offset = self._scroll_offsets[level] if level < len(self._scroll_offsets) else 0
+                        if nxt >= offset + visible_rows:
+                            self._scroll_offsets[level] = max(0, nxt - visible_rows + 1)
         elif key == curses.KEY_UP:
             if self._expanded:
                 cur_idx = self._menu_indices[-1]
-                new_idx = max(0, cur_idx - 1)
-                self._menu_indices[-1] = new_idx
-                level = len(self._menu_indices) - 1
-                visible_rows = self._visible_rows_max
-                offset = self._scroll_offsets[level] if level < len(self._scroll_offsets) else 0
-                if new_idx < offset:
-                    self._scroll_offsets[level] = new_idx
+                cur_menu = self._menu_path[-1]
+                items = list(cur_menu._children)
+                if items:
+                    # If at first selectable item on top-level, collapse to menubar
+                    first = self._first_selectable_index(items)
+                    level = len(self._menu_indices) - 1
+                    if level == 0 and first is not None and cur_idx == first:
+                        self._expanded = False
+                        self._menu_path = []
+                        self._menu_indices = []
+                        self._scroll_offsets = []
+                        return True
+                    prev = self._next_selectable_index(items, cur_idx, -1)
+                    if prev is not None:
+                        self._menu_indices[-1] = prev
+                        visible_rows = self._visible_rows_max
+                        offset = self._scroll_offsets[level] if level < len(self._scroll_offsets) else 0
+                        if prev < offset:
+                            self._scroll_offsets[level] = prev
         elif key == curses.KEY_NPAGE:
             # page down
             if self._expanded and self._menu_path:
@@ -269,11 +339,19 @@ class YMenuBarCurses(YWidget):
                 cur_menu = self._menu_path[-1]
                 total = len(cur_menu._children)
                 visible_rows = self._visible_rows_max
+                # advance through selectable items
                 idx = self._menu_indices[-1]
-                idx = min(total - 1, idx + visible_rows)
+                items = list(cur_menu._children)
+                steps = visible_rows
+                while steps > 0:
+                    nxt = self._next_selectable_index(items, idx, +1)
+                    if nxt is None:
+                        break
+                    idx = nxt
+                    steps -= 1
                 self._menu_indices[-1] = idx
                 offset = self._scroll_offsets[level]
-                self._scroll_offsets[level] = min(max(0, total - visible_rows), offset + visible_rows)
+                self._scroll_offsets[level] = min(max(0, total - visible_rows), max(offset, idx - visible_rows + 1))
         elif key == curses.KEY_PPAGE:
             # page up
             if self._expanded and self._menu_path:
@@ -281,10 +359,17 @@ class YMenuBarCurses(YWidget):
                 cur_menu = self._menu_path[-1]
                 visible_rows = self._visible_rows_max
                 idx = self._menu_indices[-1]
-                idx = max(0, idx - visible_rows)
+                items = list(cur_menu._children)
+                steps = visible_rows
+                while steps > 0:
+                    prv = self._next_selectable_index(items, idx, -1)
+                    if prv is None:
+                        break
+                    idx = prv
+                    steps -= 1
                 self._menu_indices[-1] = idx
                 offset = self._scroll_offsets[level]
-                self._scroll_offsets[level] = max(0, offset - visible_rows)
+                self._scroll_offsets[level] = min(offset, idx)
         elif key in (curses.KEY_ENTER, 10, 13):
             if self._expanded:
                 cur_menu = self._menu_path[-1]
@@ -292,7 +377,7 @@ class YMenuBarCurses(YWidget):
                 items = list(cur_menu._children)
                 if 0 <= idx < len(items):
                     item = items[idx]
-                    if item.isMenu():
+                    if item.isMenu() and item.enabled():
                         # descend
                         self._menu_path.append(item)
                         self._menu_indices.append(0)
