@@ -9,6 +9,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Gio, GLib
 import logging
+import os
 from ...yui_common import YWidget, YMenuEvent, YMenuItem
 from .commongtk import _resolve_gicon, _resolve_icon
 
@@ -19,8 +20,10 @@ class YMenuBarGtk(YWidget):
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         self._menus = []  # top-level YMenuItem menus
         self._menu_to_model = {}
-        self._item_to_action = {}
-        self._action_group = Gio.SimpleActionGroup()
+        # For MenuButton+Popover approach
+        self._menu_to_button = {}
+        self._item_to_row = {}
+        self._row_to_item = {}
 
     def widgetClass(self):
         return "YMenuBar"
@@ -44,12 +47,24 @@ class YMenuBarGtk(YWidget):
 
     def setItemEnabled(self, item: YMenuItem, on: bool = True):
         item.setEnabled(on)
-        act = self._item_to_action.get(item)
-        if act is not None:
-            try:
-                act.set_enabled(bool(on))
-            except Exception:
-                pass
+        # Update rendered row or button sensitivity if present
+        try:
+            row = self._item_to_row.get(item)
+            if row is not None:
+                try:
+                    row.set_sensitive(bool(on))
+                except Exception:
+                    pass
+                return
+            pair = self._menu_to_button.get(item)
+            if pair is not None:
+                try:
+                    btn, _ = pair
+                    btn.set_sensitive(bool(on))
+                except Exception:
+                    pass
+        except Exception:
+            self._logger.exception("Error updating enabled state for menu item '%s'", getattr(item, 'label', lambda: 'unknown')())
 
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
@@ -68,10 +83,11 @@ class YMenuBarGtk(YWidget):
             pass
 
     def _ensure_menu_rendered(self, menu: YMenuItem):
-        # Build Gio.Menu model for this menu
-        model = Gio.Menu()
-        self._menu_to_model[menu] = model
-        self._populate_menu_model(model, menu)
+        # For backwards compatibility call-through to button renderer
+        try:
+            self._ensure_menu_rendered_button(menu)
+        except Exception:
+            self._logger.exception("Failed to ensure menu rendered for '%s'", menu.label())
 
     def _action_name_for_item(self, item: YMenuItem) -> str:
         # derive action id from path, sanitized
@@ -79,110 +95,173 @@ class YMenuBarGtk(YWidget):
         return path.replace('/', '_').replace(' ', '_').lower()
 
     def _populate_menu_model(self, model: Gio.Menu, menu: YMenuItem):
+        # This implementation builds per-menu Gtk.Popover/ListBox widgets instead of a Gio.Menu model.
+        # Population is handled by `_render_menu_children` when menus are rendered.
+        return
+
+    def _ensure_menu_rendered_button(self, menu: YMenuItem):
+        # Create a MenuButton with a Popover containing a ListBox for `menu` children.
+        if menu in self._menu_to_button:
+            return
+        hb = self._backend_widget
+        if hb is None:
+            return
+        btn = Gtk.MenuButton()
+        try:
+            btn.set_label(menu.label())
+        except Exception:
+            pass
+
+        # optional icon on the button
+        if menu.iconName():
+            try:
+                img = _resolve_icon(menu.iconName())
+                if img is not None:
+                    try:
+                        btn.set_icon(img.get_paintable())
+                    except Exception:
+                        # Some Gtk versions may not support set_icon; try set_child with a box
+                        try:
+                            hb_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                            hb_box.append(img)
+                            btn.set_child(hb_box)
+                        except Exception:
+                            self._logger.exception("Failed to set icon on MenuButton for '%s'", menu.label())
+            except Exception:
+                self._logger.exception("Error resolving icon for MenuButton '%s'", menu.label())
+
+        pop = Gtk.Popover()
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        listbox.connect("row-activated", self._on_row_activated)
+        pop.set_child(listbox)
+        btn.set_popover(pop)
+        # ensure button doesn't expand vertically
+        try:
+            btn.set_vexpand(False)
+            btn.set_hexpand(False)
+        except Exception:
+            pass
+        try:
+            hb.append(btn)
+        except Exception:
+            try:
+                hb.add(btn)
+            except Exception:
+                pass
+
+        self._menu_to_button[menu] = (btn, listbox)
+        # populate listbox rows
+        self._render_menu_children(menu)
+
+    def _render_menu_children(self, menu: YMenuItem):
+        pair = self._menu_to_button.get(menu)
+        if not pair:
+            return
+        btn, listbox = pair
+        # clear existing
+        try:
+            for row in list(listbox.get_children() or []):
+                try:
+                    listbox.remove(row)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         for child in list(menu._children):
             if child.isMenu():
-                sub_model = Gio.Menu()
-                self._populate_menu_model(sub_model, child)
-                model.append_submenu(child.label(), sub_model)
+                # submenu: create a nested MenuButton inside the row
+                sub_btn = Gtk.MenuButton()
+                try:
+                    sub_btn.set_label(child.label())
+                except Exception:
+                    pass
+                sub_pop = Gtk.Popover()
+                sub_lb = Gtk.ListBox()
+                sub_lb.set_selection_mode(Gtk.SelectionMode.NONE)
+                sub_lb.connect("row-activated", self._on_row_activated)
+                sub_pop.set_child(sub_lb)
+                sub_btn.set_popover(sub_pop)
+                # optional icon
+                if child.iconName():
+                    try:
+                        img = _resolve_icon(child.iconName())
+                        if img is not None:
+                            try:
+                                sub_btn.set_icon(img.get_paintable())
+                            except Exception:
+                                try:
+                                    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                                    box.append(img)
+                                    sub_btn.set_child(box)
+                                except Exception:
+                                    self._logger.exception("Failed to set icon on submenu button '%s'", child.label())
+                    except Exception:
+                        self._logger.exception("Error resolving icon for submenu '%s'", child.label())
+
+                row = Gtk.ListBoxRow()
+                row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                row_box.append(sub_btn)
+                row.set_child(row_box)
+                row.set_sensitive(child.enabled())
+                listbox.append(row)
+                # store mapping and recurse
+                self._menu_to_button[child] = (sub_btn, sub_lb)
+                self._render_menu_children(child)
             else:
                 if child.label() == "-":
-                    # separator
-                    model.append_section(None, Gio.Menu())
+                    sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                    listbox.append(sep)
                     continue
-                item = Gio.MenuItem.new(child.label(), None)
-                image = _resolve_icon(child.iconName()) if child.iconName() else None
-                if image is None and child.iconName():
-                    self._logger.error("Failed to resolve icon for menu item <%s> <%s>", child.label(), child.iconName())
-                gicon = image.get_gicon() if image else None
-                if gicon is not None:
+                row = Gtk.ListBoxRow()
+                row_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                # optional icon
+                if child.iconName():
                     try:
-                        item.set_icon(gicon)
+                        img = _resolve_icon(child.iconName())
+                        if img is not None:
+                            row_box.append(img)
                     except Exception:
-                        self._logger.error("Failed to set icon for menu item <%s>", child.label(), exc_info=True)
-                        pass
-                elif child.iconName():
-                    self._logger.error("No icon for menu item <%s> <%s>", child.label(), child.iconName())
-                act_name = self._action_name_for_item(child)
-                action = Gio.SimpleAction.new(act_name, None)
-                # honor initial enabled state from the YMenuItem model
-                try:
-                    action.set_enabled(bool(child.enabled()))
-                except Exception:
-                    pass
-                def on_activate(_action, _param=None, _child=child):
-                    if not _child.enabled():
-                        return
-                    self._emit_activation(_child)
-                action.connect("activate", on_activate)
-                try:
-                    self._action_group.add_action(action)
-                except Exception:
-                    pass
-                self._item_to_action[child] = action
-                try:
-                    item.set_attribute_value("action", GLib.Variant.new_string(f"menubar.{act_name}"))
-                    # also set enabled attribute to guide rendering
-                    try:
-                        item.set_attribute_value("enabled", GLib.Variant.new_boolean(bool(child.enabled())))
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
-                model.append_item(item)
-
-    # no per-item rendering in PopoverMenuBar approach
+                        self._logger.exception("Failed to resolve icon for menu item '%s'", child.label())
+                lbl = Gtk.Label(label=child.label())
+                lbl.set_xalign(0.0)
+                row_box.append(lbl)
+                row.set_child(row_box)
+                row.set_sensitive(child.enabled())
+                listbox.append(row)
+                self._item_to_row[child] = row
+                self._row_to_item[row] = child
 
     def _create_backend_widget(self):
-        # Combine all top-level menus into a single model
-        root = Gio.Menu()
-        for m in self._menus:
-            self._ensure_menu_rendered(m)
-            model = self._menu_to_model.get(m)
-            if model is not None:
-                root.append_submenu(m.label(), model)
-        mb = Gtk.PopoverMenuBar.new_from_model(root)
+        hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        # Do not allow the menubar box to expand vertically
         try:
-            mb.insert_action_group("menubar", self._action_group)
+            hb.set_vexpand(False)
+            hb.set_hexpand(True)
         except Exception:
             pass
-        # Limit vertical expansion
-        #try:
-        #    mb.set_vexpand(False)
-        #    mb.set_hexpand(True)
-        #except Exception:
-        #    pass
-        self._backend_widget = mb
+        self._backend_widget = hb
+        # render any menus added before creation
+        for m in self._menus:
+            try:
+                self._ensure_menu_rendered_button(m)
+            except Exception:
+                self._logger.exception("Failed to render menu '%s'", m.label())
 
     def _rebuild_root_model(self):
+        # Re-render all menus and their popovers to reflect model changes
         try:
-            mb = self._backend_widget
-            if mb is None:
-                return
-            # Reset actions to keep state in sync
-            self._action_group = Gio.SimpleActionGroup()
-            self._item_to_action.clear()
-            root = Gio.Menu()
-            for m in self._menus:
-                # Ensure individual menu model exists and is populated
-                self._ensure_menu_rendered(m)
-                model = self._menu_to_model.get(m)
-                if model is not None:
-                    # refresh model contents
-                    refreshed = Gio.Menu()
-                    self._populate_menu_model(refreshed, m)
-                    self._menu_to_model[m] = refreshed
-                    root.append_submenu(m.label(), refreshed)
-            try:
-                mb.set_menu_model(root)
-            except Exception:
-                # Fallback: recreate component if setter not available
-                pass
-            try:
-                mb.insert_action_group("menubar", self._action_group)
-            except Exception:
-                pass
+            for m in list(self._menus):
+                try:
+                    self._ensure_menu_rendered_button(m)
+                    self._render_menu_children(m)
+                except Exception:
+                    self._logger.exception("Failed rebuilding menu '%s'", m.label())
         except Exception:
-            pass
+            self._logger.exception("Unexpected error in _rebuild_root_model")
+
+    
 
     def _set_backend_enabled(self, enabled):
         try:
@@ -191,4 +270,12 @@ class YMenuBarGtk(YWidget):
         except Exception:
             pass
 
-    # No ListBox activation in PopoverMenuBar implementation
+    # ListBox activation handled by `_on_row_activated`
+
+    def _on_row_activated(self, listbox: Gtk.ListBox, row: Gtk.ListBoxRow):
+        try:
+            item = self._row_to_item.get(row)
+            if item and item.enabled():
+                self._emit_activation(item)
+        except Exception:
+            self._logger.exception("Error handling row activation")
