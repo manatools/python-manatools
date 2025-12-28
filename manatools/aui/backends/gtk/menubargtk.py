@@ -109,6 +109,7 @@ class YMenuBarGtk(YWidget):
         btn = Gtk.MenuButton()
         try:
             btn.set_label(menu.label())
+            btn.set_has_frame(False)
         except Exception:
             pass
 
@@ -175,6 +176,7 @@ class YMenuBarGtk(YWidget):
                 sub_btn = Gtk.MenuButton()
                 try:
                     sub_btn.set_label(child.label())
+                    sub_btn.set_has_frame(False)
                 except Exception:
                     pass
                 sub_pop = Gtk.Popover()
