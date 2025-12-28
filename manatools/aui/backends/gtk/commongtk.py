@@ -13,7 +13,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib, Gio
 import cairo
 import threading
 import os
@@ -21,7 +21,7 @@ import logging
 from ...yui_common import *
 
 
-__all__ = ["_resolve_icon"]
+__all__ = ["_resolve_icon", "_resolve_gicon"]
 
 
 def _resolve_icon(icon_name, size=16):
@@ -118,4 +118,31 @@ def _resolve_icon(icon_name, size=16):
         except Exception:
             pass
         
+        return None
+
+
+def _resolve_gicon(icon_spec):
+        """Resolve icon specification to a Gio.Icon.
+
+        Supports theme icon names (Gio.ThemedIcon) and absolute file paths
+        (Gio.FileIcon). Returns None if it cannot be resolved.
+        """
+        if not icon_spec:
+            return None
+        try:
+            # absolute file path
+            if os.path.isabs(icon_spec) and os.path.exists(icon_spec):
+                try:
+                    gfile = Gio.File.new_for_path(icon_spec)
+                    return Gio.FileIcon.new(gfile)
+                except Exception:
+                    pass
+            # theme icon
+            base_name = os.path.splitext(icon_spec)[0] if '.' in icon_spec else icon_spec
+            try:
+                return Gio.ThemedIcon.new(base_name)
+            except Exception:
+                pass
+        except Exception:
+            pass
         return None
