@@ -63,7 +63,8 @@ def test_menubar_example(backend_name=None):
     file_menu = menubar.addMenu("File", icon_name="application-menu")
     item_open = menubar.addItem(file_menu, "Open", icon_name="document-open", enabled=True)
     item_close = menubar.addItem(file_menu, "Close", icon_name="window-close", enabled=False)
-    #menubar.addItem(file_menu, "-")
+    # TODO add separator to hide this trick
+    menubar.addItem(file_menu, "-")
     item_exit = menubar.addItem(file_menu, "Exit", icon_name="application-exit", enabled=True)
 
     # Edit menu
