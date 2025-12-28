@@ -15,6 +15,7 @@ from .progressbargtk import YProgressBarGtk
 from .radiobuttongtk import YRadioButtonGtk
 from .tablegtk import YTableGtk
 from .richtextgtk import YRichTextGtk
+from .menubargtk import YMenuBarGtk
 
 __all__ = [
     "YDialogGtk",
@@ -34,5 +35,6 @@ __all__ = [
     "YRadioButtonGtk",
     "YTableGtk",
     "YRichTextGtk",
+    "YMenuBarGtk",
     # ...
 ]
