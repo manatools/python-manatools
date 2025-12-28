@@ -43,13 +43,22 @@ class YVBoxGtk(YWidget):
         for child in self._children:
             widget = child.get_backend_widget()
             try:
-                widget.set_vexpand(True)
-                widget.set_hexpand(True)
-                #widget.set_valign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_VERT) else Gtk.Align.START)
-                #widget.set_halign(Gtk.Align.FILL if self.stretchable(YUIDimension.YD_HORIZ) else Gtk.Align.START)
+                # Respect the child's stretchable/weight hints instead of forcing expansion
+                vert_stretch = bool(child.stretchable(YUIDimension.YD_VERT)) or bool(child.weight(YUIDimension.YD_VERT))
+                horiz_stretch = bool(child.stretchable(YUIDimension.YD_HORIZ)) or bool(child.weight(YUIDimension.YD_HORIZ))
+                widget.set_vexpand(bool(vert_stretch))
+                widget.set_hexpand(bool(horiz_stretch))
+                try:
+                    widget.set_valign(Gtk.Align.FILL if vert_stretch else Gtk.Align.START)
+                except Exception:
+                    pass
+                try:
+                    widget.set_halign(Gtk.Align.FILL if horiz_stretch else Gtk.Align.START)
+                except Exception:
+                    pass
             except Exception:
                 pass
-            
+
             # Gtk4: use append instead of pack_start
             try:
                 self._backend_widget.append(widget)
