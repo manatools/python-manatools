@@ -67,7 +67,7 @@ def test_two_selectionbox(backend_name=None):
 
         items2 = [
             yui.YItem("Red"),
-            yui.YItem("Green", icon_name="protected"),
+            yui.YItem("Green", icon_name="system-search"),
             yui.YItem("Blue")
         ]
         items2[2].setSelected(True)
