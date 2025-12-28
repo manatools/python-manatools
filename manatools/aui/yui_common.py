@@ -406,11 +406,13 @@ class YMenuItem:
     (submenus and items). Backends may attach platform-specific references
     via `_backend_ref` for synchronization.
     """
-    def __init__(self, label: str, icon_name: str = "", enabled: bool = True, is_menu: bool = False):
-        self._label = str(label)
+    def __init__(self, label: str, icon_name: str = "", enabled: bool = True, is_menu: bool = False, is_separator: bool = False):
+        self._is_separator = bool(is_separator)
+        self._label = "-" if self._is_separator else str(label)
         self._icon_name = str(icon_name) if icon_name else ""
-        self._enabled = bool(enabled)
-        self._is_menu = bool(is_menu)
+        self._enabled = False if self._is_separator else bool(enabled)
+        self._is_menu = False if self._is_separator else bool(is_menu)
+        self._visbile = True
         self._children = []  # list of YMenuItem
         self._parent = None
         self._backend_ref = None  # optional backend-specific handle
@@ -433,8 +435,17 @@ class YMenuItem:
     def setEnabled(self, on: bool = True):
         self._enabled = bool(on)
 
+    def visible(self) -> bool:
+        return bool(self._visible)
+
+    def setVisible(self, on: bool = True):
+        self._visible = bool(on)
+
     def isMenu(self) -> bool:
         return bool(self._is_menu)
+
+    def isSeparator(self) -> bool:
+        return bool(self._is_separator)
 
     def childrenBegin(self):
         return iter(self._children)
@@ -459,7 +470,7 @@ class YMenuItem:
 
     def addSeparator(self):
         # Represent separator as a disabled item with label "-"; backends can special-case it.
-        sep = YMenuItem("-", "", enabled=False, is_menu=False)
+        sep = YMenuItem("-", is_menu=False, enabled=False, is_separator=True)
         sep._parent = self
         self._children.append(sep)
         return sep

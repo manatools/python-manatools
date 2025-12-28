@@ -218,7 +218,7 @@ class YMenuBarGtk(YWidget):
                     pass
                 self._render_menu_children(child)
             else:
-                if child.label() == "-":
+                if child.isSeparator():
                     sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                     listbox.append(sep)
                     continue

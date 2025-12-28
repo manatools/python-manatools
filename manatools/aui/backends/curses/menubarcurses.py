@@ -84,7 +84,7 @@ class YMenuBarCurses(YWidget):
 
     def _is_separator(self, item: YMenuItem) -> bool:
         try:
-            return item.label() == "-"
+            return item.isSeparator()
         except Exception:
             return False
 
@@ -207,6 +207,17 @@ class YMenuBarCurses(YWidget):
                 vis_items = items[offset:offset + visible_rows]
                 for i, item in enumerate(vis_items):
                     real_i = offset + i
+                    # separators are drawn as a centered line of underscores
+                    if self._is_separator(item):
+                        try:
+                            us_count = max(1, popup_width - 2)
+                            pad = max(0, (popup_width - us_count) // 2)
+                            sep_text = (" " * pad) + ("–" * us_count)
+                            sep_text = sep_text.ljust(popup_width)[:popup_width]
+                            window.addstr(popup_y + i, popup_x, sep_text, curses.A_NORMAL)
+                        except curses.error:
+                            pass
+                        continue
                     sel = (self._menu_indices[level] == real_i) if level < len(self._menu_indices) else (i == 0)
                     prefix = "* " if sel else "  "
                     label_text = item.label()

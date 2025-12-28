@@ -105,7 +105,7 @@ class YMenuBarQt(YWidget):
         if qmenu is None:
             self._ensure_menu_rendered(menu)
             qmenu = self._menu_to_qmenu.get(menu)
-        if item.label() == "-":
+        if item.isSeparator():
             qmenu.addSeparator()
             return
         act = self._item_to_qaction.get(item)
