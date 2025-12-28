@@ -53,6 +53,7 @@ def test_menubar_example(backend_name=None):
     except Exception:
         root_logger.debug("test_menubar_example: program=%s backend=unknown", os.path.basename(sys.argv[0]))
 
+    ui.app().setApplicationTitle(f"Menu Bar {backend.value} Test")
     dlg = factory.createMainDialog()
     vbox = factory.createVBox(dlg)
 
