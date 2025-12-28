@@ -24,6 +24,7 @@ class YMenuBarGtk(YWidget):
         self._menu_to_button = {}
         self._item_to_row = {}
         self._row_to_item = {}
+        self._row_to_popover = {}
 
     def widgetClass(self):
         return "YMenuBar"
@@ -210,6 +211,11 @@ class YMenuBarGtk(YWidget):
                 listbox.append(row)
                 # store mapping and recurse
                 self._menu_to_button[child] = (sub_btn, sub_lb)
+                # map rows in submenu to its popover so we can close it on activation
+                try:
+                    self._row_to_popover[row] = sub_btn.get_popover()
+                except Exception:
+                    pass
                 self._render_menu_children(child)
             else:
                 if child.label() == "-":
@@ -234,6 +240,11 @@ class YMenuBarGtk(YWidget):
                 listbox.append(row)
                 self._item_to_row[child] = row
                 self._row_to_item[row] = child
+                # remember the popover that contains this row (top-level menu)
+                try:
+                    self._row_to_popover[row] = btn.get_popover()
+                except Exception:
+                    pass
 
     def _create_backend_widget(self):
         hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -279,5 +290,31 @@ class YMenuBarGtk(YWidget):
             item = self._row_to_item.get(row)
             if item and item.enabled():
                 self._emit_activation(item)
+                # Close any popovers related to the menubar to mimic standard menu behavior
+                try:
+                    for btn, _lb in list(self._menu_to_button.values()):
+                        try:
+                            pop = None
+                            try:
+                                pop = btn.get_popover()
+                            except Exception:
+                                pop = None
+                            if pop is None:
+                                continue
+                            # Try popdown(), else hide/set_visible(False)
+                            try:
+                                pop.popdown()
+                            except Exception:
+                                try:
+                                    pop.set_visible(False)
+                                except Exception:
+                                    try:
+                                        pop.hide()
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                except Exception:
+                    self._logger.exception("Error closing popovers after activation")
         except Exception:
             self._logger.exception("Error handling row activation")
