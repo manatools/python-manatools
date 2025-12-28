@@ -282,6 +282,50 @@ class YMenuBarCurses(YWidget):
                 return i
         return None
 
+    def rebuildMenu(self, menu: YMenuItem = None):
+        """Rebuild menu(s) for curses backend.
+
+        For curses there is no native widget per-menu, so we force a redraw
+        of the dialog and adjust current selection if the affected menu
+        becomes invisible.
+        """
+        try:
+            # If a specific menu was passed and it's invisible, ensure current
+            # index points to a visible menu.
+            try:
+                if menu is not None:
+                    if not menu.isMenu():
+                        return
+                    if not menu.visible():
+                        # if the hidden menu is the current one try to move
+                        if menu in self._menus and self._menus.index(menu) == self._current_menu_index:
+                            nxt = self._next_visible_menu_index(self._current_menu_index)
+                            if nxt is None:
+                                prv = self._prev_visible_menu_index(self._current_menu_index)
+                                if prv is not None:
+                                    self._current_menu_index = prv
+                            else:
+                                self._current_menu_index = nxt
+            except Exception:
+                pass
+            # reset transient layout caches
+            self._menu_positions = []
+            self._menu_path = []
+            self._menu_indices = []
+            self._scroll_offsets = []
+            # request dialog redraw
+            try:
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._last_draw_time = 0
+            except Exception:
+                pass
+        except Exception:
+            try:
+                self._logger.exception("rebuildMenu failed for curses backend")
+            except Exception:
+                pass
+
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():
             return False
