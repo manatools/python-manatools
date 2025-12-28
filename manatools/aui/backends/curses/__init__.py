@@ -15,6 +15,7 @@ from .progressbarcurses import YProgressBarCurses
 from .radiobuttoncurses import YRadioButtonCurses
 from .tablecurses import YTableCurses
 from .richtextcurses import YRichTextCurses
+from .menubarcurses import YMenuBarCurses
 
 __all__ = [
     "YDialogCurses",
@@ -34,5 +35,6 @@ __all__ = [
     "YRadioButtonCurses",
     "YTableCurses",
     "YRichTextCurses",
+    "YMenuBarCurses",
     # ...
 ]

@@ -221,3 +221,7 @@ class YWidgetFactoryCurses:
     def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
         """Create a RichText widget (curses backend)."""
         return YRichTextCurses(parent, text, plainTextMode)
+
+    def createMenuBar(self, parent):
+        """Create a MenuBar widget (curses backend)."""
+        return YMenuBarCurses(parent)
