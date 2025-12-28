@@ -62,6 +62,7 @@ To check/review:
     how to manage YEvents [X] and YItems [X] (verify selection attirbute).
     [ ] YInputField password mode
     [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
+    [ ] managing shortcuts
 
 Nice to have: improvements outside YUI API
     [ ] window title
