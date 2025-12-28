@@ -217,6 +217,9 @@ class YWidgetFactoryGtk:
     def createComboBox(self, parent, label, editable=False):
         return YComboBoxGtk(parent, label, editable)
     
+    def createSelectionBox(self, parent, label):
+        return YSelectionBoxGtk(parent, label)
+    
     def createMenuBar(self, parent):
         """Create a MenuBar widget (GTK backend)."""
         return YMenuBarGtk(parent)
