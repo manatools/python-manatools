@@ -172,6 +172,12 @@ class YMenuBarGtk(YWidget):
             pass
 
         for child in list(menu._children):
+            # skip invisible children
+            try:
+                if not child.visible():
+                    continue
+            except Exception:
+                pass
             if child.isMenu():
                 # submenu: create a nested MenuButton inside the row
                 sub_btn = Gtk.MenuButton()
@@ -218,6 +224,12 @@ class YMenuBarGtk(YWidget):
                     pass
                 self._render_menu_children(child)
             else:
+                # skip invisible children
+                try:
+                    if not child.visible():
+                        continue
+                except Exception:
+                    pass
                 if child.isSeparator():
                     sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                     listbox.append(sep)
@@ -255,9 +267,14 @@ class YMenuBarGtk(YWidget):
         except Exception:
             pass
         self._backend_widget = hb
-        # render any menus added before creation
+        # render any visible menus added before creation
         for m in self._menus:
             try:
+                try:
+                    if not m.visible():
+                        continue
+                except Exception:
+                    pass
                 self._ensure_menu_rendered_button(m)
             except Exception:
                 self._logger.exception("Failed to render menu '%s'", m.label())
@@ -267,6 +284,11 @@ class YMenuBarGtk(YWidget):
         try:
             for m in list(self._menus):
                 try:
+                    try:
+                        if not m.visible():
+                            continue
+                    except Exception:
+                        pass
                     self._ensure_menu_rendered_button(m)
                     self._render_menu_children(m)
                 except Exception:

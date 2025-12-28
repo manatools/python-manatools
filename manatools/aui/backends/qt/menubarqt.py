@@ -60,6 +60,12 @@ class YMenuBarQt(YWidget):
             pass
 
     def _ensure_menu_rendered(self, menu: YMenuItem):
+        # skip invisible top-level menus
+        try:
+            if not menu.visible():
+                return
+        except Exception:
+            pass
         qmenu = self._menu_to_qmenu.get(menu)
         if qmenu is None:
             qmenu = QtWidgets.QMenu(menu.label(), self._backend_widget)
@@ -82,6 +88,11 @@ class YMenuBarQt(YWidget):
         if parent_qmenu is None:
             return
         for child in list(menu._children):
+            try:
+                if not child.visible():
+                    continue
+            except Exception:
+                pass
             if child.isMenu():
                 sub_qmenu = self._menu_to_qmenu.get(child)
                 if sub_qmenu is None:
@@ -105,6 +116,11 @@ class YMenuBarQt(YWidget):
         if qmenu is None:
             self._ensure_menu_rendered(menu)
             qmenu = self._menu_to_qmenu.get(menu)
+        try:
+            if not item.visible():
+                return
+        except Exception:
+            pass
         if item.isSeparator():
             qmenu.addSeparator()
             return

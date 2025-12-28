@@ -412,7 +412,8 @@ class YMenuItem:
         self._icon_name = str(icon_name) if icon_name else ""
         self._enabled = False if self._is_separator else bool(enabled)
         self._is_menu = False if self._is_separator else bool(is_menu)
-        self._visbile = True
+        # visible flag (backends should respect this when rendering)
+        self._visible = True
         self._children = []  # list of YMenuItem
         self._parent = None
         self._backend_ref = None  # optional backend-specific handle
@@ -440,6 +441,8 @@ class YMenuItem:
 
     def setVisible(self, on: bool = True):
         self._visible = bool(on)
+        for child in self._children:
+            child.setVisible(on)
 
     def isMenu(self) -> bool:
         return bool(self._is_menu)
@@ -459,12 +462,14 @@ class YMenuItem:
     def addItem(self, label: str, icon_name: str = ""):
         child = YMenuItem(label, icon_name, enabled=True, is_menu=False)
         child._parent = self
+        child.setVisible(self.visible())
         self._children.append(child)
         return child
 
     def addMenu(self, label: str, icon_name: str = ""):
         child = YMenuItem(label, icon_name, enabled=True, is_menu=True)
         child._parent = self
+        child.setVisible(self.visible())
         self._children.append(child)
         return child
 

@@ -133,7 +133,17 @@ class YMenuBarCurses(YWidget):
                 if idx == self._current_menu_index:
                     attr |= curses.A_BOLD
                 try:
-                    # record start position for this menu label
+                    # record start position for this menu label (keep index alignment)
+                    try:
+                        if not menu.visible():
+                            # keep alignment with None placeholder
+                            self._menu_positions.append(None)
+                            cx += len(label)
+                            if cx >= x + width:
+                                break
+                            continue
+                    except Exception:
+                        pass
                     self._menu_positions.append(cx)
                     window.addstr(y, cx, label[:max(0, width - (cx - x))], attr)
                 except curses.error:
@@ -153,7 +163,11 @@ class YMenuBarCurses(YWidget):
         try:
             # Start with top-level menu position, relative to dialog
             try:
-                start_x = self._menu_positions[self._current_menu_index] if self._current_menu_index < len(self._menu_positions) else self._bar_x
+                if self._current_menu_index < len(self._menu_positions):
+                    pos = self._menu_positions[self._current_menu_index]
+                    start_x = pos if pos is not None else self._bar_x
+                else:
+                    start_x = self._bar_x
             except Exception:
                 start_x = self._bar_x
             popup_x = start_x
@@ -164,7 +178,8 @@ class YMenuBarCurses(YWidget):
                 self._menu_indices = [0]
                 self._scroll_offsets = [0]
             for level, menu in enumerate(self._menu_path):
-                items = list(menu._children)
+                # only visible children
+                items = [it for it in list(menu._children) if getattr(it, 'visible', lambda: True)()]
                 # compute width for this popup
                 max_label = 0
                 for it in items:
@@ -248,6 +263,25 @@ class YMenuBarCurses(YWidget):
         except curses.error:
             pass
 
+    def _prev_visible_menu_index(self, start_idx):
+        for i in range(start_idx - 1, -1, -1):
+            try:
+                if self._menus[i].visible():
+                    return i
+            except Exception:
+                # assume visible if error
+                return i
+        return None
+
+    def _next_visible_menu_index(self, start_idx):
+        for i in range(start_idx + 1, len(self._menus)):
+            try:
+                if self._menus[i].visible():
+                    return i
+            except Exception:
+                return i
+        return None
+
     def _handle_key(self, key):
         if not self._focused or not self.isEnabled():
             return False
@@ -259,40 +293,52 @@ class YMenuBarCurses(YWidget):
                     self._menu_path.pop()
                     self._menu_indices.pop()
                 else:
-                    if self._menus:
-                        self._current_menu_index = max(0, self._current_menu_index - 1)
+                    prev = self._prev_visible_menu_index(self._current_menu_index)
+                    if prev is not None:
+                        self._current_menu_index = prev
                         # reset path to new top menu
                         self._menu_path = [self._menus[self._current_menu_index]]
                         self._menu_indices = [0]
                         self._scroll_offsets = [0]
             else:
-                if self._menus:
-                    self._current_menu_index = max(0, self._current_menu_index - 1)
+                prev = self._prev_visible_menu_index(self._current_menu_index)
+                if prev is not None:
+                    self._current_menu_index = prev
         elif key in (curses.KEY_RIGHT, ord('l')):
             if self._expanded:
                 # try to descend into submenu if selected item is a menu
                 cur_menu = self._menu_path[-1]
                 idx = self._menu_indices[-1] if self._menu_indices else 0
-                items = list(cur_menu._children)
+                items = [it for it in list(cur_menu._children) if getattr(it, 'visible', lambda: True)()]
                 if 0 <= idx < len(items) and items[idx].isMenu():
                     self._menu_path.append(items[idx])
                     self._menu_indices.append(0)
                 else:
                     # otherwise move to next top-level menu
-                    if self._menus:
-                        self._current_menu_index = min(len(self._menus) - 1, self._current_menu_index + 1)
+                    nxt = self._next_visible_menu_index(self._current_menu_index)
+                    if nxt is not None:
+                        self._current_menu_index = nxt
                         self._menu_path = [self._menus[self._current_menu_index]]
                         self._menu_indices = [0]
                         self._scroll_offsets = [0]
             else:
-                if self._menus:
-                    self._current_menu_index = min(len(self._menus) - 1, self._current_menu_index + 1)
+                nxt = self._next_visible_menu_index(self._current_menu_index)
+                if nxt is not None:
+                    self._current_menu_index = nxt
         elif key in (ord(' '), curses.KEY_DOWN):
             # expand
             if not self._expanded:
                 self._expanded = True
                 # initialize path to current top menu
                 if 0 <= self._current_menu_index < len(self._menus):
+                    # ensure current top menu is visible; if not find next visible
+                    try:
+                        if not self._menus[self._current_menu_index].visible():
+                            nxt = self._next_visible_menu_index(self._current_menu_index)
+                            if nxt is not None:
+                                self._current_menu_index = nxt
+                    except Exception:
+                        pass
                     self._menu_path = [self._menus[self._current_menu_index]]
                     # start at first selectable item
                     items = list(self._menu_path[0]._children)
@@ -310,7 +356,7 @@ class YMenuBarCurses(YWidget):
                 # move down in current popup
                 cur_idx = self._menu_indices[-1]
                 cur_menu = self._menu_path[-1]
-                items = list(cur_menu._children)
+                items = [it for it in list(cur_menu._children) if getattr(it, 'visible', lambda: True)()]
                 if items:
                     nxt = self._next_selectable_index(items, cur_idx, +1)
                     if nxt is not None:
@@ -385,7 +431,7 @@ class YMenuBarCurses(YWidget):
             if self._expanded:
                 cur_menu = self._menu_path[-1]
                 idx = self._menu_indices[-1]
-                items = list(cur_menu._children)
+                items = [it for it in list(cur_menu._children) if getattr(it, 'visible', lambda: True)()]
                 if 0 <= idx < len(items):
                     item = items[idx]
                     if item.isMenu() and item.enabled():

@@ -64,8 +64,7 @@ def test_menubar_example(backend_name=None):
     file_menu = menubar.addMenu("File", icon_name="application-menu")
     item_open = menubar.addItem(file_menu, "Open", icon_name="document-open", enabled=True)
     item_close = menubar.addItem(file_menu, "Close", icon_name="window-close", enabled=False)
-    # TODO add separator to hide this trick
-    menubar.addItem(file_menu, "-")
+    file_menu.addSeparator()
     item_exit = menubar.addItem(file_menu, "Exit", icon_name="application-exit", enabled=True)
 
     # Edit menu
@@ -84,6 +83,11 @@ def test_menubar_example(backend_name=None):
     sub2.addItem("Beta")
     sub3 = sub2.addMenu("Submenu 2.1")
     sub3.addItem("Info")
+    enableSubMenu3 = sub3.addItem("Enable Submenu 3")
+    # Hidden submenu for testing visibility
+    sub4 = more_menu.addMenu("Submenu 3")
+    sub4.addItem("Was Hidden")
+    sub4.setVisible(False)
 
     # Status label
     status_label = factory.createLabel(vbox, "Selected: (none)")
@@ -123,6 +127,10 @@ def test_menubar_example(backend_name=None):
                     root_logger.info("Menu item selected: File/Exit")
                     dlg.destroy()
                     break
+                elif item == enableSubMenu3:
+                    root_logger.info(f"Menu item selected: {item.label()}")                    
+                    sub4.setVisible(not sub4.visible())
+                    enableSubMenu3.setLabel("Disable Submenu 3" if sub4.visible() else "Enable Submenu 3")
 
     root_logger.info("Dialog closed")
 
