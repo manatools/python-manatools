@@ -58,7 +58,10 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
     [ ] YGraph
     [ ] Context menu support / hasContextMenu
 
-To check how to manage YEvents [X] and YItems [X] (verify selection attirbute).
+To check/review:
+    how to manage YEvents [X] and YItems [X] (verify selection attirbute).
+    [ ] YInputField password mode
+    [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
 
 Nice to have: improvements outside YUI API
     [ ] window title
