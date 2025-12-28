@@ -104,6 +104,11 @@ class YMenuBarGtk(YWidget):
                     self._logger.error("No icon for menu item <%s> <%s>", child.label(), child.iconName())
                 act_name = self._action_name_for_item(child)
                 action = Gio.SimpleAction.new(act_name, None)
+                # honor initial enabled state from the YMenuItem model
+                try:
+                    action.set_enabled(bool(child.enabled()))
+                except Exception:
+                    pass
                 def on_activate(_action, _param=None, _child=child):
                     if not _child.enabled():
                         return
@@ -116,6 +121,11 @@ class YMenuBarGtk(YWidget):
                 self._item_to_action[child] = action
                 try:
                     item.set_attribute_value("action", GLib.Variant.new_string(f"menubar.{act_name}"))
+                    # also set enabled attribute to guide rendering
+                    try:
+                        item.set_attribute_value("enabled", GLib.Variant.new_boolean(bool(child.enabled())))
+                    except Exception:
+                        pass
                 except Exception:
                     pass
                 model.append_item(item)
