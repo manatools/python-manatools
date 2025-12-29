@@ -187,6 +187,29 @@ class YWidget:
         if child in self._children:
             self._children.remove(child)
             child._parent = None
+
+    def deleteChildren(self):
+        """
+        Remove all logical children from this widget.
+
+        This clears the internal children list and detaches each child's
+        parent reference. Backend containers that render children should
+        override this method to also clear any backend layout or content
+        area. For generic widgets, this only affects the logical model.
+        """
+        try:
+            for ch in list(self._children):
+                try:
+                    ch._parent = None
+                except Exception:
+                    pass
+            self._children.clear()
+        except Exception:
+            # Best-effort: ignore failures and keep model consistent
+            try:
+                self._children = []
+            except Exception:
+                pass
     
     def parent(self):
         return self._parent

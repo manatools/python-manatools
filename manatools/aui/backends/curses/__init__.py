@@ -16,6 +16,7 @@ from .radiobuttoncurses import YRadioButtonCurses
 from .tablecurses import YTableCurses
 from .richtextcurses import YRichTextCurses
 from .menubarcurses import YMenuBarCurses
+from .replacepointcurses import YReplacePointCurses
 
 __all__ = [
     "YDialogCurses",
@@ -36,5 +37,6 @@ __all__ = [
     "YTableCurses",
     "YRichTextCurses",
     "YMenuBarCurses",
+    "YReplacePointCurses",
     # ...
 ]

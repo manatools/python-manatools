@@ -225,3 +225,7 @@ class YWidgetFactoryCurses:
     def createMenuBar(self, parent):
         """Create a MenuBar widget (curses backend)."""
         return YMenuBarCurses(parent)
+
+    def createReplacePoint(self, parent):
+        """Create a ReplacePoint widget (curses backend)."""
+        return YReplacePointCurses(parent)

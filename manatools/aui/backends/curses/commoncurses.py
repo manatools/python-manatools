@@ -53,6 +53,10 @@ def _curses_recursive_min_height(widget):
         elif cls == "YAlignment":
             child = widget.child()
             return max(1, _curses_recursive_min_height(child))
+        elif cls == "YReplacePoint":
+            # Treat ReplacePoint as a transparent single-child container
+            child = widget.child()
+            return max(1, _curses_recursive_min_height(child))
         elif cls == "YFrame" or cls == "YCheckBoxFrame":
             child = widget.child()
             inner_top = max(0, getattr(widget, "_inner_top_padding", 1))
