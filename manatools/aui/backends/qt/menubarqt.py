@@ -20,8 +20,17 @@ class YMenuBarQt(YWidget):
     def widgetClass(self):
         return "YMenuBar"
 
-    def addMenu(self, label: str, icon_name: str = "") -> YMenuItem:
-        m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
+    def addMenu(self, label: str="", icon_name: str = "", menu: YMenuItem = None) -> YMenuItem:
+        """Add a menu by lable or by an existing YMenuItem (is_menu=True) to the menubar."""
+        m = None
+        if menu is not None:
+            if not menu.isMenu():
+                raise ValueError("Provided YMenuItem is not a menu (is_menu=True)")
+            m = menu
+        else:
+            if not label:
+                raise ValueError("Menu label must be provided when no YMenuItem is given")
+            m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
         self._menus.append(m)
         if self._backend_widget:
             self._ensure_menu_rendered(m)
@@ -43,6 +52,10 @@ class YMenuBarQt(YWidget):
             except Exception:
                 pass
 
+    def setItemVisible(self, item: YMenuItem, visible: bool = True):
+        item.setVisible(visible)
+        self.rebuildMenu()
+
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
         cur = item
@@ -61,11 +74,9 @@ class YMenuBarQt(YWidget):
 
     def _ensure_menu_rendered(self, menu: YMenuItem):
         # skip invisible top-level menus
-        try:
-            if not menu.visible():
-                return
-        except Exception:
-            pass
+        if not menu.visible():
+           return
+
         qmenu = self._menu_to_qmenu.get(menu)
         if qmenu is None:
             qmenu = QtWidgets.QMenu(menu.label(), self._backend_widget)
@@ -81,6 +92,15 @@ class YMenuBarQt(YWidget):
             self._menu_to_qmenu[menu] = qmenu
             # render children recursively
             self._render_menu_children(menu)
+        # ensure the top-level action visibility matches model
+        try:
+            act = qmenu.menuAction()
+            try:
+                act.setVisible(bool(menu.visible()))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def _render_menu_children(self, menu: YMenuItem):
         """Render all children (items and submenus) of a menu recursively."""
@@ -106,6 +126,15 @@ class YMenuBarQt(YWidget):
                         if icon and not icon.isNull():
                             sub_qmenu.setIcon(icon)
                     self._menu_to_qmenu[child] = sub_qmenu
+                    # ensure submenu action visibility
+                    try:
+                        sa = sub_qmenu.menuAction()
+                        try:
+                            sa.setVisible(bool(child.visible()))
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
                 # recurse into submenu
                 self._render_menu_children(child)
             else:
@@ -116,11 +145,8 @@ class YMenuBarQt(YWidget):
         if qmenu is None:
             self._ensure_menu_rendered(menu)
             qmenu = self._menu_to_qmenu.get(menu)
-        try:
-            if not item.visible():
-                return
-        except Exception:
-            pass
+        if not item.visible():
+            return
         if item.isSeparator():
             qmenu.addSeparator()
             return
@@ -135,11 +161,16 @@ class YMenuBarQt(YWidget):
                     icon = QtGui.QIcon.fromTheme(item.iconName())
             act = QtGui.QAction(icon, item.label(), self._backend_widget)
             act.setEnabled(item.enabled())
+            try:
+                act.setVisible(bool(item.visible()))
+            except Exception:
+                pass
             def on_triggered():
                 self._emit_activation(item)
             act.triggered.connect(on_triggered)
             qmenu.addAction(act)
             self._item_to_qaction[item] = act
+            self._logger.debug("Rendered menu item: %s", self._path_for_item(item))
 
     def _create_backend_widget(self):
         mb = QtWidgets.QMenuBar()
@@ -170,3 +201,100 @@ class YMenuBarQt(YWidget):
                 self._backend_widget.setEnabled(bool(enabled))
         except Exception:
             pass
+
+    def rebuildMenus(self):
+        """Rebuild all the menus.
+
+        Useful when menu model changes at runtime. 
+        
+        This action must be perforemed to reflect any direct changes to
+        YMenuItem data (e.g., label, enabled, visible) without passing 
+        through the menubar.
+        """
+        # Rebuild all menus: clear existing QMenu/QAction structures
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    # remove all actions from the menubar
+                    for a in list(self._backend_widget.actions()):
+                        try:
+                            self._backend_widget.removeAction(a)
+                        except Exception:
+                            self._logger.exception("Failed removing action from menubar")
+                            try:
+                                a.setVisible(False)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # clear internal mappings so we rebuild from scratch
+        try:
+            self._menu_to_qmenu.clear()
+        except Exception:
+            self._menu_to_qmenu = {}
+        try:
+            self._item_to_qaction.clear()
+        except Exception:
+            self._item_to_qaction = {}
+
+        # recreate menus as done in _create_backend_widget
+        for m in self._menus:
+            try:
+                self._ensure_menu_rendered(m)
+            except Exception:
+                self._logger.exception("Failed ensuring menu rendered for '%s'", getattr(m, 'label', lambda: 'unknown')())
+        try:
+            self._logger.debug("rebuildMenu: recreated menubar <%s>", self.debugLabel())
+        except Exception:
+            pass
+
+    def deleteMenus(self):
+        """Remove all menus/items and their backend QMenu/QAction mappings.
+
+        After clearing model and mappings, call `rebuildMenus()` so the
+        backend menubar is emptied.
+        """
+        try:
+            # clear the model (top-level menus)
+            try:
+                self._menus.clear()
+            except Exception:
+                self._menus = []
+
+            # remove all actions from the backend widget
+            try:
+                if getattr(self, "_backend_widget", None) is not None:
+                    try:
+                        for a in list(self._backend_widget.actions()):
+                            try:
+                                self._backend_widget.removeAction(a)
+                            except Exception:
+                                try:
+                                    a.setVisible(False)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # clear internal mappings
+            try:
+                self._menu_to_qmenu.clear()
+            except Exception:
+                self._menu_to_qmenu = {}
+            try:
+                self._item_to_qaction.clear()
+            except Exception:
+                self._item_to_qaction = {}
+
+            # Ensure UI reflects cleared state
+            try:
+                self.rebuildMenu()
+            except Exception:
+                pass
+        except Exception:
+            self._logger.exception("deleteAllItems failed")
