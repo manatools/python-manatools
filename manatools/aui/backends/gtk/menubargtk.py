@@ -29,8 +29,17 @@ class YMenuBarGtk(YWidget):
     def widgetClass(self):
         return "YMenuBar"
 
-    def addMenu(self, label: str, icon_name: str = "") -> YMenuItem:
-        m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
+    def addMenu(self, label: str="", icon_name: str = "", menu: YMenuItem = None) -> YMenuItem:
+        """Add a menu by lable or by an existing YMenuItem (is_menu=True) to the menubar."""
+        m = None
+        if menu is not None:
+            if not menu.isMenu():
+                raise ValueError("Provided YMenuItem is not a menu (is_menu=True)")
+            m = menu
+        else:
+            if not label:
+                raise ValueError("Menu label must be provided when no YMenuItem is given")
+            m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
         self._menus.append(m)
         if self._backend_widget:
             self._ensure_menu_rendered(m)
@@ -66,6 +75,10 @@ class YMenuBarGtk(YWidget):
                     pass
         except Exception:
             self._logger.exception("Error updating enabled state for menu item '%s'", getattr(item, 'label', lambda: 'unknown')())
+
+    def setItemVisible(self, item: YMenuItem, visible: bool = True):
+        item.setVisible(visible)
+        self.rebuildMenus()
 
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
@@ -270,11 +283,8 @@ class YMenuBarGtk(YWidget):
         # render any visible menus added before creation
         for m in self._menus:
             try:
-                try:
-                    if not m.visible():
-                        continue
-                except Exception:
-                    pass
+                if not m.visible():
+                    continue
                 self._ensure_menu_rendered_button(m)
             except Exception:
                 self._logger.exception("Failed to render menu '%s'", m.label())
@@ -295,6 +305,158 @@ class YMenuBarGtk(YWidget):
                     self._logger.exception("Failed rebuilding menu '%s'", m.label())
         except Exception:
             self._logger.exception("Unexpected error in _rebuild_root_model")
+
+    def rebuildMenus(self):
+        """Rebuild all the menus.
+
+        Useful when menu model changes at runtime. 
+        
+        This action must be perforemed to reflect any direct changes to
+        YMenuItem data (e.g., label, enabled, visible) without passing 
+        through the menubar.
+        """
+        try:
+            hb = self._backend_widget
+            # clear all existing rendered buttons and rows
+            try:
+                for m, pair in list(self._menu_to_button.items()):
+                    try:
+                        btn, listbox = pair
+                        # clear listbox rows
+                        try:
+                            for row in list(listbox.get_children() or []):
+                                try:
+                                    listbox.remove(row)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        # remove button from container
+                        try:
+                            if hb is not None:
+                                try:
+                                    hb.remove(btn)
+                                except Exception:
+                                    self._logger.exception("Failed to remove MenuButton for '%s' from container", m.label())
+                                    try:
+                                        btn.set_visible(False)
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # clear mappings
+            try:
+                self._menu_to_button.clear()
+            except Exception:
+                self._menu_to_button = {}
+            try:
+                self._item_to_row.clear()
+            except Exception:
+                self._item_to_row = {}
+            try:
+                self._row_to_item.clear()
+            except Exception:
+                self._row_to_item = {}
+            try:
+                self._row_to_popover.clear()
+            except Exception:
+                self._row_to_popover = {}
+
+            # recreate top-level buttons like in _create_backend_widget
+            for m in self._menus:
+                try:
+                    self._ensure_menu_rendered_button(m)
+                    try:
+                        pair = self._menu_to_button.get(m)
+                        if pair is not None:
+                            try:
+                                btn, _ = pair
+                                btn.set_visible(bool(m.visible()))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                except Exception:
+                    self._logger.exception("Failed to ensure menu rendered for '%s'", m.label())
+
+        except Exception:
+            self._logger.exception("rebuildMenus failed")
+
+    def deleteMenus(self):
+        """Remove all top-level menus and their backend widgets/mappings.
+
+        Clears the `self._menus` model list and removes any created
+        MenuButton widgets from the backend container, then invokes
+        `rebuildMenus()` so the UI is updated.
+        """
+        try:
+            # clear model
+            try:
+                self._menus.clear()
+            except Exception:
+                self._menus = []
+
+            # remove buttons from container and clear listboxes
+            try:
+                hb = self._backend_widget
+                for m, pair in list(self._menu_to_button.items()):
+                    try:
+                        btn, listbox = pair
+                        try:
+                            for row in list(listbox.get_children() or []):
+                                try:
+                                    listbox.remove(row)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        try:
+                            if hb is not None:
+                                try:
+                                    hb.remove(btn)
+                                except Exception:
+                                    self._logger.exception("Failed to remove MenuButton for '%s' from container", m.label())
+                                    try:
+                                        btn.set_visible(False)
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # clear mappings
+            try:
+                self._menu_to_button.clear()
+            except Exception:
+                self._menu_to_button = {}
+            try:
+                self._item_to_row.clear()
+            except Exception:
+                self._item_to_row = {}
+            try:
+                self._row_to_item.clear()
+            except Exception:
+                self._row_to_item = {}
+            try:
+                self._row_to_popover.clear()
+            except Exception:
+                self._row_to_popover = {}
+
+            # reflect empty state
+            try:
+                self.rebuildMenus()
+            except Exception:
+                pass
+        except Exception:
+            self._logger.exception("deleteMenus failed")
 
     
 
