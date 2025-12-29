@@ -83,12 +83,21 @@ def test_menubar_example(backend_name=None):
     sub2.addItem("Beta")
     sub3 = sub2.addMenu("Submenu 2.1")
     sub3.addItem("Info")
-    enableSubMenu3 = sub3.addItem("Enable Submenu 3")
+    sub2.addSeparator()
+    enableSubMenu3 = sub2.addItem("Enable Submenu 3")
+    sub2.addSeparator()
+    to_change_menu = sub2.addItem("To Change menu")
     # Hidden submenu for testing visibility
     sub4 = more_menu.addMenu("Submenu 3")
     sub4.addItem("Was Hidden")
+#    menubar.setItemVisible(sub4 ,False)
     sub4.setVisible(False)
 
+    change_menu = yui.YMenuItem("Change", is_menu = True)
+    to_more_menu = change_menu.addItem("To More menu")
+    
+    menu1 = [file_menu, edit_menu, more_menu]
+    menu2 = [file_menu, edit_menu, change_menu]
     # Status label
     status_label = factory.createLabel(vbox, "Selected: (none)")
 
@@ -128,9 +137,21 @@ def test_menubar_example(backend_name=None):
                     dlg.destroy()
                     break
                 elif item == enableSubMenu3:
-                    root_logger.info(f"Menu item selected: {item.label()}")                    
+                    root_logger.info(f"Menu item selected: {item.label()}")                
+                    #menubar.setItemVisible(sub4, not sub4.visible())
                     sub4.setVisible(not sub4.visible())
                     enableSubMenu3.setLabel("Disable Submenu 3" if sub4.visible() else "Enable Submenu 3")
+                    menubar.rebuildMenus() # more_menu
+                elif item == to_change_menu:
+                    root_logger.info(f"Menu item selected: {item.label()}")
+                    menubar.deleteMenus()
+                    for m in menu2:
+                        menubar.addMenu(menu=m)
+                elif item == to_more_menu:
+                    root_logger.info(f"Menu item selected: {item.label()}")
+                    menubar.deleteMenus()
+                    for m in menu1:
+                        menubar.addMenu(menu=m)                    
 
     root_logger.info("Dialog closed")
 
