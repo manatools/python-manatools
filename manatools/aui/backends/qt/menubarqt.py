@@ -21,7 +21,7 @@ class YMenuBarQt(YWidget):
         return "YMenuBar"
 
     def addMenu(self, label: str="", icon_name: str = "", menu: YMenuItem = None) -> YMenuItem:
-        """Add a menu by lable or by an existing YMenuItem (is_menu=True) to the menubar."""
+        """Add a menu by label or by an existing YMenuItem (is_menu=True) to the menubar."""
         m = None
         if menu is not None:
             if not menu.isMenu():
@@ -207,7 +207,7 @@ class YMenuBarQt(YWidget):
 
         Useful when menu model changes at runtime. 
         
-        This action must be perforemed to reflect any direct changes to
+        This action must be performed to reflect any direct changes to
         YMenuItem data (e.g., label, enabled, visible) without passing 
         through the menubar.
         """
@@ -297,4 +297,4 @@ class YMenuBarQt(YWidget):
             except Exception:
                 pass
         except Exception:
-            self._logger.exception("deleteAllItems failed")
+            self._logger.exception("deleteMenus failed")
