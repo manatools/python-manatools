@@ -449,6 +449,12 @@ class YMenuItem:
 
     def isSeparator(self) -> bool:
         return bool(self._is_separator)
+    
+    def parentItem(self):
+        return self._parent
+    
+    def hasChildren(self):
+        return len(self._children) > 0
 
     def childrenBegin(self):
         return iter(self._children)
