@@ -54,7 +54,7 @@ class YMenuBarQt(YWidget):
 
     def setItemVisible(self, item: YMenuItem, visible: bool = True):
         item.setVisible(visible)
-        self.rebuildMenu()
+        self.rebuildMenus()
 
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
@@ -247,7 +247,7 @@ class YMenuBarQt(YWidget):
             except Exception:
                 self._logger.exception("Failed ensuring menu rendered for '%s'", getattr(m, 'label', lambda: 'unknown')())
         try:
-            self._logger.debug("rebuildMenu: recreated menubar <%s>", self.debugLabel())
+            self._logger.debug("rebuildMenus: recreated menubar <%s>", self.debugLabel())
         except Exception:
             pass
 
@@ -293,7 +293,7 @@ class YMenuBarQt(YWidget):
 
             # Ensure UI reflects cleared state
             try:
-                self.rebuildMenu()
+                self.rebuildMenus()
             except Exception:
                 pass
         except Exception:
