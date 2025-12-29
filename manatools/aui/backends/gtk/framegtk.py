@@ -13,6 +13,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
+import logging
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
