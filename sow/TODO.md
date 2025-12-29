@@ -21,8 +21,7 @@ Missing Widgets comparing libyui original factory:
     [X] YRichText
     [ ] YMultiLineEdit
     [ ] YIntField
-    [ ] YMenuBar
-    [ ] YMenuButton
+    [X] YMenuBar
     [ ] YSpacing (detailed variants: createHStretch/createVStretch/createHSpacing/createVSpacing/createSpacing)
     [X] YAlignment helpers (createLeft/createRight/createTop/createBottom/createHCenter/createVCenter/createHVCenter)
     [ ] YReplacePoint
@@ -39,6 +38,7 @@ Skipped widgets:
     [-] YMultiSelectionBox (implemented as YSelectionBox + multiselection enabled)
     [-] YPackageSelector (not ported)
     [-] YRadioButtonGroup (not ported)
+    [-] YMenuButton (legacy menus)
 
 Optional/special widgets (from `YOptionalWidgetFactory`):
 
