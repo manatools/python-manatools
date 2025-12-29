@@ -39,14 +39,51 @@ class YMenuBarCurses(YWidget):
     def widgetClass(self):
         return "YMenuBar"
 
-    def addMenu(self, label: str, icon_name: str = "") -> YMenuItem:
-        m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
+    def addMenu(self, label: str = "", icon_name: str = "", menu: YMenuItem = None) -> YMenuItem:
+        """Add a top-level menu by label or attach an existing YMenuItem.
+
+        Mirrors the Qt/GTK signatures for parameter consistency.
+        """
+        m=None
+        if menu is not None:
+            if not menu.isMenu():
+                raise ValueError("Provided YMenuItem is not a menu (is_menu=True)")
+            m = menu
+        else:
+            if not label:
+                raise ValueError("Menu label must be provided when no YMenuItem is given")
+            m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
         self._menus.append(m)
         return m
 
-    def addItem(self, menu: YMenuItem, label: str, icon_name: str = "", enabled: bool = True) -> YMenuItem:
-        item = menu.addItem(label, icon_name)
-        item.setEnabled(enabled)
+    def addItem(self, menu: YMenuItem, label: object, icon_name: str = "", enabled: bool = True) -> YMenuItem:
+        """Add an item to a menu, accepting either a label or an existing YMenuItem.
+
+        If `label` is a YMenuItem instance, attach it to `menu`. Otherwise,
+        create a new item using the label and optional icon.
+        """
+        if isinstance(label, YMenuItem):
+            item = label
+            # attach to parent if not already
+            try:
+                setattr(item, "_parent", menu)
+            except Exception:
+                pass
+            try:
+                menu._children.append(item)
+            except Exception:
+                # fallback: use provided API if available
+                try:
+                    menu.addItem(item.label(), item.iconName())
+                    item = menu._children[-1]
+                except Exception:
+                    raise
+        else:
+            item = menu.addItem(label, icon_name)
+        try:
+            item.setEnabled(enabled)
+        except Exception:
+            pass
         return item
 
     def setItemEnabled(self, item: YMenuItem, on: bool = True):
@@ -282,32 +319,13 @@ class YMenuBarCurses(YWidget):
                 return i
         return None
 
-    def rebuildMenu(self, menu: YMenuItem = None):
-        """Rebuild menu(s) for curses backend.
+    def rebuildMenus(self):
+        """Rebuild all menus for curses backend.
 
-        For curses there is no native widget per-menu, so we force a redraw
-        of the dialog and adjust current selection if the affected menu
-        becomes invisible.
+        There are no native widgets per-menu; reset transient caches and
+        request a dialog redraw to reflect model changes.
         """
         try:
-            # If a specific menu was passed and it's invisible, ensure current
-            # index points to a visible menu.
-            try:
-                if menu is not None:
-                    if not menu.isMenu():
-                        return
-                    if not menu.visible():
-                        # if the hidden menu is the current one try to move
-                        if menu in self._menus and self._menus.index(menu) == self._current_menu_index:
-                            nxt = self._next_visible_menu_index(self._current_menu_index)
-                            if nxt is None:
-                                prv = self._prev_visible_menu_index(self._current_menu_index)
-                                if prv is not None:
-                                    self._current_menu_index = prv
-                            else:
-                                self._current_menu_index = nxt
-            except Exception:
-                pass
             # reset transient layout caches
             self._menu_positions = []
             self._menu_path = []
@@ -322,7 +340,56 @@ class YMenuBarCurses(YWidget):
                 pass
         except Exception:
             try:
-                self._logger.exception("rebuildMenu failed for curses backend")
+                self._logger.exception("rebuildMenus failed for curses backend")
+            except Exception:
+                pass
+
+    # Backward compatibility shim
+    def rebuildMenu(self, menu: YMenuItem = None):
+        # adjust current menu index if a specific menu becomes invisible
+        try:
+            if menu is not None and hasattr(menu, 'isMenu') and menu.isMenu():
+                try:
+                    if not menu.visible():
+                        if menu in self._menus and self._menus.index(menu) == self._current_menu_index:
+                            nxt = self._next_visible_menu_index(self._current_menu_index)
+                            if nxt is None:
+                                prv = self._prev_visible_menu_index(self._current_menu_index)
+                                if prv is not None:
+                                    self._current_menu_index = prv
+                            else:
+                                self._current_menu_index = nxt
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self.rebuildMenus()
+
+    def deleteMenus(self):
+        """Clear all menus and reset transient state, then request redraw."""
+        try:
+            try:
+                self._menus.clear()
+            except Exception:
+                self._menus = []
+            # reset indices and caches
+            self._expanded = False
+            self._current_menu_index = 0
+            self._current_item_index = 0
+            self._menu_positions = []
+            self._menu_path = []
+            self._menu_indices = []
+            self._scroll_offsets = []
+            # request redraw
+            try:
+                dlg = self.findDialog()
+                if dlg is not None:
+                    dlg._last_draw_time = 0
+            except Exception:
+                pass
+        except Exception:
+            try:
+                self._logger.exception("deleteMenus failed for curses backend")
             except Exception:
                 pass
 
