@@ -25,12 +25,13 @@ class YMenuBarGtk(YWidget):
         self._item_to_row = {}
         self._row_to_item = {}
         self._row_to_popover = {}
+        self._pending_rebuild = False
 
     def widgetClass(self):
         return "YMenuBar"
 
     def addMenu(self, label: str="", icon_name: str = "", menu: YMenuItem = None) -> YMenuItem:
-        """Add a menu by lable or by an existing YMenuItem (is_menu=True) to the menubar."""
+        """Add a menu by label or by an existing YMenuItem (is_menu=True) to the menubar."""
         m = None
         if menu is not None:
             if not menu.isMenu():
@@ -78,7 +79,32 @@ class YMenuBarGtk(YWidget):
 
     def setItemVisible(self, item: YMenuItem, visible: bool = True):
         item.setVisible(visible)
-        self.rebuildMenus()
+        # Defer rebuild to idle to avoid clearing widgets during signal emission
+        self._queue_rebuild()
+
+    def _queue_rebuild(self):
+        try:
+            if self._pending_rebuild:
+                return
+            self._pending_rebuild = True
+            def do_rebuild():
+                try:
+                    self.rebuildMenus()
+                except Exception:
+                    self._logger.exception("Deferred rebuildMenus failed")
+                finally:
+                    self._pending_rebuild = False
+                return False  # remove idle source
+            try:
+                GLib.idle_add(do_rebuild, priority=GLib.PRIORITY_DEFAULT_IDLE)
+            except Exception:
+                # Fallback: rebuild synchronously if idle_add not available
+                try:
+                    self.rebuildMenus()
+                finally:
+                    self._pending_rebuild = False
+        except Exception:
+            self._logger.exception("_queue_rebuild failed")
 
     def _path_for_item(self, item: YMenuItem) -> str:
         labels = []
@@ -168,19 +194,20 @@ class YMenuBarGtk(YWidget):
         self._menu_to_button[menu] = (btn, listbox)
         # populate listbox rows
         self._render_menu_children(menu)
+        # reflect initial visibility
+        try:
+            btn.set_visible(bool(menu.visible()))
+        except Exception:
+            pass
 
     def _render_menu_children(self, menu: YMenuItem):
         pair = self._menu_to_button.get(menu)
         if not pair:
             return
         btn, listbox = pair
-        # clear existing
+        # clear existing rows reliably on GTK4
         try:
-            for row in list(listbox.get_children() or []):
-                try:
-                    listbox.remove(row)
-                except Exception:
-                    pass
+            self.__clear_widget(listbox)
         except Exception:
             pass
 
@@ -306,48 +333,74 @@ class YMenuBarGtk(YWidget):
         except Exception:
             self._logger.exception("Unexpected error in _rebuild_root_model")
 
+    def __clear_widget(self, widget: Gtk.Widget):
+        """Remove all children from a GTK4 widget.
+
+        Recursively unparents/removes children to help rebuild container
+        widgets safely.
+        """
+        if not widget:
+            return
+        
+        child = widget.get_first_child()
+        while child is not None:
+            next_child = child.get_next_sibling()
+            self.__clear_widget(child) 
+
+            if hasattr(widget, 'remove'):
+                widget.remove(child)
+            #elif hasattr(child, 'unparent'):
+            #    child.unparent()
+ 
+            child = next_child
+
     def rebuildMenus(self):
         """Rebuild all the menus.
 
-        Useful when menu model changes at runtime. 
-        
-        This action must be perforemed to reflect any direct changes to
-        YMenuItem data (e.g., label, enabled, visible) without passing 
-        through the menubar.
+        Useful when the menu model changes at runtime.
+
+        This action must be performed to reflect any direct changes to
+        `YMenuItem` data (e.g., label, enabled, visible) without going
+        through higher-level menubar helpers.
         """
         try:
             hb = self._backend_widget
-            # clear all existing rendered buttons and rows
+            # proactively disconnect signals and close popovers before clearing children
             try:
-                for m, pair in list(self._menu_to_button.items()):
+                for _m, pair in list(self._menu_to_button.items()):
                     try:
                         btn, listbox = pair
-                        # clear listbox rows
+                        # disconnect row-activated if available
                         try:
-                            for row in list(listbox.get_children() or []):
-                                try:
-                                    listbox.remove(row)
-                                except Exception:
-                                    pass
+                            if hasattr(listbox, 'disconnect_by_func'):
+                                listbox.disconnect_by_func(self._on_row_activated)
                         except Exception:
                             pass
-                        # remove button from container
+                        # close/detach popover
                         try:
-                            if hb is not None:
+                            pop = btn.get_popover()
+                            if pop is not None:
                                 try:
-                                    hb.remove(btn)
+                                    pop.popdown()
                                 except Exception:
-                                    self._logger.exception("Failed to remove MenuButton for '%s' from container", m.label())
                                     try:
-                                        btn.set_visible(False)
+                                        pop.set_visible(False)
                                     except Exception:
-                                        pass
+                                        try:
+                                            pop.hide()
+                                        except Exception:
+                                            pass
+                                try:
+                                    pop.set_child(None)
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
                     except Exception:
                         pass
             except Exception:
                 pass
+            self.__clear_widget(hb)            
 
             # clear mappings
             try:
@@ -371,6 +424,7 @@ class YMenuBarGtk(YWidget):
             for m in self._menus:
                 try:
                     self._ensure_menu_rendered_button(m)
+                    # set button visibility according to model
                     try:
                         pair = self._menu_to_button.get(m)
                         if pair is not None:
@@ -401,34 +455,38 @@ class YMenuBarGtk(YWidget):
             except Exception:
                 self._menus = []
 
-            # remove buttons from container and clear listboxes
+            # remove buttons from container, disconnect signals and clear listboxes
             try:
                 hb = self._backend_widget
                 for m, pair in list(self._menu_to_button.items()):
+                    btn, listbox = pair
+                    # disconnect row-activated if available
                     try:
-                        btn, listbox = pair
-                        try:
-                            for row in list(listbox.get_children() or []):
-                                try:
-                                    listbox.remove(row)
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
-                        try:
-                            if hb is not None:
-                                try:
-                                    hb.remove(btn)
-                                except Exception:
-                                    self._logger.exception("Failed to remove MenuButton for '%s' from container", m.label())
-                                    try:
-                                        btn.set_visible(False)
-                                    except Exception:
-                                        pass
-                        except Exception:
-                            pass
+                        if hasattr(listbox, 'disconnect_by_func'):
+                            listbox.disconnect_by_func(self._on_row_activated)
                     except Exception:
                         pass
+                    # close/detach popover
+                    try:
+                        pop = btn.get_popover()
+                        if pop is not None:
+                            try:
+                                pop.popdown()
+                            except Exception:
+                                try:
+                                    pop.set_visible(False)
+                                except Exception:
+                                    try:
+                                        pop.hide()
+                                    except Exception:
+                                        pass
+                            try:
+                                pop.set_child(None)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    self.__clear_widget(hb)
             except Exception:
                 pass
 
