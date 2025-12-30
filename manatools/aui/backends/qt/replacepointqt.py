@@ -9,7 +9,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore
 import logging
 from ...yui_common import *
 
@@ -38,9 +38,11 @@ class YReplacePointQt(YSingleChildContainerWidget):
         """Create a QWidget container with a vertical layout to host the single child."""
         try:
             container = QtWidgets.QWidget()
-            layout = QtWidgets.QVBoxLayout(container)
+            # Use a QStackedLayout so the single active child is shown reliably
+            layout = QtWidgets.QStackedLayout()
             layout.setContentsMargins(10, 10, 10, 10)
             layout.setSpacing(5)
+            container.setLayout(layout)
             self._backend_widget = container
             self._layout = layout
             # Default to expanding so parents like YFrame can allocate space
@@ -65,7 +67,21 @@ class YReplacePointQt(YSingleChildContainerWidget):
                     cw = self.child().get_backend_widget()
                     self._logger.debug("Attaching existing child %s", self.child().widgetClass())
                     if cw:
-                        self._layout.addWidget(cw)
+                        try:
+                            cw.setParent(self._backend_widget)
+                        except Exception:
+                            pass
+                        try:
+                            self._layout.addWidget(cw)
+                            try:
+                                self._layout.setCurrentWidget(cw)
+                            except Exception:
+                                pass
+                        except Exception:
+                            try:
+                                self._layout.addWidget(cw)
+                            except Exception:
+                                pass
                 else:
                     self._logger.debug("No existing child to attach")
             except Exception as e:
@@ -121,12 +137,14 @@ class YReplacePointQt(YSingleChildContainerWidget):
 
     def _attach_child_backend(self):
         """Attach the current child's backend into this container layout (no redraw)."""
+        # Ensure the backend container exists
         if not (self._backend_widget and self._layout and self.child()):
+            self._logger.debug("_attach_child_backend called but no backend or no child to attach")
             return
         try:
             if self._layout.count() > 0:
                 self._logger.warning("_attach_child_backend: layout is not empty")
-            # Clear previous layout widgets
+            # Clear previous layout widgets 
             try:
                 while self._layout.count():
                     it = self._layout.takeAt(0)
@@ -154,7 +172,105 @@ class YReplacePointQt(YSingleChildContainerWidget):
             ch = self.child()
             cw = ch.get_backend_widget()
             if cw:
-                self._layout.addWidget(cw)                
+                try:
+                    self._logger.debug("_attach_child_backend: layout.count before add = %s", self._layout.count())
+                except Exception:
+                    pass
+                try:
+                    # Debug info to help diagnose invisible children
+                    try:
+                        self._logger.debug("_attach_child_backend: attaching widget type=%s parent=%s visible=%s sizeHint=%s",
+                                           type(cw), getattr(cw, 'parent', lambda: None)(), getattr(cw, 'isVisible', lambda: False)(), getattr(cw, 'sizeHint', lambda: None)())
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                try:
+                    # Ensure the widget is parented to our container before adding
+                    try:
+                        cw.setParent(self._backend_widget)
+                    except Exception:
+                        pass
+                    self._layout.addWidget(cw)
+                    try:
+                        # If using QStackedLayout, show the new widget as current
+                        try:
+                            self._layout.setCurrentWidget(cw)
+                        except Exception:
+                            try:
+                                # fallback to setCurrentIndex if available
+                                idx = self._layout.indexOf(cw)
+                                if idx is not None and idx >= 0:
+                                    try:
+                                        self._layout.setCurrentIndex(idx)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                except Exception:
+                    # fallback: try remove any previous parent then add
+                    try:
+                        try:
+                            cw.setParent(None)
+                        except Exception:
+                            pass
+                        self._layout.addWidget(cw)
+                    except Exception:
+                        self._logger.exception("_attach_child_backend: addWidget fallback failed")
+                # Encourage the child to expand so content becomes visible
+                # Encourage the child to expand so content becomes visible
+                try:
+                    sp_cw = cw.sizePolicy()
+                    try:
+                        sp_cw.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                        sp_cw.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                    except Exception:
+                        try:
+                            sp_cw.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+                            sp_cw.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
+                        except Exception:
+                            pass
+                    cw.setSizePolicy(sp_cw)
+                except Exception:
+                    pass
+                try:
+                    # Ensure the single child gets stretch in the layout (stacked ignores stretch but keep for safety)
+                    try:
+                        self._layout.setStretch(0, 1)
+                    except Exception:
+                        pass
+                    try:
+                        self._logger.debug("_attach_child_backend: layout.count after add = %s currentWidget=%s", self._layout.count(), getattr(self._layout, 'currentWidget', lambda: None)())
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                try:
+                    cw.show()
+                    try:
+                        cw.raise_()
+                    except Exception:
+                        pass
+                    try:
+                        cw.updateGeometry()
+                    except Exception:
+                        pass
+                    # If sizeHint is empty, give a small visible minimum so layout doesn't collapse
+                    try:
+                        sh = cw.sizeHint()
+                        if sh is not None and (sh.width() == 0 or sh.height() == 0):
+                            try:
+                                mh = max(24, sh.height()) if hasattr(sh, 'height') else 24
+                                mw = max(24, sh.width()) if hasattr(sh, 'width') else 24
+                                cw.setMinimumSize(mw, mh)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
         except Exception:
             self._logger.exception("_attach_child_backend failed")
             pass
@@ -172,24 +288,58 @@ class YReplacePointQt(YSingleChildContainerWidget):
         the current child's backend widget.
         """
         if not (self._backend_widget and self._layout and self.child()):
-            self._logger.debug("showChild: no backend/layout/child to show")
-            return
+            self._logger.debug("showChild called but no backend or no child to attach")
+            return        
         try:
             # Reuse the attach helper
-            #self._attach_child_backend()
             # Force a dialog layout recalculation and redraw, similar to libyui's recalcLayout.
             try:
                 dlg = self.findDialog()
                 if dlg is not None:
                     qwin = getattr(dlg, "_qwidget", None)
                     if qwin:
+                        # Trigger local layout updates first
+                        try:
+                            if self._layout is not None:
+                                self._layout.invalidate()
+                                try:
+                                    self._layout.activate()
+                                except Exception:
+                                    pass
+                            if self._backend_widget is not None:
+                                self._backend_widget.updateGeometry()
+                                self._backend_widget.setVisible(True)
+                                self._backend_widget.update()
+                        except Exception:
+                            pass
                         try:
                             qwin.update()
-                            self.child().get_backend_widget().show()
+                            try:
+                                ch = self.child()
+                                if ch is not None:
+                                    cw = ch.get_backend_widget()
+                                    if cw:
+                                        cw.show()
+                            except Exception:
+                                pass
                             
                             #qwin.repaint()
                         except Exception:
                             self._logger.exception("showChild: repaint failed")
+                            pass
+                        # Activate the dialog's layout if present
+                        try:
+                            lay = qwin.layout()
+                            if lay is not None:
+                                try:
+                                    lay.invalidate()
+                                except Exception:
+                                    pass
+                                try:
+                                    lay.activate()
+                                except Exception:
+                                    pass
+                        except Exception:
                             pass
                         try:
                             qwin.adjustSize()
@@ -199,7 +349,10 @@ class YReplacePointQt(YSingleChildContainerWidget):
                         try:
                             app = QtWidgets.QApplication.instance()
                             if app:
-                                app.processEvents()
+                                try:
+                                    app.processEvents(QtCore.QEventLoop.AllEvents)
+                                except Exception:
+                                    app.processEvents()
                         except Exception:
                             self._logger.exception("showChild: processEvents failed")
                             pass
@@ -222,11 +375,30 @@ class YReplacePointQt(YSingleChildContainerWidget):
             # Clear backend layout
             if self._layout is not None:
                 try:
+                    # Properly remove and hide widgets so layout recalculates
                     while self._layout.count():
                         it = self._layout.takeAt(0)
                         w = it.widget() if it else None
                         if w:
-                            w.setParent(None)
+                            try:
+                                try:
+                                    self._layout.removeWidget(w)
+                                except Exception:
+                                    pass
+                                try:
+                                    w.hide()
+                                except Exception:
+                                    pass
+                                try:
+                                    w.setParent(None)
+                                except Exception:
+                                    pass
+                                try:
+                                    w.update()
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
                 except Exception:
                     pass
             # Clear model children

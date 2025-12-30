@@ -9,7 +9,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore
 import logging
 from ...yui_common import *
 
@@ -87,5 +87,60 @@ class YVBoxQt(YWidget):
                     c.setEnabled(enabled)
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+    def addChild(self, child):
+        """Attach child's backend widget to this VBox when added at runtime."""
+        super().addChild(child)
+        try:
+            if getattr(self, "_backend_widget", None) is None:
+                return
+
+            def _deferred_attach():
+                try:
+                    widget = child.get_backend_widget()
+                    expand = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
+                    try:
+                        if expand == 1:
+                            sp = widget.sizePolicy()
+                            try:
+                                sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                            except Exception:
+                                try:
+                                    sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
+                                except Exception:
+                                    pass
+                            widget.setSizePolicy(sp)
+                    except Exception:
+                        pass
+                    try:
+                        lay = self._backend_widget.layout()
+                        if lay is None:
+                            lay = QtWidgets.QVBoxLayout(self._backend_widget)
+                            self._backend_widget.setLayout(lay)
+                        lay.addWidget(widget, stretch=expand)
+                        try:
+                            widget.show()
+                        except Exception:
+                            pass
+                        try:
+                            widget.updateGeometry()
+                        except Exception:
+                            pass
+                    except Exception:
+                        try:
+                            self._logger.exception("YVBoxQt.addChild: failed to attach child")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            # Defer attach to next event loop iteration so child's __init__ can complete
+            try:
+                QtCore.QTimer.singleShot(0, _deferred_attach)
+            except Exception:
+                # fallback: attach immediately
+                _deferred_attach()
         except Exception:
             pass
