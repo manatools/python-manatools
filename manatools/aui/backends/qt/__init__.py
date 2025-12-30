@@ -16,6 +16,7 @@ from .radiobuttonqt import YRadioButtonQt
 from .tableqt import YTableQt
 from .richtextqt import YRichTextQt
 from .menubarqt import YMenuBarQt
+from .replacepointqt import YReplacePointQt
 
 
 __all__ = [
@@ -37,5 +38,6 @@ __all__ = [
     "YTableQt",
     "YRichTextQt",
     "YMenuBarQt",
+    "YReplacePointQt",
     # ...
 ]

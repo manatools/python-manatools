@@ -234,3 +234,7 @@ class YWidgetFactoryQt:
     def createMenuBar(self, parent):
         """Create a MenuBar widget (Qt backend)."""
         return YMenuBarQt(parent)
+
+    def createReplacePoint(self, parent):
+        """Create a ReplacePoint widget (Qt backend)."""
+        return YReplacePointQt(parent)
