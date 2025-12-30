@@ -259,6 +259,10 @@ class YWidgetFactoryGtk:
         from .backends.gtk.tablegtk import YTableGtk
         return YTableGtk(parent, header, multiSelection)
 
+    def createReplacePoint(self, parent):
+        """Create a ReplacePoint widget (GTK backend)."""
+        return YReplacePointGtk(parent)
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)

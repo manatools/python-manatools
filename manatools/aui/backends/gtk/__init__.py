@@ -16,6 +16,7 @@ from .radiobuttongtk import YRadioButtonGtk
 from .tablegtk import YTableGtk
 from .richtextgtk import YRichTextGtk
 from .menubargtk import YMenuBarGtk
+from .replacepointgtk import YReplacePointGtk
 
 __all__ = [
     "YDialogGtk",
@@ -36,5 +37,6 @@ __all__ = [
     "YTableGtk",
     "YRichTextGtk",
     "YMenuBarGtk",
+    "YReplacePointGtk",
     # ...
 ]
