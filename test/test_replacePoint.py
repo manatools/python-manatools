@@ -7,14 +7,20 @@ import logging
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Basic logging setup
-logger = logging.getLogger("manatools.test.replacepoint")
-if not logging.getLogger().handlers:
-    h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
-    logging.getLogger().addHandler(h)
-    logging.getLogger().setLevel(logging.INFO)
-    logger.setLevel(logging.INFO)
+try:
+    log_name = os.path.splitext(os.path.basename(__file__))[0] + '.log'
+    logFormatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s')
+    root_logger = logging.getLogger()
+    fileHandler = logging.FileHandler(log_name, mode='w')
+    fileHandler.setFormatter(logFormatter)
+    root_logger.addHandler(fileHandler)
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    root_logger.addHandler(consoleHandler)
+    consoleHandler.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
+except Exception as _e:
+    logging.getLogger().exception("Failed to configure file logger: %s", _e)
 
 def test_replace_point(backend_name=None):
     """Interactive test for ReplacePoint widget across backends.
@@ -24,10 +30,10 @@ def test_replace_point(backend_name=None):
     - Replaces it at runtime using deleteChildren() and showChild()
     """
     if backend_name:
-        logger.info("Setting backend to: %s", backend_name)
+        root_logger.info("Setting backend to: %s", backend_name)
         os.environ['YUI_BACKEND'] = backend_name
     else:
-        logger.info("Using auto-detection")
+        root_logger.info("Using auto-detection")
     try:
         from manatools.aui.yui import YUI, YUI_ui 
         import manatools.aui.yui_common as yui
@@ -37,12 +43,12 @@ def test_replace_point(backend_name=None):
         YUI._backend = None
 
         backend = YUI.backend()
-        logger.info("Using backend: %s", backend.value)
+        root_logger.info("Using backend: %s", backend.value)
 
         ui = YUI_ui()
         factory = ui.widgetFactory()
 
-        ui.application().setApplicationTitle("Test ReplacePoint")
+        ui.application().setApplicationTitle(f"Test {backend.value} ReplacePoint")
         dialog = factory.createPopupDialog()
         mainVbox = factory.createVBox(dialog)
         frame = factory.createFrame(mainVbox, "Replace Point here")
@@ -51,9 +57,15 @@ def test_replace_point(backend_name=None):
 
         # Initial child layout
         vbox1 = factory.createVBox(rp)
+        # hint: allow vertical stretch to avoid collapsed area in some backends
+        import manatools.aui.yui_common as yui
+        try:
+            vbox1.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
         label1 = factory.createLabel(vbox1, "Initial child layout")
         value_btn1 = factory.createPushButton(vbox1, "Value 1")
-        rp.showChild()
+        #rp.showChild()
 
         hbox = factory.createHBox(mainVbox)
         replace_button = factory.createPushButton(hbox, "Replace child")
@@ -70,7 +82,7 @@ def test_replace_point(backend_name=None):
             elif typ == yui.YEventType.WidgetEvent:
                 wdg = event.widget()
                 try:
-                    logger.info("WidgetEvent from: %s", getattr(wdg, "widgetClass", lambda: "?")())
+                    root_logger.info("WidgetEvent from: %s", getattr(wdg, "widgetClass", lambda: "?")())
                 except Exception:
                     pass
                 if wdg == close_button:
@@ -79,20 +91,24 @@ def test_replace_point(backend_name=None):
                 elif wdg == replace_button:
                     # Replace the child content dynamically
                     n_call = (n_call + 1) % 100
-                    logger.info("Replacing child layout iteration=%d", n_call)
+                    root_logger.info("Replacing child layout iteration=%d", n_call)
                     rp.deleteChildren()
                     vbox2 = factory.createVBox(rp)
+                    try:
+                        vbox2.setStretchable(yui.YUIDimension.YD_VERT, True)
+                    except Exception:
+                        pass
                     label2 = factory.createLabel(vbox2, f"Replaced child layout ({n_call})")
                     value_btn2 = factory.createPushButton(vbox2, f"Value ({n_call})")
                     rp.showChild()
                 elif wdg == value_btn1:
                     # no-op; just ensure button works
-                    logger.info("Value 1 clicked")
+                    root_logger.info("Value 1 clicked")
                 else:
                     # Handle events from new child too
-                    logger.debug("Unhandled widget event")
+                    root_logger.debug("Unhandled widget event")
     except Exception as e:
-        logger.error("Error testing ReplacePoint with backend %s: %s", backend_name, e, exc_info=True)
+        root_logger.error("Error testing ReplacePoint with backend %s: %s", backend_name, e, exc_info=True)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
