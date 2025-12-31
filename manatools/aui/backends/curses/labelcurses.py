@@ -98,7 +98,7 @@ class YLabelCurses(YWidget):
                     if para == "":
                         total += 1
                     else:
-                        wrapped = textwrap.wrap(para, width=max(1, width-1), break_long_words=True, break_on_hyphens=False) or [""]
+                        wrapped = textwrap.wrap(para, width=max(1, width), break_long_words=True, break_on_hyphens=False) or [""]
                         total += len(wrapped)
                 return max(1, total)
             else:
@@ -144,7 +144,7 @@ class YLabelCurses(YWidget):
                         if para == "":
                             lines.append("")
                         else:
-                            wrapped_para = textwrap.wrap(para, width=max(1, width-1), break_long_words=True, break_on_hyphens=False) or [""]
+                            wrapped_para = textwrap.wrap(para, width=max(1, width), break_long_words=True, break_on_hyphens=False) or [""]
                             lines.extend(wrapped_para)
                 else:
                     # No auto-wrap: respect explicit newlines but do not reflow paragraphs
@@ -157,7 +157,7 @@ class YLabelCurses(YWidget):
                 max_lines = max(1, height)
                 for i, line in enumerate(lines[:max_lines]):
                     try:
-                        window.addstr(y + i, x, line[:max(0, width-1)], attr)
+                        window.addstr(y + i, x, line[:max(0, width)], attr)
                     except curses.error:
                         pass
         except curses.error as e:
