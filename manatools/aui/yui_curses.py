@@ -155,6 +155,8 @@ class YWidgetFactoryCurses:
     
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldCurses(parent, label, password_mode)
+    def createIntField(self, parent, label, minVal, maxVal, initialVal):
+        return YIntFieldCurses(parent, label, minVal, maxVal, initialVal)
     
     def createPushButton(self, parent, label):
         return YPushButtonCurses(parent, label)
