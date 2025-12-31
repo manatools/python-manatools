@@ -46,6 +46,20 @@ class YMultiLineEditCurses(YWidget):
     def widgetClass(self):
         return "YMultiLineEdit"
 
+    def minWidth(self):
+        """Return minimal preferred width in columns when not horizontally stretchable.
+
+        Heuristic: about 20 characters plus 1 column for a scrollbar when needed.
+        Containers like `YHBoxCurses` use this to allocate space for non-stretchable
+        children.
+        """
+        try:
+            desired_chars = 20
+            # reserve one column for potential scrollbar
+            return int(desired_chars + 1)
+        except Exception:
+            return 21
+
     def value(self):
         try:
             return "\n".join(self._lines)
@@ -158,9 +172,13 @@ class YMultiLineEditCurses(YWidget):
             if content_h <= 0:
                 return
 
+            # Compute effective width respecting horizontal stretch
+            desired_w = self.minWidth()
+            eff_width = width if self.stretchable(YUIDimension.YD_HORIZ) else min(width, desired_w)
+
             # Reserve 1 column for scrollbar if needed
             bar_w = 1 if len(self._lines) > content_h else 0
-            content_w = max(1, width - bar_w)
+            content_w = max(1, eff_width - bar_w)
 
             # Ensure scroll offset keeps cursor visible
             try:
