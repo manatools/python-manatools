@@ -20,7 +20,7 @@ Missing Widgets comparing libyui original factory:
     [X] YProgressBar
     [X] YRichText
     [ ] YMultiLineEdit
-    [ ] YIntField
+    [X] YIntField
     [X] YMenuBar
     [ ] YSpacing (detailed variants: createHStretch/createVStretch/createHSpacing/createVSpacing/createSpacing)
     [X] YAlignment helpers (createLeft/createRight/createTop/createBottom/createHCenter/createVCenter/createHVCenter)
