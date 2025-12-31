@@ -1,3 +1,14 @@
+# vim: set fileencoding=utf-8 :
+# vim: set et ts=4 sw=4:
+'''
+Python manatools.aui.backends.curses contains all curses backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.curses
+'''
 import curses
 import logging
 from ...yui_common import *
@@ -21,6 +32,9 @@ class YIntFieldCurses(YWidget):
         self._height = 2 if bool(self._label) else 1
         self._focused = False
         self._can_focus = True
+        # editing buffer when user types numbers
+        self._editing = False
+        self._edit_buffer = ""
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and _mod_logger.handlers:
             for h in _mod_logger.handlers:
@@ -42,6 +56,12 @@ class YIntFieldCurses(YWidget):
         if v > self._max:
             v = self._max
         self._value = v
+        # reset edit buffer when value programmatically changed
+        try:
+            self._editing = False
+            self._edit_buffer = ""
+        except Exception:
+            pass
 
     def label(self):
         return self._label
@@ -99,7 +119,17 @@ class YIntFieldCurses(YWidget):
                 up_ch = '^'
                 down_ch = 'v'
 
-            num_s = str(self._value)
+            # hide arrows when at limits: show space to preserve layout
+            try:
+                if self._value >= self._max:
+                    up_ch = ' '
+                if self._value <= self._min:
+                    down_ch = ' '
+            except Exception:
+                pass
+
+            # if editing, show the edit buffer; otherwise show committed value
+            num_s = self._edit_buffer if getattr(self, '_editing', False) and self._edit_buffer != None and self._edit_buffer != "" else str(self._value)
             inner_width = max(1, ctrl_width - 4)
             if len(num_s) > inner_width:
                 num_s = num_s[-inner_width:]
@@ -130,37 +160,114 @@ class YIntFieldCurses(YWidget):
         """Handle keys for focusable spin-like behaviour: up/down to change value."""
         if not getattr(self, '_focused', False) or not self.isEnabled():
             return False
-
-        changed = False
         try:
+            # If currently editing, handle editing keys
+            if getattr(self, '_editing', False):
+                # Enter -> commit
+                if key == ord('\n') or key == 10 or key == 13:
+                    try:
+                        val = int(self._edit_buffer)
+                        # clamp
+                        if val < self._min:
+                            val = self._min
+                        if val > self._max:
+                            val = self._max
+                        old = self._value
+                        self._value = val
+                        self._editing = False
+                        self._edit_buffer = ""
+                        # redraw
+                        dlg = self.findDialog()
+                        if dlg is not None:
+                            try:
+                                dlg._last_draw_time = 0
+                            except Exception:
+                                pass
+                            try:
+                                if self.notify():
+                                    dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+                            except Exception:
+                                pass
+                    except Exception:
+                        # invalid buffer: cancel edit and keep previous value
+                        self._editing = False
+                        self._edit_buffer = ""
+                    return True
+                # ESC -> cancel edit
+                if key == 27:
+                    self._editing = False
+                    self._edit_buffer = ""
+                    return True
+                # Backspace/delete
+                if key in (curses.KEY_BACKSPACE, 127, 8):
+                    try:
+                        if self._edit_buffer:
+                            self._edit_buffer = self._edit_buffer[:-1]
+                    except Exception:
+                        pass
+                    return True
+                # digits or leading minus
+                if 48 <= key <= 57 or key == ord('-'):
+                    ch = chr(key)
+                    try:
+                        # prevent multiple leading zeros weirdness; accept minus only at start
+                        if ch == '-' and self._edit_buffer == "":
+                            self._edit_buffer = ch
+                        elif ch.isdigit():
+                            self._edit_buffer += ch
+                        # else ignore
+                    except Exception:
+                        pass
+                    return True
+                # ignore other keys while editing
+                return False
+
+            # Not editing: handle navigation and start-edit keys
+            # Arrow up/down adjust value
             if key == curses.KEY_UP:
                 if self._value < self._max:
                     self._value += 1
-                    changed = True
-            elif key == curses.KEY_DOWN:
+                    # notify and redraw
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        try:
+                            dlg._last_draw_time = 0
+                        except Exception:
+                            pass
+                        try:
+                            if self.notify():
+                                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+                        except Exception:
+                            pass
+                return True
+            if key == curses.KEY_DOWN:
                 if self._value > self._min:
                     self._value -= 1
-                    changed = True
-            else:
-                return False
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        try:
+                            dlg._last_draw_time = 0
+                        except Exception:
+                            pass
+                        try:
+                            if self.notify():
+                                dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+                        except Exception:
+                            pass
+                return True
+
+            # Start editing on digit or minus
+            if 48 <= key <= 57 or key == ord('-'):
+                try:
+                    ch = chr(key)
+                    self._editing = True
+                    self._edit_buffer = ch if ch != '+' else ''
+                except Exception:
+                    self._editing = True
+                    self._edit_buffer = ''
+                return True
+
         except Exception:
             return False
 
-        if changed:
-            # Force dialog redraw next loop
-            dlg = self.findDialog()
-            if dlg is not None:
-                try:
-                    dlg._last_draw_time = 0
-                except Exception:
-                    pass
-                # Emit value changed event if notify enabled
-                try:
-                    if self.notify():
-                        dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-                except Exception:
-                    try:
-                        self._logger.debug("Failed to post ValueChanged event")
-                    except Exception:
-                        pass
-        return True
+        return False
