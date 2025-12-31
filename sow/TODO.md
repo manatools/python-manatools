@@ -24,7 +24,7 @@ Missing Widgets comparing libyui original factory:
     [X] YMenuBar
     [ ] YSpacing (detailed variants: createHStretch/createVStretch/createHSpacing/createVSpacing/createSpacing)
     [X] YAlignment helpers (createLeft/createRight/createTop/createBottom/createHCenter/createVCenter/createHVCenter)
-    [ ] YReplacePoint
+    [X] YReplacePoint
     [X] YRadioButton
     [ ] YWizard
     [ ] YBusyIndicator
