@@ -17,6 +17,7 @@ from .tableqt import YTableQt
 from .richtextqt import YRichTextQt
 from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
+from .intfieldqt import YIntFieldQt
 
 
 __all__ = [
@@ -39,5 +40,6 @@ __all__ = [
     "YRichTextQt",
     "YMenuBarQt",
     "YReplacePointQt",
+    "YIntFieldQt",
     # ...
 ]

@@ -162,6 +162,9 @@ class YWidgetFactoryQt:
     
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldQt(parent, label, password_mode)
+
+    def createIntField(self, parent, label, minVal, maxVal, initialVal):
+        return YIntFieldQt(parent, label, minVal, maxVal, initialVal)
     
     def createCheckBox(self, parent, label, is_checked=False):
         return YCheckBoxQt(parent, label, is_checked)
