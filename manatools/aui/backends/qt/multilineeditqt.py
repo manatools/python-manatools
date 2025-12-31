@@ -122,101 +122,93 @@ class YMultiLineEditQt(YWidget):
             super().setStretchable(dim, new_stretch)
         except Exception:
             pass
+        # Re-apply policy so changes take effect immediately
         try:
-            # If vertical stretch disabled, ensure minimal height equals default visible lines
-            if dim == YUIDimension.YD_VERT:
-                if not self.stretchable(YUIDimension.YD_VERT):
-                    self._height = self._default_visible_lines + (1 if bool(self._label) else 0)
-                    # apply fixed widget size (approximate width for 20 chars)
-                    try:
-                        if self._qwidget is not None:
-                            fm = self._qtext.fontMetrics()
-                            char_w = fm.horizontalAdvance('M') if fm is not None else 8
-                            line_h = fm.lineSpacing() if fm is not None else 16
-                            desired_chars = 20
-                            w_px = int(char_w * desired_chars) + 12
-                            h_px = int(line_h * self._default_visible_lines) + self._qlbl.sizeHint().height() + 8
-                            self._qwidget.setFixedSize(w_px, h_px)
-                            self._qtext.setFixedHeight(int(line_h * self._default_visible_lines))
-                            self._qwidget.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                    except Exception:
-                        pass
-                else:
-                    # make widget expandable
-                    try:
-                        if self._qwidget is not None:
-                            try:
-                                self._qwidget.setMaximumSize(QtCore.QSize(16777215, 16777215))
-                            except Exception:
-                                pass
-                            try:
-                                self._qwidget.setMinimumSize(QtCore.QSize(0, 0))
-                            except Exception:
-                                pass
-                            self._qwidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-                    except Exception:
-                        pass
+            self._apply_stretch_policy()
         except Exception:
             pass
 
     def _apply_stretch_policy(self):
-        """Apply current stretchable flags to the created Qt widgets.
+        """Apply current stretchable flags per axis without locking both dimensions."""
+        if self._qwidget is None:
+            return
 
-        When vertical/horizontal stretch is disabled we enforce a fixed size
-        approximating 3 lines x 20 characters; when enabled we allow expanding.
-        """
+        # Current flags
+        horiz = bool(self.stretchable(YUIDimension.YD_HORIZ))
+        vert = bool(self.stretchable(YUIDimension.YD_VERT))
+
+        # Compute approximate pixel sizes (fallback to constants)
         try:
-            if self._qwidget is None:
-                return
-            # horizontal and vertical checks
-            horiz = self.stretchable(YUIDimension.YD_HORIZ)
-            vert = self.stretchable(YUIDimension.YD_VERT)
-            if not vert or not horiz:
-                # compute approximate pixel sizes
+            fm = self._qtext.fontMetrics() if hasattr(self, '_qtext') and self._qtext is not None else None
+            char_w = fm.horizontalAdvance('M') if fm is not None else 8
+            line_h = fm.lineSpacing() if fm is not None else 16
+        except Exception:
+            char_w = 8
+            line_h = 16
+
+        desired_chars = 20
+        try:
+            qlabel_h = self._qlbl.sizeHint().height() if hasattr(self, '_qlbl') and self._qlbl is not None else 0
+        except Exception:
+            qlabel_h = 0
+
+        w_px = int(char_w * desired_chars) + 12
+        h_px = int(line_h * max(1, self._default_visible_lines)) + qlabel_h + 8
+
+        # Set per-axis size policy
+        try:
+            self._qwidget.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding if horiz else QtWidgets.QSizePolicy.Fixed,
+                QtWidgets.QSizePolicy.Expanding if vert else QtWidgets.QSizePolicy.Fixed,
+            )
+        except Exception:
+            pass
+
+        # Apply horizontal constraint independently
+        try:
+            if not horiz:
                 try:
-                    fm = self._qtext.fontMetrics()
-                    char_w = fm.horizontalAdvance('M') if fm is not None else 8
-                    line_h = fm.lineSpacing() if fm is not None else 16
-                except Exception:
-                    char_w = 8
-                    line_h = 16
-                desired_chars = 20
-                w_px = int(char_w * desired_chars) + 12
-                h_px = int(line_h * self._default_visible_lines) + (self._qlbl.sizeHint().height() if hasattr(self, '_qlbl') else 0) + 8
-                try:
-                    self._qwidget.setFixedSize(w_px, h_px)
+                    self._qwidget.setFixedWidth(w_px)
                 except Exception:
                     try:
-                        self._qwidget.setMaximumSize(QtCore.QSize(w_px, h_px))
+                        self._qwidget.setMaximumWidth(w_px)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self._qwidget.setMinimumWidth(0)
+                    self._qwidget.setMaximumWidth(16777215)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Apply vertical constraint independently
+        try:
+            if not vert:
+                try:
+                    self._qwidget.setFixedHeight(h_px)
+                except Exception:
+                    try:
+                        self._qwidget.setMaximumHeight(h_px)
                     except Exception:
                         pass
                 try:
-                    self._qtext.setFixedHeight(int(line_h * self._default_visible_lines))
-                except Exception:
-                    pass
-                try:
-                    self._qwidget.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                    if hasattr(self, '_qtext') and self._qtext is not None:
+                        self._qtext.setFixedHeight(int(line_h * max(1, self._default_visible_lines)))
                 except Exception:
                     pass
             else:
                 try:
-                    self._qwidget.setMaximumSize(QtCore.QSize(16777215, 16777215))
-                except Exception:
-                    pass
-                try:
-                    self._qwidget.setMinimumSize(QtCore.QSize(0, 0))
-                except Exception:
-                    pass
-                try:
-                    self._qwidget.setSizePolicy(QtWidgets.QSizePolicy.Expanding if horiz else QtWidgets.QSizePolicy.Fixed, 
-                                                QtWidgets.QSizePolicy.Expanding if vert else QtWidgets.QSizePolicy.Fixed)
+                    self._qwidget.setMinimumHeight(0)
+                    self._qwidget.setMaximumHeight(16777215)
+                    if hasattr(self, '_qtext') and self._qtext is not None:
+                        self._qtext.setMinimumHeight(0)
+                        self._qtext.setMaximumHeight(16777215)
                 except Exception:
                     pass
         except Exception:
-            try:
-                self._logger.exception("_apply_stretch_policy failed")
-            except Exception:
-                pass
+            pass
 
     def _create_backend_widget(self):
         try:
