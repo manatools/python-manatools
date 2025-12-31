@@ -53,22 +53,27 @@ def test_intfield(backend_name=None):
         v = factory.createVBox(dlg)
 
         # Left column with intfields
-        h = factory.createHBox(v)
-        col1 = factory.createVBox(h)
-        col2 = factory.createVBox(h)
+        row1 = factory.createHBox(v)
+        row2 = factory.createHBox(v)
+        
+        int1 = factory.createIntField(row1, "First", 0, 100, 10)
+        int2 = factory.createIntField(row2, "Second", -50, 50, 0)
 
-        int1 = factory.createIntField(col1, "First", 0, 100, 10)
-        int2 = factory.createIntField(col1, "Second", -50, 50, 0)
-
-        lab1 = factory.createLabel(col2, "Value 1: 10")
-        lab2 = factory.createLabel(col2, "Value 2: 0")
+        lab1 = factory.createLabel(factory.createVCenter(row1), "Value 1: 10")
+        lab2 = factory.createLabel(factory.createVCenter(row2), "Value 2: 0")
 
         ok = factory.createPushButton(v, "OK")
 
         try:
-            # make int fields vertically stretchable if supported
-            int1.setStretchable(yui.YUIDimension.YD_VERT, True)
-            int2.setStretchable(yui.YUIDimension.YD_VERT, True)
+            # make int fields not vertically stretchable
+            int1.setStretchable(yui.YUIDimension.YD_VERT, False)
+            int2.setStretchable(yui.YUIDimension.YD_VERT, False)
+            int1.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            int2.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            #lab1.setStretchable(yui.YUIDimension.YD_VERT, False)
+            #lab2.setStretchable(yui.YUIDimension.YD_VERT, False)
+            #lab1.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            #lab2.setStretchable(yui.YUIDimension.YD_HORIZ, False)
         except Exception:
             pass
 
