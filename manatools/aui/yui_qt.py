@@ -163,6 +163,9 @@ class YWidgetFactoryQt:
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldQt(parent, label, password_mode)
 
+    def createMultiLineEdit(self, parent, label):
+        return YMultiLineEditQt(parent, label)
+
     def createIntField(self, parent, label, minVal, maxVal, initialVal):
         return YIntFieldQt(parent, label, minVal, maxVal, initialVal)
     

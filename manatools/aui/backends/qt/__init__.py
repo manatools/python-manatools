@@ -18,6 +18,7 @@ from .richtextqt import YRichTextQt
 from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
 from .intfieldqt import YIntFieldQt
+from .multilineeditqt import YMultiLineEditQt
 
 
 __all__ = [
@@ -41,5 +42,6 @@ __all__ = [
     "YMenuBarQt",
     "YReplacePointQt",
     "YIntFieldQt",
+    "YMultiLineEditQt",
     # ...
 ]
