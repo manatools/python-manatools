@@ -207,6 +207,8 @@ class YWidgetFactoryGtk:
     
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldGtk(parent, label, password_mode)
+    def createIntField(self, parent, label, minVal, maxVal, initialVal):
+        return YIntFieldGtk(parent, label, minVal, maxVal, initialVal)
     
     def createCheckBox(self, parent, label, is_checked=False):
         return YCheckBoxGtk(parent, label, is_checked)

@@ -17,6 +17,7 @@ from .tablegtk import YTableGtk
 from .richtextgtk import YRichTextGtk
 from .menubargtk import YMenuBarGtk
 from .replacepointgtk import YReplacePointGtk
+from .intfieldgtk import YIntFieldGtk
 
 __all__ = [
     "YDialogGtk",
@@ -38,5 +39,6 @@ __all__ = [
     "YRichTextGtk",
     "YMenuBarGtk",
     "YReplacePointGtk",
+    "YIntFieldGtk",
     # ...
 ]
