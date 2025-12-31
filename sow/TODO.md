@@ -60,7 +60,7 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
 
 To check/review:
     how to manage YEvents [X] and YItems [X] (verify selection attirbute).
-    [ ] YInputField password mode
+    [X] YInputField password mode
     [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
     [ ] managing shortcuts
 
