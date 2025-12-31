@@ -112,6 +112,11 @@ class YLabelGtk(YWidget):
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+        try:
+            # apply initial size policy according to any stretch hints
+            self._apply_size_policy()
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the label widget backend."""
@@ -121,5 +126,40 @@ class YLabelGtk(YWidget):
                     self._backend_widget.set_sensitive(enabled)
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+    def _apply_size_policy(self):
+        """Apply `hexpand`/`vexpand` on the Gtk.Label according to model stretchable hints."""
+        try:
+            horiz = bool(self.stretchable(YUIDimension.YD_HORIZ))
+        except Exception:
+            horiz = False
+        try:
+            vert = bool(self.stretchable(YUIDimension.YD_VERT))
+        except Exception:
+            vert = False
+        try:
+            if getattr(self, '_backend_widget', None) is not None:
+                try:
+                    if hasattr(self._backend_widget, 'set_hexpand'):
+                        self._backend_widget.set_hexpand(horiz)
+                except Exception:
+                    pass
+                try:
+                    if hasattr(self._backend_widget, 'set_vexpand'):
+                        self._backend_widget.set_vexpand(vert)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def setStretchable(self, dim, new_stretch):
+        try:
+            super().setStretchable(dim, new_stretch)
+        except Exception:
+            pass
+        try:
+            self._apply_size_policy()
         except Exception:
             pass

@@ -92,6 +92,11 @@ class YLabelQt(YWidget):
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+        try:
+            # apply initial size policy according to any stretch hints
+            self._apply_size_policy()
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QLabel backend."""
@@ -101,5 +106,50 @@ class YLabelQt(YWidget):
                     self._backend_widget.setEnabled(bool(enabled))
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+    def _apply_size_policy(self):
+        """Apply Qt size policy based on `stretchable` hints."""
+        try:
+            try:
+                horiz = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Preferred
+            except Exception:
+                try:
+                    horiz = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Preferred
+                except Exception:
+                    horiz = QtWidgets.QSizePolicy.Preferred
+            try:
+                vert = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Preferred
+            except Exception:
+                try:
+                    vert = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Preferred
+                except Exception:
+                    vert = QtWidgets.QSizePolicy.Preferred
+
+            if getattr(self, '_backend_widget', None) is not None:
+                try:
+                    sp = self._backend_widget.sizePolicy()
+                    try:
+                        sp.setHorizontalPolicy(horiz)
+                        sp.setVerticalPolicy(vert)
+                    except Exception:
+                        pass
+                    try:
+                        self._backend_widget.setSizePolicy(sp)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def setStretchable(self, dim, new_stretch):
+        try:
+            super().setStretchable(dim, new_stretch)
+        except Exception:
+            pass
+        try:
+            self._apply_size_policy()
         except Exception:
             pass
