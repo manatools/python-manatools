@@ -190,7 +190,7 @@ class YDialogCurses(YSingleChildContainerWidget):
                 self._draw_child_content(content_y, content_x, content_width, content_height)
             
             # Draw footer with instructions
-            footer_text = " TAB=Navigate | SPACE=Expand | ENTER=Select | F10/Q=Quit "
+            footer_text = " TAB=Navigate | SPACE=Expand | ENTER=Select | F10=Quit "
             footer_x = max(0, (width - len(footer_text)) // 2)
             if footer_x + len(footer_text) < width:
                 self._backend_widget.addstr(height - 1, footer_x, footer_text, curses.A_DIM)
@@ -340,7 +340,7 @@ class YDialogCurses(YSingleChildContainerWidget):
                     continue
 
                 # Global keys
-                if key == curses.KEY_F10 or key == ord('q') or key == ord('Q'):
+                if key == curses.KEY_F10:
                     self._post_event(YCancelEvent())
                     break
                 elif key == curses.KEY_RESIZE:
