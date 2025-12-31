@@ -35,7 +35,8 @@ class YInputFieldCurses(YWidget):
         self._cursor_pos = 0
         self._focused = False
         self._can_focus = True
-        self._height = 1
+        # one row for field + optional label row on top
+        self._height = 1 + (1 if bool(self._label) else 0)
         # per-instance logger
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
@@ -55,6 +56,13 @@ class YInputFieldCurses(YWidget):
     
     def label(self):
         return self._label
+    
+    def setLabel(self, label):
+        self._label = label
+        try:
+            self._height = 1 + (1 if bool(self._label) else 0)
+        except Exception:
+            pass
     
     def _create_backend_widget(self):
         try:
@@ -93,19 +101,20 @@ class YInputFieldCurses(YWidget):
 
     def _draw(self, window, y, x, width, height):
         try:
-            # Draw label
+            line = y
+            # Draw label on its own row above field
             if self._label:
-                label_text = self._label
-                if len(label_text) > width // 3:
-                    label_text = label_text[:width // 3]
-                lbl_attr = curses.A_BOLD if self._is_heading else curses.A_NORMAL
+                label_text = str(self._label)
+                lbl_attr = curses.A_BOLD if getattr(self, '_is_heading', False) else curses.A_NORMAL
                 if not self.isEnabled():
                     lbl_attr |= curses.A_DIM
-                window.addstr(y, x, label_text, lbl_attr)
-                x += len(label_text) + 1
-                width -= len(label_text) + 1
+                window.addstr(line, x, label_text[:max(0, width)], lbl_attr)
+                line += 1
 
-            if width <= 0:
+            # Effective width respecting horizontal stretch
+            desired_w = self.minWidth()
+            eff_width = width if self.stretchable(YUIDimension.YD_HORIZ) else min(width, desired_w)
+            if eff_width <= 0:
                 return
 
             # Prepare display value
@@ -115,12 +124,12 @@ class YInputFieldCurses(YWidget):
                 display_value = self._value
 
             # Handle scrolling for long values
-            if len(display_value) > width:
-                if self._cursor_pos >= width:
-                    start_pos = self._cursor_pos - width + 1
-                    display_value = display_value[start_pos:start_pos + width]
+            if len(display_value) > eff_width:
+                if self._cursor_pos >= eff_width:
+                    start_pos = self._cursor_pos - eff_width + 1
+                    display_value = display_value[start_pos:start_pos + eff_width]
                 else:
-                    display_value = display_value[:width]
+                    display_value = display_value[:eff_width]
 
             # Draw input field background
             if not self.isEnabled():
@@ -128,18 +137,18 @@ class YInputFieldCurses(YWidget):
             else:
                 attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
 
-            field_bg = ' ' * width
-            window.addstr(y, x, field_bg, attr)
+            field_bg = ' ' * eff_width
+            window.addstr(line, x, field_bg, attr)
 
             # Draw text
             if display_value:
-                window.addstr(y, x, display_value, attr)
+                window.addstr(line, x, display_value, attr)
 
             # Show cursor if focused and enabled
             if self._focused and self.isEnabled():
-                cursor_display_pos = min(self._cursor_pos, width - 1)
+                cursor_display_pos = min(self._cursor_pos, eff_width - 1)
                 if cursor_display_pos < len(display_value):
-                    window.chgat(y, x + cursor_display_pos, 1, curses.A_REVERSE | curses.A_BOLD)
+                    window.chgat(line, x + cursor_display_pos, 1, curses.A_REVERSE | curses.A_BOLD)
         except curses.error as e:
             try:
                 self._logger.error("_draw curses.error: %s", e, exc_info=True)
@@ -172,7 +181,27 @@ class YInputFieldCurses(YWidget):
         elif 32 <= key <= 126:  # Printable characters
             self._value = self._value[:self._cursor_pos] + chr(key) + self._value[self._cursor_pos:]
             self._cursor_pos += 1
+            # Post ValueChanged immediately
+            try:
+                dlg = self.findDialog()
+                if dlg is not None and self.notify():
+                    dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
+            except Exception:
+                pass
         else:
             handled = False
         
         return handled
+
+    def minWidth(self):
+        """Preferred minimal width in columns when not horizontally stretchable."""
+        try:
+            return 20
+        except Exception:
+            return 20
+
+    def _desired_height_for_width(self, width: int) -> int:
+        try:
+            return max(1, 1 + (1 if bool(self._label) else 0))
+        except Exception:
+            return 1
