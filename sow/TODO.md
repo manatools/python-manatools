@@ -35,6 +35,7 @@ Missing Widgets comparing libyui original factory:
     [ ] YSquash / createSquash
 
 Skipped widgets:
+
     [-] YMultiSelectionBox (implemented as YSelectionBox + multiselection enabled)
     [-] YPackageSelector (not ported)
     [-] YRadioButtonGroup (not ported)
