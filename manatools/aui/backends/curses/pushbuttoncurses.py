@@ -32,6 +32,7 @@ class YPushButtonCurses(YWidget):
         self._label = label
         self._focused = False
         self._can_focus = True
+        self._icon_name = None
         self._height = 1  # Fixed height - buttons are always one line
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
@@ -118,3 +119,10 @@ class YPushButtonCurses(YWidget):
                         _mod_logger.error("_handle_key post event error", exc_info=True)
             return True
         return False
+
+    def setIcon(self, icon_name: str):
+        """Store icon name for curses backend (no graphical icon support)."""
+        try:
+            self._icon_name = icon_name
+        except Exception:
+            pass

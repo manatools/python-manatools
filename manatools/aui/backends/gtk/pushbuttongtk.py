@@ -19,12 +19,14 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _resolve_icon, _resolve_gicon
 
 
 class YPushButtonGtk(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
         self._label = label
+        self._icon_name = None
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -43,6 +45,32 @@ class YPushButtonGtk(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Button(label=self._label)
+        # apply icon if previously set
+        try:
+            if getattr(self, "_icon_name", None):
+                try:
+                    img = _resolve_icon(self._icon_name)
+                except Exception:
+                    img = None
+                if img is not None:
+                    try:
+                        # Prefer set_icon if available
+                        try:
+                            self._backend_widget.set_icon(img.get_paintable())
+                        except Exception:
+                            # Fallback: set a composite child with image + label
+                            try:
+                                hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                                hb.append(img)
+                                lbl = Gtk.Label(label=self._label)
+                                hb.append(lbl)
+                                self._backend_widget.set_child(hb)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         # Prevent button from being stretched horizontally by default.
         try:
             self._backend_widget.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))            
@@ -84,3 +112,52 @@ class YPushButtonGtk(YWidget):
                     pass
         except Exception:
             pass
+
+    def setIcon(self, icon_name: str):
+        """Set/clear the icon for this pushbutton (icon_name may be theme name or path)."""
+        try:
+            self._icon_name = icon_name
+            if getattr(self, "_backend_widget", None) is None:
+                return
+            img = None
+            try:
+                img = _resolve_icon(icon_name)
+            except Exception:
+                img = None
+            if img is not None:
+                try:
+                    try:
+                        self._backend_widget.set_icon(img.get_paintable())
+                        return
+                    except Exception:
+                        # Fallback: set composite child with image + label
+                        try:
+                            hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                            hb.append(img)
+                            lbl = Gtk.Label(label=self._label)
+                            hb.append(lbl)
+                            self._backend_widget.set_child(hb)
+                            return
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            # If we reach here, clear any icon and ensure label is present
+            try:
+                # Reset to simple label-only button
+                try:
+                    self._backend_widget.set_label(self._label)
+                except Exception:
+                    try:
+                        # If set_label not available, set child to a label
+                        lbl = Gtk.Label(label=self._label)
+                        self._backend_widget.set_child(lbl)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception:
+            try:
+                self._logger.exception("setIcon failed")
+            except Exception:
+                pass

@@ -9,15 +9,17 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtGui
 import logging
 from ...yui_common import *
+from .commonqt import _resolve_icon
 
 
 class YPushButtonQt(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
         self._label = label
+        self._icon_name = None
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -33,6 +35,17 @@ class YPushButtonQt(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QPushButton(self._label)
+        # apply icon if previously set
+        try:
+            if getattr(self, "_icon_name", None):
+                ico = _resolve_icon(self._icon_name)
+                if ico is not None and not ico.isNull():
+                    try:
+                        self._backend_widget.setIcon(ico)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         # Set size policy to prevent unwanted expansion
         try:
             try:
@@ -82,5 +95,29 @@ class YPushButtonQt(YWidget):
             # fallback logging for now
             try:
                 self._logger.warning("Button clicked (no dialog found): %s", self._label)
+            except Exception:
+                pass
+
+    def setIcon(self, icon_name: str):
+        """Set/clear the icon for this pushbutton (icon_name may be theme name or path)."""
+        try:
+            self._icon_name = icon_name
+            if getattr(self, "_backend_widget", None) is None:
+                return
+            ico = _resolve_icon(icon_name)
+            if ico is not None and not ico.isNull():
+                try:
+                    self._backend_widget.setIcon(ico)
+                    return
+                except Exception:
+                    pass
+            # Clear icon if resolution failed
+            try:
+                self._backend_widget.setIcon(QtGui.QIcon())
+            except Exception:
+                pass
+        except Exception:
+            try:
+                self._logger.exception("setIcon failed")
             except Exception:
                 pass
