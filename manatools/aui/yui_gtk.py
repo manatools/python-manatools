@@ -267,6 +267,15 @@ class YWidgetFactoryGtk:
         """Create a ReplacePoint widget (GTK backend)."""
         return YReplacePointGtk(parent)
 
+    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size: float = 0.0):
+        """Create a Spacing/Stretch widget.
+
+        - `dim`: primary dimension for spacing (YUIDimension)
+        - `stretchable`: expand in primary dimension when True (minimum size = `size`)
+        - `size`: spacing size in pixels (device units)
+        """
+        return YSpacingGtk(parent, dim, stretchable, size)
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
