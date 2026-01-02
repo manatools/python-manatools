@@ -234,11 +234,12 @@ class YWidgetFactoryCurses:
         """Create a ReplacePoint widget (curses backend)."""
         return YReplacePointCurses(parent)
 
-    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size: float = 0.0):
+    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
         """Create a Spacing/Stretch widget.
 
         - `dim`: primary dimension for spacing (YUIDimension)
         - `stretchable`: expand in primary dimension when True (minimum size = `size`)
-        - `size`: spacing size in pixels, converted to character cells using 800x600→80x25 mapping
+        - `size_px`: spacing size in pixels (integer), converted to character cells
+            using 8 px/char horizontally and ~16 px/row vertically.
         """
-        return YSpacingCurses(parent, dim, stretchable, size)
+        return YSpacingCurses(parent, dim, stretchable, size_px)

@@ -16,24 +16,23 @@ __all__ = ["pixels_to_chars"]
 
 _logger = logging.getLogger("manatools.aui.curses.common")
 
-def pixels_to_chars(size_px: float, dim: YUIDimension) -> int:
-    """Convert a pixel size into character cells for curses.
+def pixels_to_chars(size_px: int, dim: YUIDimension) -> int:
+    """Convert a pixel size into terminal character cells.
 
-    Mapping rationale: libyui uses an abstract unit where a main window of
-    800x600 pixels corresponds to an 80x25 character window. We adopt the same
-    ratio: 10 px per column horizontally, 24 px per row vertically.
+    Horizontal (X): 1 character = 8 pixels (i.e., 1 pixel = 0.125 char).
+    Vertical (Y): assumed 1 character row ≈ 16 pixels (typical terminal font).
 
-    This conversion provides a uniform interpretation of the `size` argument
-    across Qt/GTK/curses backends.
+    The vertical ratio can be adjusted later if needed; this maps pixel sizes
+    to curses units uniformly with Qt/GTK which operate in pixels.
     """
     try:
-        px = max(0.0, float(size_px))
+        px = max(0, int(size_px))
     except Exception:
-        px = 0.0
+        px = 0
     if dim == YUIDimension.YD_HORIZ:
-        return max(0, int(round(px / 10.0)))
+        return max(0, int(round(px / 8.0)))
     else:
-        return max(0, int(round(px / 24.0)))
+        return max(0, int(round(px / 16.0)))
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 '''
