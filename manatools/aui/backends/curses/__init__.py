@@ -19,6 +19,7 @@ from .menubarcurses import YMenuBarCurses
 from .replacepointcurses import YReplacePointCurses
 from .intfieldcurses import YIntFieldCurses
 from .multilineeditcurses import YMultiLineEditCurses
+from .spacingcurses import YSpacingCurses
 
 __all__ = [
     "YDialogCurses",
@@ -42,5 +43,6 @@ __all__ = [
     "YReplacePointCurses",
     "YIntFieldCurses",
     "YMultiLineEditCurses",
+    "YSpacingCurses",
     # ...
 ]

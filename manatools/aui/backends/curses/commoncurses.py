@@ -1,6 +1,42 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 '''
+Common helpers for the curses backend.
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.curses
+'''
+import logging
+from ...yui_common import YUIDimension
+
+__all__ = ["pixels_to_chars"]
+
+_logger = logging.getLogger("manatools.aui.curses.common")
+
+def pixels_to_chars(size_px: float, dim: YUIDimension) -> int:
+    """Convert a pixel size into character cells for curses.
+
+    Mapping rationale: libyui uses an abstract unit where a main window of
+    800x600 pixels corresponds to an 80x25 character window. We adopt the same
+    ratio: 10 px per column horizontally, 24 px per row vertically.
+
+    This conversion provides a uniform interpretation of the `size` argument
+    across Qt/GTK/curses backends.
+    """
+    try:
+        px = max(0.0, float(size_px))
+    except Exception:
+        px = 0.0
+    if dim == YUIDimension.YD_HORIZ:
+        return max(0, int(round(px / 10.0)))
+    else:
+        return max(0, int(round(px / 24.0)))
+# vim: set fileencoding=utf-8 :
+# vim: set et ts=4 sw=4:
+'''
 Python manatools.aui.backends.curses contains all curses backend classes
 
 License: LGPLv2+
