@@ -63,6 +63,17 @@ class YPushButtonGtk(YWidget):
                                 hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                                 hb.append(img)
                                 lbl = Gtk.Label(label=self._label)
+                                # center contents inside the box so button label appears centered
+                                try:
+                                    hb.set_halign(Gtk.Align.CENTER)
+                                    hb.set_valign(Gtk.Align.CENTER)
+                                    hb.set_hexpand(False)
+                                except Exception:
+                                    pass
+                                try:
+                                    lbl.set_halign(Gtk.Align.CENTER)
+                                except Exception:
+                                    pass
                                 hb.append(lbl)
                                 self._backend_widget.set_child(hb)
                             except Exception:
@@ -130,11 +141,21 @@ class YPushButtonGtk(YWidget):
                         self._backend_widget.set_icon(img.get_paintable())
                         return
                     except Exception:
-                        # Fallback: set composite child with image + label
+                        # Fallback: set composite child with image + label (centered)
                         try:
                             hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                             hb.append(img)
                             lbl = Gtk.Label(label=self._label)
+                            try:
+                                hb.set_halign(Gtk.Align.CENTER)
+                                hb.set_valign(Gtk.Align.CENTER)
+                                hb.set_hexpand(False)
+                            except Exception:
+                                pass
+                            try:
+                                lbl.set_halign(Gtk.Align.CENTER)
+                            except Exception:
+                                pass
                             hb.append(lbl)
                             self._backend_widget.set_child(hb)
                             return
