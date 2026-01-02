@@ -31,15 +31,22 @@ class YSpacingQt(YWidget):
     - Pixels are used as the unit to avoid ambiguity. Other backends convert as
       appropriate (e.g., curses maps pixels to character cells using a fixed ratio).
     """
-    def __init__(self, parent=None, dim: YUIDimension = YUIDimension.YD_HORIZ, stretchable: bool = False, size: float = 0.0):
+    def __init__(self, parent=None, dim: YUIDimension = YUIDimension.YD_HORIZ, stretchable: bool = False, size_px: int = 0):
         super().__init__(parent)
         self._dim = dim
         self._stretchable = bool(stretchable)
         try:
-            self._size_px = max(0, int(round(float(size))))
+            # integer pixel size; minimum granularity is 1 px when non-zero
+            spx = int(size_px)
+            self._size_px = 0 if spx <= 0 else max(1, spx)
         except Exception:
             self._size_px = 0
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        # Sync base stretch flags so containers can query stretchable()
+        try:
+            self.setStretchable(self._dim, self._stretchable)
+        except Exception:
+            pass
         try:
             self._logger.debug("%s.__init__(dim=%s, stretchable=%s, size_px=%d)", self.__class__.__name__, self._dim, self._stretchable, self._size_px)
         except Exception:

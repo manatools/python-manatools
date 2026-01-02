@@ -245,11 +245,11 @@ class YWidgetFactoryQt:
         """Create a ReplacePoint widget (Qt backend)."""
         return YReplacePointQt(parent)
 
-    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size: float = 0.0):
+    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
         """Create a Spacing/Stretch widget.
 
         - `dim`: primary dimension for spacing (YUIDimension)
         - `stretchable`: expand in primary dimension when True (minimum size = `size`)
-        - `size`: spacing size in pixels (device units)
+        - `size_px`: spacing size in pixels (device units, integer)
         """
-        return YSpacingQt(parent, dim, stretchable, size)
+        return YSpacingQt(parent, dim, stretchable, size_px)
