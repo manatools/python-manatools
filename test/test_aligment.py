@@ -61,10 +61,11 @@ def test_Alignment(backend_name=None):
 
         factory.createLabel(vbox, "Testing aligment HVCenter into HBox")
         hbox = factory.createHBox( vbox )
-        align = factory.createVCenter( hbox )
+        align = factory.createHVCenter( hbox )
         factory.createPushButton( align, "HVCenter" )
 
         b = factory.createPushButton( vbox, "OK" )
+        b.setIcon("application-exit")
         b.setStretchable(yui.YUIDimension.YD_HORIZ, True )
         b.setStretchable(yui.YUIDimension.YD_VERT, True )
         dialog.open()
