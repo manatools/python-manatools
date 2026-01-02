@@ -19,6 +19,7 @@ from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
 from .intfieldqt import YIntFieldQt
 from .multilineeditqt import YMultiLineEditQt
+from .spacingqt import YSpacingQt
 
 
 __all__ = [
@@ -43,5 +44,6 @@ __all__ = [
     "YReplacePointQt",
     "YIntFieldQt",
     "YMultiLineEditQt",
+    "YSpacingQt",
     # ...
 ]
