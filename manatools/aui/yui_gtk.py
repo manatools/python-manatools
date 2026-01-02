@@ -37,7 +37,7 @@ class YApplicationGtk:
         self._application_title = "manatools GTK Application"
         self._product_name = "manatools AUI Gtk"
         self._icon_base_path = None
-        self._icon = ""
+        self._icon = "manatools"  # default icon name
         # cached resolved GdkPixbuf.Pixbuf (or None)
         self._gtk_icon_pixbuf = None
 

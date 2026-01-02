@@ -39,7 +39,7 @@ class YApplicationQt:
         self._application_title = "manatools Qt Application"
         self._product_name = "manatools AUI Qt"
         self._icon_base_path = None
-        self._icon = ""
+        self._icon = "manatools"  # default icon name
         # cached QIcon resolved from _icon (None if not resolved)
         self._qt_icon = None
 

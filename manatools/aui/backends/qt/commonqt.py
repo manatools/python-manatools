@@ -27,25 +27,27 @@ def _resolve_icon(icon_name):
     try:
         if not icon_name:
             return None
+        logger = logging.getLogger(f"manatools.aui.qt.common")
         # If icon_name looks like a filesystem path (absolute or contains a
         # path separator), prefer loading from disk. If it has no
         # extension, also try the same path with a .png suffix to help
         # debugging/test cases where a directory+basename is provided.
         try:
             if os.path.isabs(icon_name) or os.path.sep in icon_name:
-                # exact file
-                if os.path.exists(icon_name):
+                if os.path.isfile(icon_name):
                     return QtGui.QIcon(icon_name)
                 # if there's no extension, try .png
                 base, ext = os.path.splitext(icon_name)
                 if not ext:
                     png_candidate = icon_name + '.png'
-                    if os.path.exists(png_candidate):
+                    if os.path.isfile(png_candidate):
+                        logger.debug("Resolved icon %r to %r", icon_name, png_candidate)
                         return QtGui.QIcon(png_candidate)
                 # not found on filesystem: fall through to theme/name
             else:
                 # non-path might still be a relative file name
-                if os.path.exists(icon_name):
+                if os.path.isfile(icon_name):
+                    logger.debug("Resolved icon %r to filesystem path", icon_name)
                     return QtGui.QIcon(icon_name)
         except Exception:
             pass
@@ -56,14 +58,17 @@ def _resolve_icon(icon_name):
         except Exception:
             pass
         try:
+            logger.debug("Trying to resolve icon %r via QIcon.fromTheme(%r)", icon_name, base)
             ico = QtGui.QIcon.fromTheme(base)
             if ico and not ico.isNull():
+                logger.debug("Resolved icon %r to theme icon %r", icon_name, base)
                 return ico
         except Exception:
             pass
         try:
             ico = QtGui.QIcon(icon_name)
             if ico and not ico.isNull():
+                logger.debug("Resolved icon %r to QIcon(%r)", icon_name, icon_name)
                 return ico
         except Exception:
             pass
