@@ -115,7 +115,7 @@ class YHBoxCurses(YWidget):
                 text = getattr(child, "_text", None)
                 if text is None:
                     text = getattr(child, "_label", "")
-                pad = 4 if cls == "YPushButton" else 0
+                pad = 4 if cls in ("YPushButton", "YCheckBox") else 0
                 return min(max_width, max(1, len(str(text)) + pad))
         except Exception:
             pass
@@ -131,31 +131,78 @@ class YHBoxCurses(YWidget):
         spacing = max(0, num_children - 1)
         available = max(0, width - spacing)
 
+        # Compute a safe minimal reservation for every child so that
+        # stretchable spacers cannot steal the minimum space required
+        # by subsequent fixed widgets (e.g. the final checkbox).
         widths = [0] * num_children
         stretchables = []
-        fixed_total = 0
+        min_reserved = [0] * num_children
         for i, child in enumerate(self._children):
+            # compute each child's minimal width (best-effort)
+            m = self._child_min_width(child, available)
+            min_reserved[i] = max(1, m)
             if child.stretchable(YUIDimension.YD_HORIZ):
                 stretchables.append(i)
-            else:
-                w = self._child_min_width(child, available)
-                widths[i] = w
-                fixed_total += w
 
-        remaining = max(0, available - fixed_total)
-        if stretchables:
+        # Sum fixed (non-stretchable) minimal widths and minimal total for stretchables
+        fixed_total = sum(min_reserved[i] for i, c in enumerate(self._children) if not c.stretchable(YUIDimension.YD_HORIZ))
+        min_stretch_total = sum(min_reserved[i] for i, c in enumerate(self._children) if c.stretchable(YUIDimension.YD_HORIZ))
+
+        # Available space already accounts for gaps
+        remaining = available - fixed_total - min_stretch_total
+
+        if stretchables and remaining > 0:
+            # Start from each stretchable's minimum, then distribute leftover
             per = remaining // len(stretchables)
             extra = remaining % len(stretchables)
             for k, idx in enumerate(stretchables):
-                widths[idx] = max(1, per + (1 if k < extra else 0))
+                widths[idx] = min_reserved[idx] + per + (1 if k < extra else 0)
+            # Fixed children get their reserved minima
+            for i, child in enumerate(self._children):
+                if not child.stretchable(YUIDimension.YD_HORIZ):
+                    widths[i] = min_reserved[i]
         else:
-            if fixed_total < available:
-                leftover = available - fixed_total
-                per = leftover // num_children
-                extra = leftover % num_children
+            # Either no stretchables, or not enough space to give extra.
+            # In this case, try to honor minimal reservations as much as possible.
+            # If total minima exceed available, shrink proportionally but keep at least 1.
+            total_min = fixed_total + min_stretch_total
+            if total_min <= available:
+                # we have some leftover but no stretchables to expand; distribute among all
+                leftover = available - total_min
+                per = leftover // num_children if num_children else 0
+                extra = leftover % num_children if num_children else 0
                 for i in range(num_children):
-                    base = widths[i] if widths[i] else 1
-                    widths[i] = base + per + (1 if i < extra else 0)
+                    widths[i] = min_reserved[i] + per + (1 if i < extra else 0)
+            else:
+                # Need to shrink some minima to fit; compute shrink ratio
+                # Start from minima and reduce from largest items first to preserve small widgets
+                widths = list(min_reserved)
+                overflow = total_min - available
+                # Sort indices by current width descending
+                order = sorted(range(num_children), key=lambda ii: widths[ii], reverse=True)
+                for idx in order:
+                    if overflow <= 0:
+                        break
+                    can_reduce = widths[idx] - 1
+                    if can_reduce <= 0:
+                        continue
+                    take = min(can_reduce, overflow)
+                    widths[idx] -= take
+                    overflow -= take
+                # If still overflow (shouldn't happen), clamp all to 1
+                if overflow > 0:
+                    for i in range(num_children):
+                        widths[i] = 1
+
+        # Debug: log final allocation before drawing children
+        try:
+            total_assigned = sum(widths)
+            self._logger.info("HBox final widths=%s total=%d (available=%d)", widths, total_assigned, available)
+            self._logger.debug("HBox internal min_reserved=%s fixed_total=%d min_stretch_total=%d num_stretch=%d",
+                               min_reserved, fixed_total, min_stretch_total if 'min_stretch_total' in locals() else 0,
+                               len(stretchables))
+        except Exception:
+            pass
 
         # Draw children and pass full container height to stretchable children
         cx = x

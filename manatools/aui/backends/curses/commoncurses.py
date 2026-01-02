@@ -9,12 +9,23 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.curses
 '''
+import curses
+import curses.ascii
+import sys
+import os
+import time
 import logging
-from ...yui_common import YUIDimension
+from ...yui_common import *
 
-__all__ = ["pixels_to_chars"]
+__all__ = ["pixels_to_chars", "_curses_recursive_min_height", "_curses_recursive_min_width"]
 
-_logger = logging.getLogger("manatools.aui.curses.common")
+# Module-level logger for common curses helpers
+_mod_logger = logging.getLogger("manatools.aui.curses.common")
+if not logging.getLogger().handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
+    _mod_logger.addHandler(_h)
+    _mod_logger.setLevel(logging.INFO)
 
 def pixels_to_chars(size_px: int, dim: YUIDimension) -> int:
     """Convert a pixel size into terminal character cells.
@@ -33,35 +44,6 @@ def pixels_to_chars(size_px: int, dim: YUIDimension) -> int:
         return max(0, int(round(px / 8.0)))
     else:
         return max(0, int(round(px / 16.0)))
-# vim: set fileencoding=utf-8 :
-# vim: set et ts=4 sw=4:
-'''
-Python manatools.aui.backends.curses contains all curses backend classes
-
-License: LGPLv2+
-
-Author:  Angelo Naselli <anaselli@linux.it>
-
-@package manatools.aui.backends.curses
-'''
-import curses
-import curses.ascii
-import sys
-import os
-import time
-import logging
-from ...yui_common import *
-
-# Module-level logger for common curses helpers
-_mod_logger = logging.getLogger("manatools.aui.curses.common.module")
-if not logging.getLogger().handlers:
-    _h = logging.StreamHandler()
-    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
-    _mod_logger.addHandler(_h)
-    _mod_logger.setLevel(logging.INFO)
-
-__all__ = ["_curses_recursive_min_height"]
-
 
 def _curses_recursive_min_height(widget):
     """Compute minimal height for a widget, recursively considering container children."""
@@ -105,3 +87,83 @@ def _curses_recursive_min_height(widget):
         except Exception:
             pass
         return max(1, getattr(widget, "_height", 1))
+
+
+def _curses_recursive_min_width(widget):
+    """Compute minimal width for a widget, recursively considering container children.
+
+    Heuristics:
+    - YHBox: sum of children's minimal widths plus 1 char spacing between them
+    - YVBox: maximal minimal width among children
+    - Frames (YFrame/YCheckBoxFrame): border (2) + inner minimal width
+    - Alignment/ReplacePoint: pass-through to child
+    - Basic widgets: use `minWidth()` if available, otherwise infer from text/label
+    """
+    try:
+        if widget is None:
+            return 1
+        cls = widget.widgetClass() if hasattr(widget, "widgetClass") else ""
+        # Helper to infer min width of leaf/basic widgets
+        def _leaf_min_width(w):
+            try:
+                if hasattr(w, "minWidth"):
+                    m = int(w.minWidth())
+                    return max(1, m)
+            except Exception:
+                pass
+            try:
+                c = w.widgetClass() if hasattr(w, "widgetClass") else ""
+                if c in ("YLabel", "YPushButton", "YCheckBox"):
+                    text = getattr(w, "_text", None)
+                    if text is None:
+                        text = getattr(w, "_label", "")
+                    pad = 4 if c == "YPushButton" else 0
+                    # Checkbox includes symbol like "[ ] "
+                    if c == "YCheckBox":
+                        pad = max(pad, 4)
+                    return max(1, len(str(text)) + pad)
+            except Exception:
+                pass
+            try:
+                return max(1, int(getattr(w, "_width", 10)))
+            except Exception:
+                return 10
+
+        if cls == "YHBox":
+            chs = list(getattr(widget, "_children", []) or [])
+            if not chs:
+                return 1
+            spacing = max(0, len(chs) - 1)
+            total = 0
+            for c in chs:
+                total += _curses_recursive_min_width(c)
+            return max(1, total + spacing)
+        elif cls == "YVBox":
+            chs = list(getattr(widget, "_children", []) or [])
+            if not chs:
+                return 1
+            widest = 1
+            for c in chs:
+                widest = max(widest, _curses_recursive_min_width(c))
+            return max(1, widest)
+        elif cls == "YAlignment":
+            child = widget.child()
+            return max(1, _curses_recursive_min_width(child))
+        elif cls == "YReplacePoint":
+            child = widget.child()
+            return max(1, _curses_recursive_min_width(child))
+        elif cls == "YFrame" or cls == "YCheckBoxFrame":
+            child = widget.child()
+            inner_min = _curses_recursive_min_width(child) if child is not None else 1
+            return max(3, 2 + inner_min)  # borders(2) + inner
+        else:
+            return _leaf_min_width(widget)
+    except Exception as e:
+        try:
+            _mod_logger.error("_curses_recursive_min_width error: %s", e, exc_info=True)
+        except Exception:
+            pass
+        try:
+            return max(1, int(getattr(widget, "_width", 10)))
+        except Exception:
+            return 10
