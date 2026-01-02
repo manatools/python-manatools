@@ -25,15 +25,21 @@ class YSpacingGtk(YWidget):
     - `size`: spacing size in pixels (device units). Pixels are used for clarity
       and uniformity across backends; GTK honors `set_size_request` in pixels.
     """
-    def __init__(self, parent=None, dim: YUIDimension = YUIDimension.YD_HORIZ, stretchable: bool = False, size: float = 0.0):
+    def __init__(self, parent=None, dim: YUIDimension = YUIDimension.YD_HORIZ, stretchable: bool = False, size_px: int = 0):
         super().__init__(parent)
         self._dim = dim
         self._stretchable = bool(stretchable)
         try:
-            self._size_px = max(0, int(round(float(size))))
+            spx = int(size_px)
+            self._size_px = 0 if spx <= 0 else max(1, spx)
         except Exception:
             self._size_px = 0
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        # Keep base stretch flags in sync for layout containers
+        try:
+            self.setStretchable(self._dim, self._stretchable)
+        except Exception:
+            pass
         try:
             self._logger.debug("%s.__init__(dim=%s, stretchable=%s, size_px=%d)", self.__class__.__name__, self._dim, self._stretchable, self._size_px)
         except Exception:

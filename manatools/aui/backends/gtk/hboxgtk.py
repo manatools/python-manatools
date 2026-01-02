@@ -42,15 +42,24 @@ class YHBoxGtk(YWidget):
 
         for child in self._children:
             try:
-                self._logger.debug("HBox child: %s", child.widgetClass())
+                self._logger.debug("HBox child: %s stretch(H)=%s weight(H)=%s stretch(V)=%s", child.widgetClass(), child.stretchable(YUIDimension.YD_HORIZ), child.weight(YUIDimension.YD_HORIZ), child.stretchable(YUIDimension.YD_VERT))
             except Exception:
                 pass
             widget = child.get_backend_widget()
             try:
-                widget.set_hexpand(True)
-                widget.set_vexpand(True)
-                #if hasattr(widget, "set_halign"):
-                #    widget.set_halign(Gtk.Align.FILL)
+                # Respect per-axis stretch flags
+                hexp = bool(child.stretchable(YUIDimension.YD_HORIZ) or child.weight(YUIDimension.YD_HORIZ))
+                vexp = bool(child.stretchable(YUIDimension.YD_VERT) or child.weight(YUIDimension.YD_VERT))
+                widget.set_hexpand(hexp)
+                widget.set_vexpand(vexp)
+                try:
+                    widget.set_halign(Gtk.Align.FILL if hexp else Gtk.Align.CENTER)
+                except Exception:
+                    pass
+                try:
+                    widget.set_valign(Gtk.Align.FILL if vexp else Gtk.Align.CENTER)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
