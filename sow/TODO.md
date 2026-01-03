@@ -27,18 +27,18 @@ Missing Widgets comparing libyui original factory:
     [X] YAlignment helpers (createLeft/createRight/createTop/createBottom/createHCenter/createVCenter/createHVCenter)
     [X] YReplacePoint
     [X] YRadioButton
-    [ ] YWizard
+    [X] YImage
     [ ] YBusyIndicator
-    [ ] YImage
     [ ] YLogView
-    [ ] YItemSelector
-    [ ] YEmpty    
-    [ ] YSquash / createSquash
 
 Skipped widgets:
     
-    [-] YPackageSelector (not ported)
+    [-] YPackageSelector  (not ported)
     [-] YRadioButtonGroup (not ported)
+    [-] YWizard           (not ported)
+    [-] YItemSelector     (not ported)
+    [-] YEmpty            (not ported)
+    [-] YSquash / createSquash (not ported)
     [-] YMenuButton (legacy menus)
 
 Optional/special widgets (from `YOptionalWidgetFactory`):
