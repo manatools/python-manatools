@@ -43,7 +43,6 @@ Skipped widgets:
 
 Optional/special widgets (from `YOptionalWidgetFactory`):
 
-    [ ] YWizard
     [ ] YDumbTab
     [ ] YSlider
     [ ] YDateField
