@@ -9,7 +9,8 @@ Next is the starting todo list.
 Missing Widgets comparing libyui original factory:
 
     [X] YComboBox
-    [X] YSelectionBox    
+    [X] YSelectionBox
+    [X] YMultiSelectionBox (implemented as YSelectionBox + multiselection enabled)
     [X] YPushButton
     [X] YLabel
     [X] YInputField
@@ -35,8 +36,7 @@ Missing Widgets comparing libyui original factory:
     [ ] YSquash / createSquash
 
 Skipped widgets:
-
-    [-] YMultiSelectionBox (implemented as YSelectionBox + multiselection enabled)
+    
     [-] YPackageSelector (not ported)
     [-] YRadioButtonGroup (not ported)
     [-] YMenuButton (legacy menus)
