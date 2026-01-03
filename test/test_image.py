@@ -64,8 +64,8 @@ def test_image(backend_name=None):
         img = factory.createImage(vbox, example)
         # allow image to expand horizontally
         img.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        img.setStretchable(yui.YUIDimension.YD_VERT, False)
-        #img.setAutoScale(True)
+        img.setStretchable(yui.YUIDimension.YD_VERT, True)
+        img.setAutoScale(True)
 
         # OK button
         hbox = factory.createHBox(vbox)
