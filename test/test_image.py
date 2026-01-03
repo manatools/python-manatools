@@ -59,15 +59,17 @@ def test_image(backend_name=None):
         if not os.path.exists(example):
             example = ""
 
+        images = [example, "system-software-install"]
+
         img = factory.createImage(vbox, example)
         # allow image to expand horizontally
         img.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        img.setStretchable(yui.YUIDimension.YD_VERT, True)
-        img.setAutoScale(True)
+        img.setStretchable(yui.YUIDimension.YD_VERT, False)
+        #img.setAutoScale(True)
 
         # OK button
         hbox = factory.createHBox(vbox)
-        ok = factory.createPushButton(hbox, "OK")
+        toggle = factory.createPushButton(hbox, "Toggle Image")
         close = factory.createPushButton(hbox, "Close")
 
         dialog.open()
@@ -84,9 +86,8 @@ def test_image(backend_name=None):
               if wdg == close:
                   dialog.destroy()
                   break
-              elif wdg == ok:
-                  dialog.destroy()
-                  break
+              elif wdg == toggle:
+                  img.setImage(images[1] if img.imageFileName() == images[0] else images[0])
 
     except Exception as e:
         print(f"Error testing Image with backend {backend_name}: {e}")
