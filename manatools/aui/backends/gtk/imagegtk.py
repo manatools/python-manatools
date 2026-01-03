@@ -105,11 +105,17 @@ class YImageGtk(YWidget):
     def _create_backend_widget(self):
         try:
             self._backend_widget = Gtk.Image()
-            if self._imageFileName and os.path.exists(self._imageFileName):
+            if self._imageFileName:
+                # Use setImage to allow theme icon resolution via commongtk._resolve_icon
                 try:
-                    self._pixbuf = GdkPixbuf.Pixbuf.new_from_file(self._imageFileName)
+                    self.setImage(self._imageFileName)
                 except Exception:
-                    self._logger.exception("failed to load pixbuf")
+                    # Fallback: try direct filesystem load
+                    try:
+                        if os.path.exists(self._imageFileName):
+                            self._pixbuf = GdkPixbuf.Pixbuf.new_from_file(self._imageFileName)
+                    except Exception:
+                        self._logger.exception("failed to load pixbuf")
             if getattr(self, '_pixbuf', None) is not None:
                 self._apply_pixbuf()
             # hook allocation to rescale if autoscale is enabled
