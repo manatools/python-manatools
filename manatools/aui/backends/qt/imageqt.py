@@ -86,7 +86,40 @@ class YImageQt(YWidget):
 
     def _create_backend_widget(self):
         try:
-            self._backend_widget = QtWidgets.QLabel()
+            # Use a QLabel subclass that notifies this owner on resize so
+            # we can re-apply scaled pixmaps when the widget changes size.
+            class _ImageLabel(QtWidgets.QLabel):
+                def __init__(self, owner, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self._owner = owner
+
+                def resizeEvent(self, ev):
+                    super().resizeEvent(ev)
+                    try:
+                        self._owner._apply_pixmap()
+                    except Exception:
+                        pass
+
+                def sizeHint(self):
+                    try:
+                        # When autoscale is enabled prefer to give a small size hint
+                        # so layouts can shrink the widget; actual pixmap will be
+                        # scaled on resizeEvent.
+                        if getattr(self._owner, '_auto_scale', False):
+                            return QtCore.QSize(0, 0)
+                    except Exception:
+                        pass
+                    return super().sizeHint()
+
+                def minimumSizeHint(self):
+                    try:
+                        if getattr(self._owner, '_auto_scale', False):
+                            return QtCore.QSize(0, 0)
+                    except Exception:
+                        pass
+                    return super().minimumSizeHint()
+
+            self._backend_widget = _ImageLabel(self)
             self._backend_widget.setAlignment(QtCore.Qt.AlignCenter)
             if self._imageFileName and os.path.exists(self._imageFileName):
                 self._pixmap = QtGui.QPixmap(self._imageFileName)
