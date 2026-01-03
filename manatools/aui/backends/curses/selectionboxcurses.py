@@ -14,6 +14,7 @@ import curses.ascii
 import sys
 import os
 import time
+from typing import Optional
 import logging
 from ...yui_common import *
 
@@ -28,7 +29,7 @@ if not logging.getLogger().handlers:
 
 
 class YSelectionBoxCurses(YSelectionWidget):
-    def __init__(self, parent=None, label=""):
+    def __init__(self, parent=None, label="", multi_selection: Optional[bool] = False):
         super().__init__(parent)
         # per-instance logger named by package/backend/class
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
@@ -40,7 +41,7 @@ class YSelectionBoxCurses(YSelectionWidget):
         self._label = label
         self._value = ""
         self._selected_items = []
-        self._multi_selection = False
+        self._multi_selection = multi_selection
 
         # UI state for drawing/navigation
         # actual minimal height for layout (keep small so parent can expand it)

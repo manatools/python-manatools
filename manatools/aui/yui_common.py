@@ -150,7 +150,7 @@ class YWidget:
         return self.__class__.__name__
     
     def debugLabel(self):
-        return f"{self.widgetClass()}({self._id})"
+        return f"{self._parent.debugLabel()}/{self.widgetClass()}({self._id})" if self._parent else f"{self.widgetClass()}({self._id})"
     
     def helpText(self):
         return self._help_text

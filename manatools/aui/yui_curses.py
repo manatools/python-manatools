@@ -172,6 +172,10 @@ class YWidgetFactoryCurses:
     def createSelectionBox(self, parent, label):
         return YSelectionBoxCurses(parent, label)
 
+    #Multi-selection box variant
+    def createMultiSelectionBox(self, parent, label):
+        return YSelectionBoxCurses(parent, label, multi_selection=True)
+
     # Alignment helpers
     def createLeft(self, parent):
         return YAlignmentCurses(parent, horAlign=YAlignmentType.YAlignBegin,  vertAlign=YAlignmentType.YAlignUnchanged)
@@ -243,3 +247,21 @@ class YWidgetFactoryCurses:
             using 8 px/char horizontally and ~16 px/row vertically.
         """
         return YSpacingCurses(parent, dim, stretchable, size_px)
+    
+    # Create a Spacing widget variant
+    def createHStretch(self, parent):
+        """Create a Horizontal Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=True)
+    
+    def createVStretch(self, parent):
+        """Create a Vertical Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=True)
+    
+    def createHSpacing(self, parent, size_px: int = 8):
+        """Create a Horizontal Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=False, size_px=size_px)
+    
+    def createVSpacing(self, parent, size_px: int = 16):
+        """Create a Vertical Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
+

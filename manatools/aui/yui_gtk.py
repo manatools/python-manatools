@@ -223,7 +223,11 @@ class YWidgetFactoryGtk:
     
     def createSelectionBox(self, parent, label):
         return YSelectionBoxGtk(parent, label)
-    
+
+    #Multi-selection box variant
+    def createMultiSelectionBox(self, parent, label):
+        return YSelectionBoxGtk(parent, label, multi_selection=True)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (GTK backend)."""
         return YMenuBarGtk(parent)
@@ -263,23 +267,6 @@ class YWidgetFactoryGtk:
         from .backends.gtk.tablegtk import YTableGtk
         return YTableGtk(parent, header, multiSelection)
 
-    def createReplacePoint(self, parent):
-        """Create a ReplacePoint widget (GTK backend)."""
-        return YReplacePointGtk(parent)
-
-    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
-        """Create a Spacing/Stretch widget.
-
-        - `dim`: primary dimension for spacing (YUIDimension)
-        - `stretchable`: expand in primary dimension when True (minimum size = `size`)
-        - `size_px`: spacing size in pixels (device units, integer)
-        """
-        return YSpacingGtk(parent, dim, stretchable, size_px)
-
-    def createFrame(self, parent, label: str=""):
-        """Create a Frame widget."""
-        return YFrameGtk(parent, label)
-
     def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
         """Create a RichText widget (GTK backend)."""
         from .backends.gtk.richtextgtk import YRichTextGtk
@@ -295,3 +282,38 @@ class YWidgetFactoryGtk:
     def createRadioButton(self, parent, label:str = "", isChecked:bool = False):    
         """Create a Radio Button widget."""
         return YRadioButtonGtk(parent, label, isChecked)
+
+    def createReplacePoint(self, parent):
+        """Create a ReplacePoint widget (GTK backend)."""
+        return YReplacePointGtk(parent)
+
+    def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
+        """Create a Spacing/Stretch widget.
+
+        - `dim`: primary dimension for spacing (YUIDimension)
+        - `stretchable`: expand in primary dimension when True (minimum size = `size`)
+        - `size_px`: spacing size in pixels (device units, integer)
+        """
+        return YSpacingGtk(parent, dim, stretchable, size_px)
+    
+    # Create a Spacing widget variant
+    def createHStretch(self, parent):
+        """Create a Horizontal Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=True)
+    
+    def createVStretch(self, parent):
+        """Create a Vertical Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=True)
+    
+    def createHSpacing(self, parent, size_px: int = 8):
+        """Create a Horizontal Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=False, size_px=size_px)
+    
+    def createVSpacing(self, parent, size_px: int = 16):
+        """Create a Vertical Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
+
+    def createFrame(self, parent, label: str=""):
+        """Create a Frame widget."""
+        return YFrameGtk(parent, label)
+

@@ -12,16 +12,17 @@ Author:  Angelo Naselli <anaselli@linux.it>
 from PySide6 import QtWidgets
 import logging
 import os
+from typing import Optional
 from ...yui_common import *
 from .commonqt import _resolve_icon
 
 class YSelectionBoxQt(YSelectionWidget):
-    def __init__(self, parent=None, label=""):
+    def __init__(self, parent=None, label="", multi_selection: Optional[bool] = False):
         super().__init__(parent)
         self._label = label
         self._value = ""
         self._selected_items = []
-        self._multi_selection = False
+        self._multi_selection = multi_selection
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
         self._list_widget = None

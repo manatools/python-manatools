@@ -17,18 +17,19 @@ from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
 import cairo
 import threading
 import os
+from typing import Optional
 import logging
 from ...yui_common import *
 from .commongtk import _resolve_icon
 
 
 class YSelectionBoxGtk(YSelectionWidget):
-    def __init__(self, parent=None, label=""):
+    def __init__(self, parent=None, label="", multi_selection: Optional[bool] = False):
         super().__init__(parent)
         self._label = label
         self._value = ""        
         self._old_selected_items = [] # for change detection
-        self._multi_selection = False
+        self._multi_selection = bool(multi_selection)
         self._listbox = None
         self._backend_widget = None
         # keep a stable list of rows we create so we don't rely on ListBox container APIs

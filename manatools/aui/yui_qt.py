@@ -180,7 +180,11 @@ class YWidgetFactoryQt:
     
     def createSelectionBox(self, parent, label):
         return YSelectionBoxQt(parent, label)
-    
+
+    #Multi-selection box variant
+    def createMultiSelectionBox(self, parent, label):
+        return YSelectionBoxQt(parent, label, multi_selection=True)
+
     def createProgressBar(self, parent, label, max_value=100):
         return YProgressBarQt(parent, label, max_value)
     
@@ -253,3 +257,20 @@ class YWidgetFactoryQt:
         - `size_px`: spacing size in pixels (device units, integer)
         """
         return YSpacingQt(parent, dim, stretchable, size_px)
+
+    # Create a Spacing widget variant
+    def createHStretch(self, parent):
+        """Create a Horizontal Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=True)
+    
+    def createVStretch(self, parent):
+        """Create a Vertical Stretch widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=True)
+    
+    def createHSpacing(self, parent, size_px: int = 8):
+        """Create a Horizontal Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=False, size_px=size_px)
+    
+    def createVSpacing(self, parent, size_px: int = 16):
+        """Create a Vertical Spacing widget."""
+        return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
