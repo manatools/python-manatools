@@ -43,8 +43,10 @@ class YImageQt(YWidget):
                     ico = None
                 if ico is not None:
                     try:
-                        # store QIcon and let _apply_pixmap pick appropriate size
+                        # store QIcon (clear any stored QPixmap) and let
+                        # _apply_pixmap pick an appropriate size
                         self._qicon = ico
+                        self._pixmap = None
                         self._apply_pixmap()
                         return
                     except Exception:
@@ -121,9 +123,19 @@ class YImageQt(YWidget):
 
             self._backend_widget = _ImageLabel(self)
             self._backend_widget.setAlignment(QtCore.Qt.AlignCenter)
-            if self._imageFileName and os.path.exists(self._imageFileName):
-                self._pixmap = QtGui.QPixmap(self._imageFileName)
-                self._apply_pixmap()
+            if self._imageFileName:
+                # Use setImage which will attempt to resolve theme icons via
+                # commonqt._resolve_icon and fall back to filesystem loading.
+                try:
+                    self.setImage(self._imageFileName)
+                except Exception:
+                    # Fallback: try direct filesystem load
+                    try:
+                        if os.path.exists(self._imageFileName):
+                            self._pixmap = QtGui.QPixmap(self._imageFileName)
+                            self._apply_pixmap()
+                    except Exception:
+                        pass
             self._apply_size_policy()
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -149,7 +161,8 @@ class YImageQt(YWidget):
         try:
             if getattr(self, '_backend_widget', None) is None:
                 return
-            if not self._pixmap:
+            # If neither a QPixmap nor a QIcon is available, clear the widget.
+            if getattr(self, '_qicon', None) is None and not getattr(self, '_pixmap', None):
                 self._backend_widget.clear()
                 return
             # If we have a QIcon (resolved from theme/name) prefer it as it can provide
