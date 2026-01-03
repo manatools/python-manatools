@@ -20,6 +20,7 @@ from .replacepointgtk import YReplacePointGtk
 from .intfieldgtk import YIntFieldGtk
 from .multilineeditgtk import YMultiLineEditGtk
 from .spacinggtk import YSpacingGtk
+from .imagegtk import YImageGtk
 
 __all__ = [
     "YDialogGtk",
@@ -44,5 +45,6 @@ __all__ = [
     "YIntFieldGtk",
     "YMultiLineEditGtk",
     "YSpacingGtk",
+    "YImageGtk",
     # ...
 ]

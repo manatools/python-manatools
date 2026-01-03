@@ -247,6 +247,10 @@ class YWidgetFactoryCurses:
             using 8 px/char horizontally and ~16 px/row vertically.
         """
         return YSpacingCurses(parent, dim, stretchable, size_px)
+
+    def createImage(self, parent, imageFileName):
+        """Create an image widget as an empty frame for curses."""
+        return YImageCurses(parent, imageFileName)
     
     # Create a Spacing widget variant
     def createHStretch(self, parent):

@@ -295,6 +295,10 @@ class YWidgetFactoryGtk:
         - `size_px`: spacing size in pixels (device units, integer)
         """
         return YSpacingGtk(parent, dim, stretchable, size_px)
+
+    def createImage(self, parent, imageFileName):
+        """Create an image widget."""
+        return YImageGtk(parent, imageFileName)
     
     # Create a Spacing widget variant
     def createHStretch(self, parent):

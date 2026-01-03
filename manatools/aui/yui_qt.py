@@ -258,6 +258,10 @@ class YWidgetFactoryQt:
         """
         return YSpacingQt(parent, dim, stretchable, size_px)
 
+    def createImage(self, parent, imageFileName):
+        """Create an image widget."""
+        return YImageQt(parent, imageFileName)
+
     # Create a Spacing widget variant
     def createHStretch(self, parent):
         """Create a Horizontal Stretch widget."""
