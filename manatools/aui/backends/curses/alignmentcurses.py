@@ -16,6 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
+from .commoncurses import pixels_to_chars
 
 # Module-level logger for curses alignment backend
 _mod_logger = logging.getLogger("manatools.aui.curses.alignment.module")
@@ -36,6 +37,8 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._backend_widget = None  # not used by curses
+        self._min_width_px = 0
+        self._min_height_px = 0
         # per-instance logger
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
@@ -106,6 +109,13 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         try:
             # width to give to the child: minimal needed (so it can be pushed)
             ch_min_w = self._child_min_width(self.child(), width)
+            # honor explicit minimum width in pixels, converting to character cells
+            try:
+                if getattr(self, '_min_width_px', 0) and self._min_width_px > 0:
+                    min_chars = pixels_to_chars(int(self._min_width_px), YUIDimension.YD_HORIZ)
+                    ch_min_w = max(ch_min_w, min_chars)
+            except Exception:
+                pass
             # Horizontal position
             if self._halign_spec == YAlignmentType.YAlignEnd:
                 cx = x + max(0, width - ch_min_w)
@@ -120,6 +130,30 @@ class YAlignmentCurses(YSingleChildContainerWidget):
                 cy = y + max(0, height - 1)
             else:
                 cy = y
-            self.child()._draw(window, cy, cx, min(ch_min_w, max(1, width)), min(height, getattr(self.child(), "_height", 1)))
+            # honor explicit minimum height in pixels for child
+            ch_height = getattr(self.child(), "_height", 1)
+            try:
+                if getattr(self, '_min_height_px', 0) and self._min_height_px > 0:
+                    min_h = pixels_to_chars(int(self._min_height_px), YUIDimension.YD_VERT)
+                    ch_height = max(ch_height, min_h)
+            except Exception:
+                pass
+            self.child()._draw(window, cy, cx, min(ch_min_w, max(1, width)), min(height, ch_height))
         except Exception:
             pass
+
+    def setMinWidth(self, width_px: int):
+        try:
+            self._min_width_px = int(width_px) if width_px is not None else 0
+        except Exception:
+            self._min_width_px = 0
+
+    def setMinHeight(self, height_px: int):
+        try:
+            self._min_height_px = int(height_px) if height_px is not None else 0
+        except Exception:
+            self._min_height_px = 0
+
+    def setMinSize(self, width_px: int, height_px: int):
+        self.setMinWidth(width_px)
+        self.setMinHeight(height_px)

@@ -258,6 +258,34 @@ class YWidgetFactoryGtk:
         """Create a generic YAlignment using YAlignmentType enums (or compatible specs)."""
         return YAlignmentGtk(parent, horAlign=horAlignment, vertAlign=vertAlignment)
 
+    def createMinWidth(self, parent, minWidth: int):
+        a = YAlignmentGtk(parent)
+        try:
+            a._min_width_px = int(minWidth)
+        except Exception:
+            pass
+        return a
+
+    def createMinHeight(self, parent, minHeight: int):
+        a = YAlignmentGtk(parent)
+        try:
+            a._min_height_px = int(minHeight)
+        except Exception:
+            pass
+        return a
+
+    def createMinSize(self, parent, minWidth: int, minHeight: int):
+        a = YAlignmentGtk(parent)
+        try:
+            a._min_width_px = int(minWidth)
+        except Exception:
+            pass
+        try:
+            a._min_height_px = int(minHeight)
+        except Exception:
+            pass
+        return a
+
     def createTree(self, parent, label, multiselection=False, recursiveselection = False):
         """Create a Tree widget."""
         return YTreeGtk(parent, label, multiselection, recursiveselection)

@@ -24,6 +24,8 @@ class YAlignmentQt(YSingleChildContainerWidget):
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
+        self._min_width_px = 0
+        self._min_height_px = 0
         self._backend_widget = None
         self._layout = None
 
@@ -108,6 +110,33 @@ class YAlignmentQt(YSingleChildContainerWidget):
         super().addChild(child)
         self._attach_child_backend()
 
+    def setMinWidth(self, width_px: int):
+        try:
+            self._min_width_px = int(width_px) if width_px is not None else 0
+        except Exception:
+            self._min_width_px = 0
+        try:
+            # if child already attached, re-apply
+            if self.child() and getattr(self, '_layout', None) is not None:
+                self._attach_child_backend()
+        except Exception:
+            pass
+
+    def setMinHeight(self, height_px: int):
+        try:
+            self._min_height_px = int(height_px) if height_px is not None else 0
+        except Exception:
+            self._min_height_px = 0
+        try:
+            if self.child() and getattr(self, '_layout', None) is not None:
+                self._attach_child_backend()
+        except Exception:
+            pass
+
+    def setMinSize(self, width_px: int, height_px: int):
+        self.setMinWidth(width_px)
+        self.setMinHeight(height_px)
+
 
     def _attach_child_backend(self):
         if not (self._backend_widget and self._layout and self.child()):
@@ -150,6 +179,20 @@ class YAlignmentQt(YSingleChildContainerWidget):
                             except Exception:
                                 pass
                         w.setSizePolicy(sp)
+                    # Enforce minimum size on child if requested (pixels)
+                    try:
+                        if getattr(self, '_min_width_px', 0) and hasattr(w, 'setMinimumWidth'):
+                            try:
+                                w.setMinimumWidth(int(self._min_width_px))
+                            except Exception:
+                                pass
+                        if getattr(self, '_min_height_px', 0) and hasattr(w, 'setMinimumHeight'):
+                            try:
+                                w.setMinimumHeight(int(self._min_height_px))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 except Exception:
                     pass
                 self._layout.addWidget(w, 0, 0, flags)

@@ -38,6 +38,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         self._halign_spec = horAlign
         self._valign_spec = vertAlign
         self._background_pixbuf = None
+        self._min_width_px = 0
+        self._min_height_px = 0
         self._signal_id = None
         self._backend_widget = None
         # get a reference to the single row container
@@ -231,6 +233,31 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 pass
             cw.set_halign(hal)
             cw.set_valign(val)
+
+            # enforce minimum size on child if requested
+            try:
+                mw = getattr(self, '_min_width_px', 0)
+                mh = getattr(self, '_min_height_px', 0)
+                if (mw and mw > 0) or (mh and mh > 0):
+                    # GTK uses size-request on widgets for minimum size
+                    w_req = -1
+                    h_req = -1
+                    try:
+                        if mw and mw > 0:
+                            w_req = int(mw)
+                    except Exception:
+                        w_req = -1
+                    try:
+                        if mh and mh > 0:
+                            h_req = int(mh)
+                    except Exception:
+                        h_req = -1
+                    try:
+                        cw.set_size_request(w_req if w_req > 0 else -1, h_req if h_req > 0 else -1)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
             if hal == Gtk.Align.START:
                 target_cb.set_start_widget(cw)
