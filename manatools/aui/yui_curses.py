@@ -7,6 +7,7 @@ import curses.ascii
 import sys
 import os
 import time
+import fnmatch
 from .yui_common import *
 from .backends.curses import *
 
@@ -80,6 +81,11 @@ class YApplicationCurses:
         self._product_name = "manatools AUI Curses"
         self._icon_base_path = ""
         self._icon = ""
+        # Default directories
+        try:
+            self._default_documents_dir = os.path.expanduser('~/Documenti')
+        except Exception:
+            self._default_documents_dir = os.path.expanduser('~')
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -96,6 +102,52 @@ class YApplicationCurses:
     def setApplicationIcon(self, Icon):
         """Set the application icon."""
         self._icon = Icon
+
+    def askForExistingDirectory(self, startDir: str, headline: str):
+        """
+        NCurses overlay dialog to select an existing directory.
+        Presents a navigable list of directories similar to a simple file manager.
+        """
+        try:
+            start_dir = startDir if (startDir and os.path.isdir(startDir)) else os.path.expanduser('~')
+            return self._browse_paths(start_dir, select_file=False, headline=headline or "Select Directory")
+        except Exception:
+            return ""
+
+    def askForExistingFile(self, startWith: str, filter: str, headline: str):
+        """
+        NCurses overlay dialog to select an existing file.
+        Shows a navigable list of directories and files, honoring simple filters like "*.txt;*.md".
+        """
+        try:
+            if startWith and os.path.isfile(startWith):
+                start_dir = os.path.dirname(startWith)
+            elif startWith and os.path.isdir(startWith):
+                start_dir = startWith
+            else:
+                # Default to Documents if available, else home
+                start_dir = self._default_documents_dir if os.path.isdir(self._default_documents_dir) else os.path.expanduser('~')
+            return self._browse_paths(start_dir, select_file=True, headline=headline or "Open File", filter_str=filter)
+        except Exception:
+            return ""
+
+    def askForSaveFileName(self, startWith: str, filter: str, headline: str):
+        """
+        NCurses overlay to choose a filename: navigate directories and type the name.
+        """
+        try:
+            if startWith and os.path.isfile(startWith):
+                start_dir = os.path.dirname(startWith)
+                default_name = os.path.basename(startWith)
+            elif startWith and os.path.isdir(startWith):
+                start_dir = startWith
+                default_name = ""
+            else:
+                start_dir = self._default_documents_dir if os.path.isdir(self._default_documents_dir) else os.path.expanduser('~')
+                default_name = ""
+            return self._save_path_dialog(start_dir, default_name, headline or "Save File", filter_str=filter)
+        except Exception:
+            return ""
 
     def applicationIcon(self):
         """Get the application icon."""
@@ -130,6 +182,260 @@ class YApplicationCurses:
     def applicationIcon(self):
         """Get the application title."""
         return self.__icon
+
+    # --- Internal helpers for ncurses file/directory chooser ---
+    def _parse_filter_patterns(self, filter_str: str):
+        try:
+            if not filter_str:
+                return []
+            parts = [p.strip() for p in filter_str.split(';') if p.strip()]
+            return parts
+        except Exception:
+            return []
+
+    def _list_entries(self, current_dir: str, select_file: bool, patterns):
+        """Return list of (label, path, type) for entries under current_dir.
+        type is 'dir' or 'file'. If select_file is True, apply patterns to files.
+        """
+        entries = []
+        try:
+            # Add parent directory entry
+            parent = os.path.dirname(current_dir.rstrip(os.sep)) or current_dir
+            if parent and parent != current_dir:
+                entries.append(("..", parent, 'dir'))
+            # List directory contents
+            with os.scandir(current_dir) as it:
+                dirs = []
+                files = []
+                for e in it:
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            dirs.append((e.name + '/', e.path, 'dir'))
+                        elif e.is_file(follow_symlinks=False):
+                            if not select_file:
+                                continue
+                            if not patterns:
+                                files.append((e.name, e.path, 'file'))
+                            else:
+                                for pat in patterns:
+                                    if fnmatch.fnmatch(e.name, pat):
+                                        files.append((e.name, e.path, 'file'))
+                                        break
+                    except Exception:
+                        pass
+            # Sort directories and files separately
+            dirs.sort(key=lambda x: x[0].lower())
+            files.sort(key=lambda x: x[0].lower())
+            entries.extend(dirs)
+            entries.extend(files)
+        except Exception:
+            # On failure, just return parent
+            pass
+        return entries
+
+    def _browse_paths(self, start_dir: str, select_file: bool, headline: str, filter_str: str = ""):
+        """Create an overlay ncurses dialog to navigate directories and pick a directory or file."""
+        current_dir = start_dir if os.path.isdir(start_dir) else os.path.expanduser('~')
+        patterns = self._parse_filter_patterns(filter_str)
+
+        # Build dialog UI
+        dlg = YDialogCurses(YDialogType.YPopupDialog, YDialogColorMode.YDialogNormalColor)
+        root = YVBoxCurses(dlg)
+        title_lbl = YLabelCurses(root, headline, isHeading=True)
+        path_lbl = YLabelCurses(root, f"Current: {current_dir}")
+        list_box = YSelectionBoxCurses(root, label="Items", multi_selection=False)
+        # Let list box stretch vertically
+        try:
+            list_box.setWeight(YUIDimension.YD_VERT, 1)
+        except Exception:
+            pass
+        buttons = YHBoxCurses(root)
+        btn_select = YPushButtonCurses(buttons, "Select")
+        btn_cancel = YPushButtonCurses(buttons, "Cancel")
+
+        def refresh_listing(dir_path):
+            try:
+                list_box.deleteAllItems()
+                for (label, path, typ) in self._list_entries(dir_path, select_file, patterns):
+                    it = YItem(label)
+                    try:
+                        it.setData({'path': path, 'type': typ})
+                    except Exception:
+                        pass
+                    list_box.addItem(it)
+            except Exception:
+                pass
+
+        refresh_listing(current_dir)
+        try:
+            dlg.open()
+        except Exception:
+            return ""
+
+        # Event loop
+        result = ""
+        while True:
+            ev = dlg.waitForEvent(0)
+            if isinstance(ev, YCancelEvent):
+                result = ""
+                break
+            if isinstance(ev, YWidgetEvent):
+                w = ev.widget()
+                if w == btn_cancel and ev.reason() == YEventReason.Activated:
+                    result = ""
+                    break
+                # Selecting from list via button
+                if w == btn_select and ev.reason() == YEventReason.Activated:
+                    try:
+                        sel = list_box.selectedItems()
+                        if not sel:
+                            continue
+                        item = sel[0]
+                        data = item.data() if hasattr(item, 'data') else None
+                        if not data or 'path' not in data:
+                            continue
+                        if data.get('type') == 'dir':
+                            # In directory mode, selecting chooses current dir
+                            if not select_file:
+                                result = data['path']
+                                break
+                            # In file mode, selecting a dir navigates
+                            current_dir = data['path']
+                            path_lbl.setText(f"Current: {current_dir}")
+                            refresh_listing(current_dir)
+                            continue
+                        else:
+                            # File selected -> choose in file mode
+                            if select_file:
+                                result = data['path']
+                                break
+                    except Exception:
+                        continue
+                # Enter/Space on list toggles selection -> use SelectionChanged to navigate/select
+                if w == list_box and ev.reason() == YEventReason.SelectionChanged:
+                    try:
+                        sel = list_box.selectedItems()
+                        if not sel:
+                            continue
+                        item = sel[0]
+                        data = item.data() if hasattr(item, 'data') else None
+                        if not data or 'path' not in data:
+                            continue
+                        if data.get('type') == 'dir':
+                            # Navigate into directory
+                            current_dir = data['path']
+                            path_lbl.setText(f"Current: {current_dir}")
+                            refresh_listing(current_dir)
+                            continue
+                        else:
+                            # File chosen via Enter in file mode
+                            if select_file:
+                                result = data['path']
+                                break
+                    except Exception:
+                        continue
+        try:
+            dlg.destroy()
+        except Exception:
+            pass
+        # For directory mode, if user navigated, return the current directory when no explicit file was selected.
+        if not select_file and result == "":
+            try:
+                # Return the current_dir as selection.
+                return current_dir
+            except Exception:
+                return ""
+        return result
+
+    def _save_path_dialog(self, start_dir: str, default_name: str, headline: str, filter_str: str = ""):
+        """Overlay dialog to navigate to a directory and enter a filename to save."""
+        current_dir = start_dir if os.path.isdir(start_dir) else os.path.expanduser('~')
+        patterns = self._parse_filter_patterns(filter_str)
+
+        dlg = YDialogCurses(YDialogType.YPopupDialog, YDialogColorMode.YDialogNormalColor)
+        root = YVBoxCurses(dlg)
+        YLabelCurses(root, headline, isHeading=True)
+        path_lbl = YLabelCurses(root, f"Current: {current_dir}")
+        list_box = YSelectionBoxCurses(root, label="Items", multi_selection=False)
+        try:
+            list_box.setWeight(YUIDimension.YD_VERT, 1)
+        except Exception:
+            pass
+        filename_input = YInputFieldCurses(root, label="Filename:")
+        try:
+            if default_name:
+                filename_input.setValue(default_name)
+        except Exception:
+            pass
+        buttons = YHBoxCurses(root)
+        btn_save = YPushButtonCurses(buttons, "Save")
+        btn_cancel = YPushButtonCurses(buttons, "Cancel")
+
+        def refresh_listing(dir_path):
+            try:
+                list_box.deleteAllItems()
+                for (label, path, typ) in self._list_entries(dir_path, select_file=True, patterns=patterns):
+                    it = YItem(label)
+                    try:
+                        it.setData({'path': path, 'type': typ})
+                    except Exception:
+                        pass
+                    list_box.addItem(it)
+            except Exception:
+                pass
+
+        refresh_listing(current_dir)
+        try:
+            dlg.open()
+        except Exception:
+            return ""
+
+        result = ""
+        while True:
+            ev = dlg.waitForEvent(0)
+            if isinstance(ev, YCancelEvent):
+                result = ""
+                break
+            if isinstance(ev, YWidgetEvent):
+                w = ev.widget()
+                if w == btn_cancel and ev.reason() == YEventReason.Activated:
+                    result = ""
+                    break
+                if w == btn_save and ev.reason() == YEventReason.Activated:
+                    try:
+                        name = filename_input.value()
+                        if name:
+                            result = os.path.join(current_dir, name)
+                            break
+                    except Exception:
+                        continue
+                if w == list_box and ev.reason() == YEventReason.SelectionChanged:
+                    try:
+                        sel = list_box.selectedItems()
+                        if not sel:
+                            continue
+                        item = sel[0]
+                        data = item.data() if hasattr(item, 'data') else None
+                        if not data or 'path' not in data:
+                            continue
+                        if data.get('type') == 'dir':
+                            current_dir = data['path']
+                            path_lbl.setText(f"Current: {current_dir}")
+                            refresh_listing(current_dir)
+                            continue
+                        else:
+                            # Pre-fill filename with selected file's name
+                            try:
+                                filename_input.setValue(os.path.basename(data['path']))
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+        try:
+            dlg.destroy()
+        except Exception:
+            pass
+        return result
 
 class YWidgetFactoryCurses:
     def __init__(self):
