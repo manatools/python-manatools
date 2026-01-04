@@ -165,14 +165,14 @@ class YApplicationQt:
 
         Parameters:
         - startWith: initial directory or file
-        - filter: file filter string (e.g. "*.txt")
+        - filter: semicolon-separated string containing a list of filters (e.g. "*.txt;*.md")
         - headline: explanatory text for the dialog
 
         Returns: selected filename as string, or empty string if cancelled.
         """
         try:
             start = startWith or ""
-            flt = f"Text files ({filter});;All files (*)" if filter else "All files (*)"
+            flt = filter if filter else "All files (*)"
             fn, _ = QtWidgets.QFileDialog.getOpenFileName(None, headline or "Open File", start, flt)
             return fn or ""
         except Exception:
@@ -192,7 +192,7 @@ class YApplicationQt:
         """
         try:
             start = startWith or ""
-            flt = f"Text files ({filter});;All files (*)" if filter else "All files (*)"
+            flt = filter if filter else "All files (*)"
             fn, _ = QtWidgets.QFileDialog.getSaveFileName(None, headline or "Save File", start, flt)
             return fn or ""
         except Exception:
