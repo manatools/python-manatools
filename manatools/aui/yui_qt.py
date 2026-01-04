@@ -5,6 +5,7 @@ Qt backend implementation for YUI
 import sys
 from PySide6 import QtWidgets, QtCore, QtGui
 import os
+import logging
 from .yui_common import *
 from .backends.qt import *
 from .backends.qt.commonqt import _resolve_icon
@@ -18,6 +19,11 @@ class YUIQt:
         if not self._qapp:
             self._qapp = QtWidgets.QApplication(sys.argv)
         self._application = YApplicationQt()
+        # logger for the backend manager
+        try:
+            self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        except Exception:
+            self._logger = logging.getLogger("manatools.aui.qt.YUIQt")
 
     def widgetFactory(self):
         return self._widget_factory
@@ -42,6 +48,10 @@ class YApplicationQt:
         self._icon = "manatools"  # default icon name
         # cached QIcon resolved from _icon (None if not resolved)
         self._qt_icon = None
+        try:
+            self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        except Exception:
+            self._logger = logging.getLogger("manatools.aui.qt.YApplicationQt")
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -126,6 +136,71 @@ class YApplicationQt:
     def applicationTitle(self):
         """Get the application title."""
         return self._application_title
+
+    def askForExistingDirectory(self, startDir: str, headline: str):
+        """
+        Prompt user to select an existing directory.
+
+        Parameters:
+        - startDir: initial folder to display (string, may be empty)
+        - headline: explanatory text for the dialog
+
+        Returns: selected directory path as string, or empty string if cancelled.
+        """
+        try:
+            start = startDir or ""
+            # Use QFileDialog static helper for convenience
+            res = QtWidgets.QFileDialog.getExistingDirectory(None, headline or "Select Directory", start)
+            return res or ""
+        except Exception:
+            try:
+                self._logger.exception("askForExistingDirectory failed")
+            except Exception:
+                pass
+            return ""
+
+    def askForExistingFile(self, startWith: str, filter: str, headline: str):
+        """
+        Prompt user to select an existing file.
+
+        Parameters:
+        - startWith: initial directory or file
+        - filter: file filter string (e.g. "*.txt")
+        - headline: explanatory text for the dialog
+
+        Returns: selected filename as string, or empty string if cancelled.
+        """
+        try:
+            start = startWith or ""
+            flt = f"Text files ({filter});;All files (*)" if filter else "All files (*)"
+            fn, _ = QtWidgets.QFileDialog.getOpenFileName(None, headline or "Open File", start, flt)
+            return fn or ""
+        except Exception:
+            try:
+                self._logger.exception("askForExistingFile failed")
+            except Exception:
+                pass
+            return ""
+
+    def askForSaveFileName(self, startWith: str, filter: str, headline: str):
+        """
+        Prompt user to choose a filename to save data.
+
+        Parameters are as in `askForExistingFile`.
+
+        Returns: selected filename as string, or empty string if cancelled.
+        """
+        try:
+            start = startWith or ""
+            flt = f"Text files ({filter});;All files (*)" if filter else "All files (*)"
+            fn, _ = QtWidgets.QFileDialog.getSaveFileName(None, headline or "Save File", start, flt)
+            return fn or ""
+        except Exception:
+            try:
+                self._logger.exception("askForSaveFileName failed")
+            except Exception:
+                pass
+            return ""
 
     def setApplicationIcon(self, Icon):
         """Set the application title."""
