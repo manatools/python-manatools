@@ -63,6 +63,7 @@ To check/review:
     [X] YInputField password mode
     [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
     [ ] managing shortcuts
+    [ ] localization
 
 Nice to have: improvements outside YUI API
     [ ] window title
