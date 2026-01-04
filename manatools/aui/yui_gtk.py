@@ -4,18 +4,24 @@ GTK4 backend implementation for YUI (converted from GTK3)
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib
-import cairo
-import threading
+from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib, Gio
+from typing import List
 import os
+import logging
 from .yui_common import *
 from .backends.gtk import *
 
+
 class YUIGtk:
     def __init__(self):
+        # Use a dedicated widget factory to match other backends.
         self._widget_factory = YWidgetFactoryGtk()
         self._optional_widget_factory = None
         self._application = YApplicationGtk()
+        try:
+            self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        except Exception:
+            self._logger = logging.getLogger("manatools.aui.gtk.YUIGtk")
     
     def widgetFactory(self):
         return self._widget_factory
@@ -40,6 +46,10 @@ class YApplicationGtk:
         self._icon = "manatools"  # default icon name
         # cached resolved GdkPixbuf.Pixbuf (or None)
         self._gtk_icon_pixbuf = None
+        try:
+            self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        except Exception:
+            self._logger = logging.getLogger("manatools.aui.gtk.YApplicationGtk")
 
     def _resolve_pixbuf(self, icon_spec):
         """Resolve icon_spec into a GdkPixbuf.Pixbuf if possible.
@@ -180,10 +190,367 @@ class YApplicationGtk:
     def applicationIcon(self):
         return self._icon
 
+    def _create_gtk4_filters(self, filter_str: str) -> List[Gtk.FileFilter]:
+        """
+        Create GTK4 file filters from a semicolon-separated filter string.
+        """
+        filters = []
+        
+        if not filter_str or filter_str.strip() == "":
+            return filters
+        
+        # Split and clean patterns
+        patterns = [p.strip() for p in filter_str.split(';') if p.strip()]
+        
+        # Create main filter
+        main_filter = Gtk.FileFilter()
+        
+        # Set a meaningful name
+        if len(patterns) == 1:
+            ext = patterns[0].replace('*.', '').replace('*', '')
+            main_filter.set_name(f"{ext.upper()} files")
+        else:
+            main_filter.set_name("Supported files")
+        
+        # Add patterns to the filter
+        for pattern in patterns:
+            pattern = pattern.strip()
+            if not pattern:
+                continue
+                
+            # Handle different pattern formats
+            if pattern == "*" or pattern == "*.*":
+                # All files
+                main_filter.add_pattern("*")
+            elif pattern.startswith("*."):
+                # Pattern like "*.txt"
+                main_filter.add_pattern(pattern)
+                # Also add without star for some systems
+                main_filter.add_pattern(pattern[1:])  # ".txt"
+            elif pattern.startswith("."):
+                # Pattern like ".txt"
+                main_filter.add_pattern(f"*{pattern}")  # "*.txt"
+                main_filter.add_pattern(pattern)        # ".txt"
+            else:
+                # Try as mime type or literal pattern
+                if '/' in pattern:  # Looks like a mime type
+                    main_filter.add_mime_type(pattern)
+                else:
+                    main_filter.add_pattern(pattern)
+        
+        filters.append(main_filter)
+        
+        # Add "All files" filter
+        all_filter = Gtk.FileFilter()
+        all_filter.set_name("All files")
+        all_filter.add_pattern("*")
+        filters.append(all_filter)
+        
+        return filters
+
+    def askForExistingDirectory(self, startDir: str, headline: str):
+        """
+        Prompt user to select an existing directory (GTK implementation).
+        """
+        try:
+            # try to find an active YDialogGtk window to use as transient parent
+            parent_window = None
+            try:
+                for od in getattr(YDialogGtk, "_open_dialogs", []) or []:
+                    try:
+                        w = getattr(od, "_window", None)
+                        if w:
+                            parent_window = w
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                parent_window = None
+
+            # ensure application name is set so recent manager can record resources
+            try:
+                GLib.set_prgname(self._product_name or "manatools")
+            except Exception:
+                pass
+
+            # Use Gtk.FileDialog (GTK 4.10+) exclusively for directory selection
+            if not hasattr(Gtk, 'FileDialog'):
+                try:
+                    self._logger.error('Gtk.FileDialog is not available in this GTK runtime')
+                except Exception:
+                    pass
+                return ""
+
+            try:
+                fd = Gtk.FileDialog.new()
+                try:
+                    fd.set_title(headline or "Select Directory")
+                except Exception:
+                    pass
+
+                if startDir and os.path.exists(startDir):
+                    try:
+                        fd.set_initial_folder(Gio.File.new_for_path(startDir))
+                    except Exception:
+                        try:
+                            fd.set_initial_folder_uri(GLib.filename_to_uri(startDir, None))
+                        except Exception:
+                            pass
+
+                loop = GLib.MainLoop()
+                result_holder = {'file': None}
+
+                def _on_opened(dialog, result, _lh=loop, _holder=result_holder, _fd=fd):
+                    try:
+                        f = _fd.select_folder_finish(result)
+                        _holder['file'] = f
+                    except Exception:
+                        _holder['file'] = None
+                    try:
+                        _fd.close()
+                    except Exception:
+                        pass
+                    try:
+                        _lh.quit()
+                    except Exception:
+                        pass
+
+                fd.select_folder(parent_window, None, _on_opened)
+                loop.run()
+                gf = result_holder.get('file')
+                if gf is not None:
+                    try:
+                        return gf.get_path() or gf.get_uri() or ""
+                    except Exception:
+                        return ""
+                return ""
+            except Exception:
+                try:
+                    self._logger.exception('FileDialog.select_folder failed')
+                except Exception:
+                    pass
+                return ""
+        except Exception:
+            try:
+                self._logger.exception("askForExistingDirectory failed")
+            except Exception:
+                pass
+            return ""
+
+    def askForExistingFile(self, startWith: str, filter: str, headline: str):
+        """
+        Prompt user to select an existing file.
+
+        Parameters:
+        - startWith: initial directory or file
+        - filter: semicolon-separated string containing a list of filters (e.g. "*.txt;*.md")
+        - headline: explanatory text for the dialog
+
+        Returns: selected filename as string, or empty string if cancelled.
+        """
+        try:
+            # try to use an active dialog window as transient parent
+            parent_window = None
+            try:
+                for od in getattr(YDialogGtk, "_open_dialogs", []) or []:
+                    try:
+                        w = getattr(od, "_window", None)
+                        if w:
+                            parent_window = w
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                parent_window = None
+
+            if parent_window is None:
+                self._logger.info("askForExistingFile: no parent window found")
+
+            try:
+                GLib.set_prgname(self._product_name or "manatools")
+            except Exception:
+                pass
+
+            # Use Gtk.FileDialog (GTK 4.10+) exclusively for file open
+            if not hasattr(Gtk, 'FileDialog'):
+                try:
+                    self._logger.error('Gtk.FileDialog is not available in this GTK runtime')
+                except Exception:
+                    pass
+                return ""
+
+            try:
+                fd = Gtk.FileDialog.new()
+                try:
+                    fd.set_title(headline or "Open File")
+                except Exception:
+                    pass
+
+                # filters
+                try:
+                    filters = self._create_gtk4_filters(filter)
+                    if filters:
+                        filter_list = Gio.ListStore.new(Gtk.FileFilter)
+                        for file_filter in filters:
+                            filter_list.append(file_filter)
+                        fd.set_filters(filter_list)
+                except Exception:
+                    self._logger.exception("askForExistingFile: setting filters failed")
+                    pass
+
+                if startWith and os.path.exists(startWith):
+                    try:
+                        target = os.path.dirname(startWith) if os.path.isfile(startWith) else startWith
+                        fd.set_initial_folder(Gio.File.new_for_path(target))
+                    except Exception:
+                        self._logger.exception("askForExistingFile: setting initial folder failed")
+                        try:
+                            fd.set_initial_folder_uri(GLib.filename_to_uri(target, None))
+                        except Exception:
+                            pass
+
+                loop = GLib.MainLoop()
+                result_holder = {'file': None}
+
+                def _on_opened(dialog, result, _lh=loop, _holder=result_holder, _fd=fd):
+                    try:
+                        f = _fd.open_finish(result)
+                        _holder['file'] = f
+                    except Exception:
+                        _holder['file'] = None
+                    try:
+                        _fd.close()
+                    except Exception:
+                        pass
+                    try:
+                        _lh.quit()
+                    except Exception:
+                        pass
+
+                fd.open(parent_window, None, _on_opened)
+                loop.run()
+                gf = result_holder.get('file')
+                if gf is not None:
+                    pathname = gf.get_path() or gf.get_uri() or ""
+                    self._logger.debug("askForExistingFile: selected file: %s", pathname)
+                    return pathname
+                return ""
+            except Exception:
+                try:
+                    self._logger.exception('FileDialog.open failed')
+                except Exception:
+                    pass
+                return ""
+        except Exception:
+            return ""
+
+    def askForSaveFileName(self, startWith: str, filter: str, headline: str):
+        """
+        Prompt user to choose a filename to save data.
+
+        Returns selected filename or empty string if cancelled.
+        """
+        try:
+            parent_window = None
+            try:
+                for od in getattr(YDialogGtk, "_open_dialogs", []) or []:
+                    try:
+                        w = getattr(od, "_window", None)
+                        if w:
+                            parent_window = w
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                parent_window = None
+
+            try:
+                GLib.set_prgname(self._product_name or "manatools")
+            except Exception:
+                pass
+
+            # Use Gtk.FileDialog (GTK 4.10+) exclusively for save
+            if not hasattr(Gtk, 'FileDialog'):
+                try:
+                    self._logger.error('Gtk.FileDialog is not available in this GTK runtime')
+                except Exception:
+                    pass
+                return ""
+
+            try:
+                fd = Gtk.FileDialog.new()
+                try:
+                    fd.set_title(headline or "Save File")
+                except Exception:
+                    pass
+
+                if filter:
+                    try:
+                        filt = Gtk.FileFilter()
+                        filt.set_name("Text files")
+                        for pat in filter.split():
+                            try:
+                                filt.add_pattern(pat)
+                            except Exception:
+                                pass
+                        fd.set_filters([filt])
+                    except Exception:
+                        pass
+
+                if startWith and os.path.exists(startWith):
+                    try:
+                        target = os.path.dirname(startWith) if os.path.isfile(startWith) else startWith
+                        fd.set_initial_folder(Gio.File.new_for_path(target))
+                    except Exception:
+                        try:
+                            fd.set_initial_folder_uri(GLib.filename_to_uri(target, None))
+                        except Exception:
+                            pass
+
+                loop = GLib.MainLoop()
+                result_holder = {'file': None}
+
+                def _on_saved(dialog, result, _lh=loop, _holder=result_holder, _fd=fd):
+                    try:
+                        f = _fd.save_finish(result)
+                        _holder['file'] = f
+                    except Exception:
+                        _holder['file'] = None
+                    try:
+                        _fd.close()
+                    except Exception:
+                        pass
+                    try:
+                        _lh.quit()
+                    except Exception:
+                        pass
+
+                fd.save(parent_window, None, _on_saved)
+                loop.run()
+                gf = result_holder.get('file')
+                if gf is not None:
+                    try:
+                        return gf.get_path() or gf.get_uri() or ""
+                    except Exception:
+                        return ""
+                return ""
+            except Exception:
+                try:
+                    self._logger.exception('FileDialog.save failed')
+                except Exception:
+                    pass
+                return ""
+        except Exception:
+            try:
+                self._logger.exception("askForSaveFileName failed")
+            except Exception:
+                pass
+            return ""
+
 class YWidgetFactoryGtk:
     def __init__(self):
         pass
-    
+
     def createMainDialog(self, color_mode=YDialogColorMode.YDialogNormalColor):
         return YDialogGtk(YDialogType.YMainDialog, color_mode)
     
@@ -348,4 +715,3 @@ class YWidgetFactoryGtk:
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
-
