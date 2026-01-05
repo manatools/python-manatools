@@ -149,8 +149,16 @@ class YWidget:
     def widgetClass(self):
         return self.__class__.__name__
     
+    def widgetPathName(self):
+        ''' Return the full path name of this widget in the hierarchy. '''
+        return f"{self._parent.widgetPathName()}/{self.widgetClass()}({self._id})" if self._parent else f"/{self.widgetClass()}({self._id})"
+    
+    def id(self):
+        ''' Return the unique identifier of this widget. '''
+        return self._id
+
     def debugLabel(self):
-        return f"{self._parent.debugLabel()}/{self.widgetClass()}({self._id})" if self._parent else f"{self.widgetClass()}({self._id})"
+        return f"{self.widgetClass()}({self._id})"
     
     def helpText(self):
         return self._help_text
