@@ -118,20 +118,29 @@ class YVBoxCurses(YWidget):
             else:
                 fixed_height_total += child_min
 
-        available_for_stretch = max(0, height - fixed_height_total - spacing)
+        # Determine spacing budget and allocate stretch space
+        # Compute base minimal total (children minima + minimal gaps)
+        base_min_total = sum(child_min_heights) + spacing
+        # If base minimal total exceeds height, reduce spacing to fit
+        if base_min_total > height:
+            # No space for all gaps; allow zero or minimal gaps
+            spacing_allowed = max(0, height - sum(child_min_heights))
+        else:
+            spacing_allowed = spacing
+
+        # Recompute available rows for stretch after honoring allowed spacing
+        available_for_stretch = max(0, height - sum(child_min_heights) - spacing_allowed)
 
         allocated = list(child_min_heights)
 
         if stretchable_indices:
             total_weight = sum(stretchable_weights) or len(stretchable_indices)
-            # Proportional distribution of extra rows
             extras = [0] * len(stretchable_indices)
             base = 0
             for k, idx in enumerate(stretchable_indices):
                 extra = (available_for_stretch * stretchable_weights[k]) // total_weight
                 extras[k] = extra
                 base += extra
-            # Distribute leftover rows due to integer division
             leftover = available_for_stretch - base
             for k in range(len(stretchable_indices)):
                 if leftover <= 0:
@@ -141,20 +150,20 @@ class YVBoxCurses(YWidget):
             for k, idx in enumerate(stretchable_indices):
                 allocated[idx] = child_min_heights[idx] + extras[k]
 
-        total_alloc = sum(allocated) + spacing
+        # If still room, give remainder to last stretchable/last child
+        total_alloc = sum(allocated) + spacing_allowed
         if total_alloc < height:
-            # Give remainder to the last stretchable (or last child)
             extra = height - total_alloc
             target = stretchable_indices[-1] if stretchable_indices else (num_children - 1)
             allocated[target] += extra
         elif total_alloc > height:
-            # Reduce overflow from the last stretchable (or last child)
             diff = total_alloc - height
             target = stretchable_indices[-1] if stretchable_indices else (num_children - 1)
             allocated[target] = max(1, allocated[target] - diff)
 
-        # Draw children with allocated heights
+        # Draw children with allocated heights, inserting at most spacing_allowed gaps
         cy = y
+        gaps_allowed = spacing_allowed
         for i, child in enumerate(self._children):
             ch = allocated[i]
             if ch <= 0:
@@ -172,5 +181,7 @@ class YVBoxCurses(YWidget):
                 except Exception:
                     _mod_logger.error("_draw child error", exc_info=True)
             cy += ch
-            if i < num_children - 1 and cy < (y + height):
-                cy += 1  # one-line spacing
+            # Insert at most one-line gap between children if budget allows
+            if i < num_children - 1 and gaps_allowed > 0 and cy < (y + height):
+                cy += 1
+                gaps_allowed -= 1

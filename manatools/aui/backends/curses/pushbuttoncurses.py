@@ -84,18 +84,29 @@ class YPushButtonCurses(YWidget):
         try:
             # Center the button label within available width
             button_text = f"[ {self._label} ]"
-            text_x = x + max(0, (width - len(button_text)) // 2)
+            # Determine drawing position and clip text if necessary
+            if width <= 0:
+                return
+            if len(button_text) <= width:
+                text_x = x + max(0, (width - len(button_text)) // 2)
+                draw_text = button_text
+            else:
+                # Not enough space: draw truncated centered/left-aligned text
+                draw_text = button_text[:max(1, width)]
+                text_x = x
 
-            # Only draw if we have enough space
-            if text_x + len(button_text) <= x + width:
-                if not self.isEnabled():
-                    attr = curses.A_DIM
-                else:
-                    attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
-                    if self._focused:
-                        attr |= curses.A_BOLD
+            if not self.isEnabled():
+                attr = curses.A_DIM
+            else:
+                attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
+                if self._focused:
+                    attr |= curses.A_BOLD
 
-                window.addstr(y, text_x, button_text, attr)
+            try:
+                window.addstr(y, text_x, draw_text, attr)
+            except curses.error:
+                # Best-effort: if even this fails, ignore
+                pass
         except curses.error as e:
             try:
                 self._logger.error("_draw curses.error: %s", e, exc_info=True)
