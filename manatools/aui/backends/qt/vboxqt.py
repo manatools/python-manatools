@@ -41,13 +41,27 @@ class YVBoxQt(YWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
         
-        for child in self._children:
-            widget = child.get_backend_widget()
-            expand = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
+        # Map YWidget weights and stretchable flags to Qt layout stretch factors.
+        # Weight semantics: if any child has a positive weight (>0) use those
+        # weights as stretch factors; otherwise give equal stretch (1) to
+        # children that are marked stretchable. Non-stretchable children get 0.
+        try:
+            child_weights = [int(child.weight(YUIDimension.YD_VERT) or 0) for child in self._children]
+        except Exception:
+            child_weights = [0 for _ in self._children]
+        has_positive = any(w > 0 for w in child_weights)
 
-            # If the child requests horizontal stretch, set its QSizePolicy to Expanding
+        for idx, child in enumerate(self._children):
+            widget = child.get_backend_widget()
+            weight = int(child_weights[idx]) if idx < len(child_weights) else 0
+            if has_positive:
+                stretch = weight
+            else:
+                stretch = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
+
+            # If the child will receive extra space, set its QSizePolicy to Expanding
             try:
-                if expand == 1:
+                if stretch > 0:
                     sp = widget.sizePolicy()
                     try:
                         sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
@@ -62,10 +76,10 @@ class YVBoxQt(YWidget):
 
             self._backend_widget.setEnabled(bool(self._enabled))
             try:
-                self._logger.debug("YVBoxQt: adding child %s expand=%s", child.widgetClass(), expand)
+                self._logger.debug("YVBoxQt: adding child %s stretch=%s weight=%s", child.widgetClass(), stretch, weight)
             except Exception:
                 pass
-            layout.addWidget(widget, stretch=expand)
+            layout.addWidget(widget, stretch=stretch)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -100,9 +114,15 @@ class YVBoxQt(YWidget):
             def _deferred_attach():
                 try:
                     widget = child.get_backend_widget()
-                    expand = 1 if child.stretchable(YUIDimension.YD_VERT) else 0
                     try:
-                        if expand == 1:
+                        weight = int(child.weight(YUIDimension.YD_VERT) or 0)
+                    except Exception:
+                        weight = 0
+                    # If dynamic addition, use explicit weight when >0, otherwise
+                    # fall back to stretchable flag (equal-share represented by 1).
+                    stretch = weight if weight > 0 else (1 if child.stretchable(YUIDimension.YD_VERT) else 0)
+                    try:
+                        if stretch > 0:
                             sp = widget.sizePolicy()
                             try:
                                 sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
@@ -119,7 +139,7 @@ class YVBoxQt(YWidget):
                         if lay is None:
                             lay = QtWidgets.QVBoxLayout(self._backend_widget)
                             self._backend_widget.setLayout(lay)
-                        lay.addWidget(widget, stretch=expand)
+                        lay.addWidget(widget, stretch=stretch)
                         try:
                             widget.show()
                         except Exception:
