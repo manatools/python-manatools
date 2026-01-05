@@ -108,6 +108,16 @@ class YHBoxCurses(YWidget):
                 return min(max_width, max(1, int(child.minWidth())))
         except Exception:
             pass
+        # If the child is a container, compute its recursive minimal width
+        try:
+            cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
+            if cls in ("YVBox", "YHBox", "YFrame", "YCheckBoxFrame", "YAlignment", "YReplacePoint"):
+                try:
+                    return min(max_width, max(1, _curses_recursive_min_width(child)))
+                except Exception:
+                    pass
+        except Exception:
+            pass
         # Heuristics based on common attributes
         try:
             cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
@@ -137,72 +147,193 @@ class YHBoxCurses(YWidget):
         widths = [0] * num_children
         stretchables = []
         min_reserved = [0] * num_children
+        pref_reserved = [0] * num_children
+        child_weights = [0] * num_children
         for i, child in enumerate(self._children):
             # compute each child's minimal width (best-effort)
             m = self._child_min_width(child, available)
             min_reserved[i] = max(1, m)
-            if child.stretchable(YUIDimension.YD_HORIZ):
+            # preferred width: allow explicit _width or min_reserved as default
+            try:
+                pref_w = int(getattr(child, "_width", min_reserved[i]))
+            except Exception:
+                pref_w = min_reserved[i]
+            pref_reserved[i] = max(min_reserved[i], pref_w)
+            # gather declared weight (if any)
+            try:
+                w = int(child.weight(YUIDimension.YD_HORIZ))
+            except Exception:
+                try:
+                    w = int(getattr(child, "_weight", 0))
+                except Exception:
+                    w = 0
+            if w < 0:
+                w = 0
+            child_weights[i] = w
+            # consider as stretchable if explicitly stretchable or has non-zero weight
+            if child.stretchable(YUIDimension.YD_HORIZ) or child_weights[i] > 0:
                 stretchables.append(i)
 
         # Sum fixed (non-stretchable) minimal widths and minimal total for stretchables
-        fixed_total = sum(min_reserved[i] for i, c in enumerate(self._children) if not c.stretchable(YUIDimension.YD_HORIZ))
-        min_stretch_total = sum(min_reserved[i] for i, c in enumerate(self._children) if c.stretchable(YUIDimension.YD_HORIZ))
+        fixed_total = sum(min_reserved[i] for i, c in enumerate(self._children) if not (c.stretchable(YUIDimension.YD_HORIZ) or child_weights[i] > 0))
+        min_stretch_total = sum(min_reserved[i] for i, c in enumerate(self._children) if (c.stretchable(YUIDimension.YD_HORIZ) or child_weights[i] > 0))
 
-        # Available space already accounts for gaps
-        remaining = available - fixed_total - min_stretch_total
+        # Start allocation from preferred widths, then adjust to fit available
+        widths = list(pref_reserved)
 
-        if stretchables and remaining > 0:
-            # Start from each stretchable's minimum, then distribute leftover
-            per = remaining // len(stretchables)
-            extra = remaining % len(stretchables)
-            for k, idx in enumerate(stretchables):
-                widths[idx] = min_reserved[idx] + per + (1 if k < extra else 0)
-            # Fixed children get their reserved minima
+        # collect stretchable weights (0 means equal-share fallback)
+        stretch_weights = []
+        for idx in stretchables:
+            w = child_weights[idx] if idx < len(child_weights) else 0
+            # normalize weight to 0..100 range if out of bounds
+            try:
+                if w > 100:
+                    w = 100
+                elif w < 0:
+                    w = 0
+            except Exception:
+                w = 0
+            stretch_weights.append(w)
+
+        try:
+            # Detailed per-child diagnostics
+            details = []
             for i, child in enumerate(self._children):
-                if not child.stretchable(YUIDimension.YD_HORIZ):
-                    widths[i] = min_reserved[i]
-        else:
-            # Either no stretchables, or not enough space to give extra.
-            # In this case, try to honor minimal reservations as much as possible.
-            # If total minima exceed available, shrink proportionally but keep at least 1.
-            total_min = fixed_total + min_stretch_total
-            if total_min <= available:
-                # we have some leftover but no stretchables to expand; distribute among all
-                leftover = available - total_min
-                per = leftover // num_children if num_children else 0
-                extra = leftover % num_children if num_children else 0
-                for i in range(num_children):
-                    widths[i] = min_reserved[i] + per + (1 if i < extra else 0)
+                try:
+                    lbl = child.debugLabel() if hasattr(child, 'debugLabel') else f'child_{i}'
+                except Exception:
+                    lbl = f'child_{i}'
+                try:
+                    sw = bool(child.stretchable(YUIDimension.YD_HORIZ))
+                except Exception:
+                    sw = False
+                try:
+                    wv = int(child.weight(YUIDimension.YD_HORIZ))
+                except Exception:
+                    wv = 0
+                details.append((i, lbl, min_reserved[i], pref_reserved[i], sw, wv))
+            self._logger.debug("HBox allocation inputs: available=%d spacing=%d details=%s",
+                               available, spacing, details)
+        except Exception:
+            pass
+
+        total_pref = sum(widths)
+        # If preferred total fits, distribute surplus among stretchables by weight
+        if total_pref <= available:
+            surplus = available - total_pref
+            if stretchables:
+                total_weight = sum(stretch_weights)
+                if total_weight <= 0:
+                    per = surplus // len(stretchables) if stretchables else 0
+                    extra = surplus % len(stretchables) if stretchables else 0
+                    for k, idx in enumerate(stretchables):
+                        widths[idx] += per + (1 if k < extra else 0)
+                else:
+                    assigned = [0] * len(stretchables)
+                    base = 0
+                    for k, w in enumerate(stretch_weights):
+                        add = (surplus * w) // total_weight
+                        assigned[k] = add
+                        base += add
+                    leftover = surplus - base
+                    for k in range(len(stretchables)):
+                        if leftover <= 0:
+                            break
+                        assigned[k] += 1
+                        leftover -= 1
+                    for k, idx in enumerate(stretchables):
+                        widths[idx] += assigned[k]
             else:
-                # Need to shrink some minima to fit; compute shrink ratio
-                # Start from minima and reduce from largest items first to preserve small widgets
-                widths = list(min_reserved)
-                overflow = total_min - available
-                # Sort indices by current width descending
-                order = sorted(range(num_children), key=lambda ii: widths[ii], reverse=True)
+                # No stretchables: spread leftover evenly among all children
+                per = surplus // num_children if num_children else 0
+                extra = surplus % num_children if num_children else 0
+                for i in range(num_children):
+                    widths[i] += per + (1 if i < extra else 0)
+        else:
+            # Need to shrink preferred sizes down to minima to fit available
+            total_with_spacing = total_pref
+            if total_with_spacing + spacing > available:
+                overflow = total_with_spacing + spacing - available
+                reducible = [max(0, widths[i] - min_reserved[i]) for i in range(num_children)]
+                order = sorted(range(num_children), key=lambda ii: reducible[ii], reverse=True)
                 for idx in order:
                     if overflow <= 0:
                         break
-                    can_reduce = widths[idx] - 1
-                    if can_reduce <= 0:
+                    can = reducible[idx]
+                    if can <= 0:
                         continue
-                    take = min(can_reduce, overflow)
+                    take = min(can, overflow)
                     widths[idx] -= take
                     overflow -= take
-                # If still overflow (shouldn't happen), clamp all to 1
                 if overflow > 0:
                     for i in range(num_children):
-                        widths[i] = 1
+                        if overflow <= 0:
+                            break
+                        can = max(0, widths[i] - 1)
+                        take = min(can, overflow)
+                        widths[i] -= take
+                        overflow -= take
 
-        # Debug: log final allocation before drawing children
+        # Final debug of allocated widths
         try:
-            total_assigned = sum(widths)
-            self._logger.info("HBox final widths=%s total=%d (available=%d)", widths, total_assigned, available)
-            self._logger.debug("HBox internal min_reserved=%s fixed_total=%d min_stretch_total=%d num_stretch=%d",
-                               min_reserved, fixed_total, min_stretch_total if 'min_stretch_total' in locals() else 0,
-                               len(stretchables))
+            self._logger.debug("HBox allocated widths=%s total=%d (available=%d)", widths, sum(widths), available)
         except Exception:
             pass
+
+        # Ensure containers get at least the width required by their children
+        def _required_width_for(widget):
+            try:
+                cls = widget.widgetClass() if hasattr(widget, 'widgetClass') else ''
+            except Exception:
+                cls = ''
+            try:
+                if cls == 'YPushButton':
+                    lbl = getattr(widget, '_label', '')
+                    return max(1, len(f"[ {lbl} ]"))
+                if cls == 'YLabel':
+                    txt = getattr(widget, '_text', '') or getattr(widget, '_label', '')
+                    return max(1, len(str(txt)))
+                if cls in ('YVBox', 'YHBox', 'YFrame', 'YCheckBoxFrame', 'YAlignment', 'YReplacePoint'):
+                    # for containers, required width is max of children's required widths
+                    mx = 1
+                    for ch in getattr(widget, '_children', []) or []:
+                        try:
+                            r = _required_width_for(ch)
+                            if r > mx:
+                                mx = r
+                        except Exception:
+                            pass
+                    return mx
+            except Exception:
+                pass
+            # fallback to minimal reserved
+            try:
+                return max(1, _curses_recursive_min_width(widget))
+            except Exception:
+                return 1
+
+        # try to satisfy required widths by borrowing from others
+        for i, child in enumerate(self._children):
+            req = _required_width_for(child)
+            if widths[i] < req:
+                need = req - widths[i]
+                # try to reduce other children that are above their minima
+                for j in range(num_children):
+                    if j == i:
+                        continue
+                    avail = widths[j] - min_reserved[j]
+                    if avail <= 0:
+                        continue
+                    take = min(avail, need)
+                    widths[j] -= take
+                    widths[i] += take
+                    need -= take
+                    if need <= 0:
+                        break
+                # if still need, clamp to available overall (best-effort)
+                if widths[i] < req:
+                    # nothing else we can do; leave as-is
+                    pass
 
         # Draw children and pass full container height to stretchable children
         cx = x
@@ -223,6 +354,12 @@ class YHBoxCurses(YWidget):
             else:
                 ch = min(height, max(1, getattr(child, "_height", 1)))
             if hasattr(child, "_draw"):
+                try:
+                    self._logger.debug("HBox drawing child %d: lbl=%s alloc_w=%d x=%d height=%d ch_h=%d", i,
+                                       (child.debugLabel() if hasattr(child, 'debugLabel') else f'child_{i}'),
+                                       w, cx, height, ch)
+                except Exception:
+                    pass
                 child._draw(window, y, cx, w, ch)
             cx += w
             if i < num_children - 1:

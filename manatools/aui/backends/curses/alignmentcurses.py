@@ -117,10 +117,22 @@ class YAlignmentCurses(YSingleChildContainerWidget):
             except Exception:
                 pass
             # Horizontal position
+            # determine the width we'll give to the child: prefer an
+            # explicit child _width (or the child's minimal width), but
+            # never exceed the available width
+            try:
+                child_pref_w = getattr(self.child(), "_width", None)
+                if child_pref_w is not None:
+                    child_w = min(width, max(ch_min_w, int(child_pref_w)))
+                else:
+                    child_w = min(width, ch_min_w)
+            except Exception:
+                child_w = min(width, ch_min_w)
+
             if self._halign_spec == YAlignmentType.YAlignEnd:
-                cx = x + max(0, width - ch_min_w)
+                cx = x + max(0, width - child_w)
             elif self._halign_spec == YAlignmentType.YAlignCenter:
-                cx = x + max(0, (width - ch_min_w) // 2)
+                cx = x + max(0, (width - child_w) // 2)
             else:
                 cx = x
             # Vertical position (single line widgets mostly)
@@ -138,7 +150,17 @@ class YAlignmentCurses(YSingleChildContainerWidget):
                     ch_height = max(ch_height, min_h)
             except Exception:
                 pass
-            self.child()._draw(window, cy, cx, min(ch_min_w, max(1, width)), min(height, ch_height))
+            # give the computed width to the child (at least 1 char)
+            final_w = max(1, child_w)
+            try:
+                self._logger.debug("Alignment draw: child=%s halign=%s valign=%s container=(%d,%d) size=(%d,%d) child_min=%d child_pref=%s child_w=%d cx=%d cy=%d",
+                                   self.child().debugLabel() if hasattr(self.child(), 'debugLabel') else '<child>',
+                                   self._halign_spec, self._valign_spec,
+                                   x, y, width, height,
+                                   ch_min_w, getattr(self.child(), '_width', None), final_w, cx, cy)
+            except Exception:
+                pass
+            self.child()._draw(window, cy, cx, final_w, min(height, ch_height))
         except Exception:
             pass
 

@@ -86,69 +86,127 @@ class YVBoxCurses(YWidget):
 
         spacing = max(0, num_children - 1)
 
+        # Compute both minimal heights and preferred (requested) heights
         child_min_heights = []
+        child_pref_heights = []
         stretchable_indices = []
         stretchable_weights = []
         fixed_height_total = 0
 
         for i, child in enumerate(self._children):
-            # Use recursive min height for containers and frames
-            child_min = max(1, _curses_recursive_min_height(child))
-            # If child can compute desired height for the current width, honor it
+            # Minimal height (hard lower bound)
+            min_h = max(1, _curses_recursive_min_height(child))
+            # Preferred/requested height (may be larger than min_h)
+            pref_h = min_h
+            try:
+                # explicit _height attribute may express a preferred size
+                if hasattr(child, "_height"):
+                    h = int(getattr(child, "_height", pref_h))
+                    pref_h = max(pref_h, h)
+            except Exception:
+                pass
             try:
                 if hasattr(child, "_desired_height_for_width"):
                     dh = int(child._desired_height_for_width(width))
-                    if dh > child_min:
-                        child_min = dh
+                    pref_h = max(pref_h, dh)
             except Exception:
                 pass
-            child_min_heights.append(child_min)
+            child_min_heights.append(min_h)
+            child_pref_heights.append(pref_h)
 
             is_stretch = bool(child.stretchable(YUIDimension.YD_VERT))
             if is_stretch:
                 stretchable_indices.append(i)
                 try:
                     w = child.weight(YUIDimension.YD_VERT)
-                    w = int(w) if w is not None else 1
+                    # normalize weight to 0..100; default 0
+                    w = int(w) if w is not None else 0
                 except Exception:
-                    w = 1
-                if w <= 0:
-                    w = 1
+                    w = 0
+                if w < 0:
+                    w = 0
                 stretchable_weights.append(w)
             else:
-                fixed_height_total += child_min
+                fixed_height_total += min_h
 
         # Determine spacing budget and allocate stretch space
-        # Compute base minimal total (children minima + minimal gaps)
-        base_min_total = sum(child_min_heights) + spacing
-        # If base minimal total exceeds height, reduce spacing to fit
-        if base_min_total > height:
-            # No space for all gaps; allow zero or minimal gaps
-            spacing_allowed = max(0, height - sum(child_min_heights))
+        # Compute minimal totals and decide allowed gaps
+        min_total = sum(child_min_heights)
+        # If even minimal sizes plus spacing don't fit, reduce spacing first
+        if min_total + spacing > height:
+            spacing_allowed = max(0, height - min_total)
         else:
             spacing_allowed = spacing
 
-        # Recompute available rows for stretch after honoring allowed spacing
-        available_for_stretch = max(0, height - sum(child_min_heights) - spacing_allowed)
+        # Preferred total is sum of preferred heights
+        pref_total = sum(child_pref_heights)
 
-        allocated = list(child_min_heights)
+        # Start allocation from preferred heights clamped to available space
+        allocated = list(child_pref_heights)
 
-        if stretchable_indices:
-            total_weight = sum(stretchable_weights) or len(stretchable_indices)
-            extras = [0] * len(stretchable_indices)
-            base = 0
-            for k, idx in enumerate(stretchable_indices):
-                extra = (available_for_stretch * stretchable_weights[k]) // total_weight
-                extras[k] = extra
-                base += extra
-            leftover = available_for_stretch - base
-            for k in range(len(stretchable_indices)):
-                if leftover <= 0:
+        # If preferred total plus spacing fits, we'll later distribute surplus
+        total_with_pref = pref_total + spacing_allowed
+        if total_with_pref <= height:
+            surplus = height - total_with_pref
+        else:
+            surplus = 0
+
+        # If there's surplus after preferred sizes and allowed spacing, distribute
+        # it among stretchable children according to their weights (0..100).
+        if stretchable_indices and surplus > 0:
+            weights = [stretchable_weights[i] for i in range(len(stretchable_indices))]
+            total_weight = sum(weights)
+            # If all weights are zero, distribute equally
+            if total_weight <= 0:
+                per = surplus // len(stretchable_indices)
+                extra_left = surplus % len(stretchable_indices)
+                for k, idx in enumerate(stretchable_indices):
+                    allocated[idx] += per + (1 if k < extra_left else 0)
+            else:
+                # Distribute proportional to weights
+                assigned = [0] * len(stretchable_indices)
+                base = 0
+                for k, idx in enumerate(stretchable_indices):
+                    add = (surplus * weights[k]) // total_weight
+                    assigned[k] = add
+                    base += add
+                leftover = surplus - base
+                for k in range(len(stretchable_indices)):
+                    if leftover <= 0:
+                        break
+                    assigned[k] += 1
+                    leftover -= 1
+                for k, idx in enumerate(stretchable_indices):
+                    allocated[idx] += assigned[k]
+
+        # If preferred sizes + spacing do not fit, we must shrink from preferred
+        # down to minima. Reduce largest available slack first.
+        total_alloc = sum(allocated) + spacing_allowed
+        if total_alloc > height:
+            overflow = total_alloc - height
+            # compute how much each child can be reduced (allocated - min)
+            reducible = [max(0, allocated[i] - child_min_heights[i]) for i in range(num_children)]
+            # sort indices by reducible descending to preserve small widgets
+            order = sorted(range(num_children), key=lambda ii: reducible[ii], reverse=True)
+            for idx in order:
+                if overflow <= 0:
                     break
-                extras[k] += 1
-                leftover -= 1
-            for k, idx in enumerate(stretchable_indices):
-                allocated[idx] = child_min_heights[idx] + extras[k]
+                can = reducible[idx]
+                if can <= 0:
+                    continue
+                take = min(can, overflow)
+                allocated[idx] -= take
+                overflow -= take
+            # if still overflow, clamp from any child down to 1
+            if overflow > 0:
+                for i in range(num_children):
+                    if overflow <= 0:
+                        break
+                    can = max(0, allocated[i] - 1)
+                    take = min(can, overflow)
+                    allocated[i] -= take
+                    overflow -= take
+            total_alloc = sum(allocated) + spacing_allowed
 
         # If still room, give remainder to last stretchable/last child
         total_alloc = sum(allocated) + spacing_allowed
