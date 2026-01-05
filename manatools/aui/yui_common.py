@@ -260,16 +260,24 @@ class YWidget:
             self._stretchable_vert = new_stretch
     
     def weight(self, dim):
+        """ 
+            The weight is used when all widgets can get their preferred size and yet space is available. 
+            The remaining space will be devided between all stretchable widgets according to their weights.
+            A widget with greater weight will get more space. The default weight for all widgets is 0. 
+            The weight range is 0-99.
+        """
         if dim == YUIDimension.YD_HORIZ:
             return self._weight_horiz
         else:
             return self._weight_vert
     
-    def setWeight(self, dim, weight):
+    def setWeight(self, dim, weight: int):
+        w = weight % 100 if weight >= 0 else 0
+        
         if dim == YUIDimension.YD_HORIZ:
-            self._weight_horiz = weight
+            self._weight_horiz = w
         else:
-            self._weight_vert = weight
+            self._weight_vert = w
     
     def setNotify(self, notify=True):
         self._notify = notify
