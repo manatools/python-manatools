@@ -272,6 +272,12 @@ class YApplicationGtk:
                 GLib.set_prgname(self._product_name or "manatools")
             except Exception:
                 pass
+            # Log portal-related environment to help diagnose behavior differences
+            try:
+                self._logger.debug("GTK_USE_PORTAL=%s", os.environ.get("GTK_USE_PORTAL"))
+                self._logger.debug("XDG_CURRENT_DESKTOP=%s", os.environ.get("XDG_CURRENT_DESKTOP"))
+            except Exception:
+                pass
 
             # Use Gtk.FileDialog (GTK 4.10+) exclusively for directory selection
             if not hasattr(Gtk, 'FileDialog'):
@@ -285,6 +291,11 @@ class YApplicationGtk:
                 fd = Gtk.FileDialog.new()
                 try:
                     fd.set_title(headline or "Select Directory")
+                except Exception:
+                    pass
+
+                try:
+                    fd.set_modal(True)
                 except Exception:
                     pass
 
@@ -314,6 +325,19 @@ class YApplicationGtk:
                         _lh.quit()
                     except Exception:
                         pass
+
+                # Fallback transient parent for portals/desktops that require it
+                if parent_window is None:
+                    self._logger.warning("askForExistingDirectory: no parent window found")
+                    try:
+                        parent_window = Gtk.Window()
+                        try:
+                            parent_window.set_title(self._application_title)
+                        except Exception:
+                            pass
+                    except Exception:
+                        self._logger.exception("askForExistingDirectory: failed to create fallback parent window")
+                        parent_window = None
 
                 fd.select_folder(parent_window, None, _on_opened)
                 loop.run()
@@ -370,6 +394,12 @@ class YApplicationGtk:
                 GLib.set_prgname(self._product_name or "manatools")
             except Exception:
                 pass
+            # Log portal-related environment to help diagnose behavior differences
+            try:
+                self._logger.debug("GTK_USE_PORTAL=%s", os.environ.get("GTK_USE_PORTAL"))
+                self._logger.debug("XDG_CURRENT_DESKTOP=%s", os.environ.get("XDG_CURRENT_DESKTOP"))
+            except Exception:
+                pass
 
             # Use Gtk.FileDialog (GTK 4.10+) exclusively for file open
             if not hasattr(Gtk, 'FileDialog'):
@@ -385,6 +415,14 @@ class YApplicationGtk:
                     fd.set_title(headline or "Open File")
                 except Exception:
                     pass
+                try:
+                    fd.set_modal(True)
+                except Exception:
+                    pass
+                try:
+                    fd.set_accept_label("Open")
+                except Exception:
+                    pass
 
                 # filters
                 try:
@@ -398,7 +436,10 @@ class YApplicationGtk:
                     self._logger.exception("askForExistingFile: setting filters failed")
                     pass
 
+                # Determine initial directory: requested path if valid, else default Documents
+                initial_dir = None
                 if startWith and os.path.exists(startWith):
+                    # Set both folder and URI to improve portal compatibility
                     try:
                         target = os.path.dirname(startWith) if os.path.isfile(startWith) else startWith
                         fd.set_initial_folder(Gio.File.new_for_path(target))
@@ -483,25 +524,28 @@ class YApplicationGtk:
                     fd.set_title(headline or "Save File")
                 except Exception:
                     pass
+                try:
+                    fd.set_modal(True)
+                except Exception:
+                    pass
 
                 if filter:
                     try:
-                        filt = Gtk.FileFilter()
-                        filt.set_name("Text files")
-                        for pat in filter.split():
-                            try:
-                                filt.add_pattern(pat)
-                            except Exception:
-                                pass
-                        fd.set_filters([filt])
+                        filters = self._create_gtk4_filters(filter)
+                        if filters:
+                            filter_list = Gio.ListStore.new(Gtk.FileFilter)
+                            for file_filter in filters:
+                                filter_list.append(file_filter)
+                            fd.set_filters(filter_list)
                     except Exception:
-                        pass
+                        self._logger.exception("askForSaveFileName: setting filters failed")
 
                 if startWith and os.path.exists(startWith):
                     try:
                         target = os.path.dirname(startWith) if os.path.isfile(startWith) else startWith
                         fd.set_initial_folder(Gio.File.new_for_path(target))
                     except Exception:
+                        self._logger.exception("askForSaveFileName: setting initial folder failed")
                         try:
                             fd.set_initial_folder_uri(GLib.filename_to_uri(target, None))
                         except Exception:
@@ -524,6 +568,19 @@ class YApplicationGtk:
                         _lh.quit()
                     except Exception:
                         pass
+
+                # Fallback transient parent creation if none present
+                if parent_window is None:
+                    self._logger.warning("askForSaveFileName: no parent window found")
+                    try:
+                        parent_window = Gtk.Window()
+                        try:
+                            parent_window.set_title(self._application_title)
+                        except Exception:
+                            pass
+                    except Exception:
+                        self._logger.exception("askForSaveFileName: failed to create fallback parent window")
+                        parent_window = None
 
                 fd.save(parent_window, None, _on_saved)
                 loop.run()
