@@ -50,6 +50,7 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
 
 To check/review:
     how to manage YEvents [X] and YItems [X] (verify selection attirbute).
+
     [X] YInputField password mode
     [X] askForExistingDirectory
     [X] askForExistingFile
