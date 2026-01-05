@@ -110,7 +110,7 @@ class YApplicationCurses:
         """
         try:
             start_dir = startDir if (startDir and os.path.isdir(startDir)) else os.path.expanduser('~')
-            return self._browse_paths(start_dir, select_file=False, headline=headline or "Select Directory")
+            return self._browse_paths(start_dir, select_file=False, headline=headline or "Select Directory", reason='directory')
         except Exception:
             return ""
 
@@ -127,7 +127,7 @@ class YApplicationCurses:
             else:
                 # Default to Documents if available, else home
                 start_dir = self._default_documents_dir if os.path.isdir(self._default_documents_dir) else os.path.expanduser('~')
-            return self._browse_paths(start_dir, select_file=True, headline=headline or "Open File", filter_str=filter)
+            return self._browse_paths(start_dir, select_file=True, headline=headline or "Open File", filter_str=filter, reason='file')
         except Exception:
             return ""
 
@@ -145,7 +145,7 @@ class YApplicationCurses:
             else:
                 start_dir = self._default_documents_dir if os.path.isdir(self._default_documents_dir) else os.path.expanduser('~')
                 default_name = ""
-            return self._save_path_dialog(start_dir, default_name, headline or "Save File", filter_str=filter)
+            return self._browse_paths(start_dir, select_file=True, headline=headline or "Save File", filter_str=filter, reason='save', default_name=default_name)
         except Exception:
             return ""
 
@@ -233,36 +233,70 @@ class YApplicationCurses:
             pass
         return entries
 
-    def _browse_paths(self, start_dir: str, select_file: bool, headline: str, filter_str: str = ""):
-        """Create an overlay ncurses dialog to navigate directories and pick a directory or file."""
+    def _browse_paths(self, start_dir: str, select_file: bool, headline: str, filter_str: str = "", reason: str = "file", default_name: str = ""):
+        """
+            Unified ncurses overlay to navigate directories and pick a file, directory or save path.
+            - `reason` in ('file', 'directory', 'save') controls final behavior.
+            - Uses a `YTableCurses` with a single "Name" column to list entries.
+            - Avoids race between refresh and button-based selection by keeping
+              the current selection in a label/input field that is updated on
+              SelectionChanged and read when the Select/Save button is pressed.
+        """
         current_dir = start_dir if os.path.isdir(start_dir) else os.path.expanduser('~')
         patterns = self._parse_filter_patterns(filter_str)
 
         # Build dialog UI
         dlg = YDialogCurses(YDialogType.YPopupDialog, YDialogColorMode.YDialogNormalColor)
         root = YVBoxCurses(dlg)
-        title_lbl = YLabelCurses(root, headline, isHeading=True)
+        YLabelCurses(root, headline, isHeading=True)
         path_lbl = YLabelCurses(root, f"Current: {current_dir}")
-        list_box = YSelectionBoxCurses(root, label="Items", multi_selection=False)
-        # Let list box stretch vertically
+
+        # Table with single "Name" column
+        header = YTableHeader()
+        header.addColumn("Name")
+        table = YTableCurses(root, header, multiSelection=False)
         try:
-            list_box.setWeight(YUIDimension.YD_VERT, 1)
+            table.setWeight(YUIDimension.YD_VERT, 1)
         except Exception:
             pass
+
+        # Selection preview and optional filename input (useful for save)
+        selected_lbl = YLabelCurses(root, "Selected: ")
+        filename_input = None
+        if reason == 'save':
+            filename_input = YInputFieldCurses(root, label="Filename:")
+            try:
+                if default_name:
+                    filename_input.setValue(default_name)
+            except Exception:
+                pass
+
+        # Buttons
         buttons = YHBoxCurses(root)
-        btn_select = YPushButtonCurses(buttons, "Select")
+        btn_label = "Save" if reason == 'save' else "Select"
+        btn_select = YPushButtonCurses(buttons, btn_label)
         btn_cancel = YPushButtonCurses(buttons, "Cancel")
 
+        selected_item_data = None
+
         def refresh_listing(dir_path):
+            nonlocal selected_item_data
             try:
-                list_box.deleteAllItems()
+                table.deleteAllItems()
                 for (label, path, typ) in self._list_entries(dir_path, select_file, patterns):
-                    it = YItem(label)
+                    it = YTableItem(label)
                     try:
+                        it.addCell(label)
                         it.setData({'path': path, 'type': typ})
                     except Exception:
                         pass
-                    list_box.addItem(it)
+                    table.addItem(it)
+                # reset selection state when navigating
+                selected_item_data = None
+                try:
+                    selected_lbl.setText("Selected: ")
+                except Exception:
+                    pass
             except Exception:
                 pass
 
@@ -275,7 +309,7 @@ class YApplicationCurses:
         # Event loop
         result = ""
         while True:
-            ev = dlg.waitForEvent(0)
+            ev = dlg.waitForEvent()
             if isinstance(ev, YCancelEvent):
                 result = ""
                 break
@@ -284,158 +318,98 @@ class YApplicationCurses:
                 if w == btn_cancel and ev.reason() == YEventReason.Activated:
                     result = ""
                     break
-                # Selecting from list via button
+
+                # Select/Save pressed: read from selection preview / input field
                 if w == btn_select and ev.reason() == YEventReason.Activated:
                     try:
-                        sel = list_box.selectedItems()
-                        if not sel:
-                            continue
-                        item = sel[0]
-                        data = item.data() if hasattr(item, 'data') else None
-                        if not data or 'path' not in data:
-                            continue
-                        if data.get('type') == 'dir':
-                            # In directory mode, selecting chooses current dir
-                            if not select_file:
-                                result = data['path']
-                                break
-                            # In file mode, selecting a dir navigates
-                            current_dir = data['path']
-                            path_lbl.setText(f"Current: {current_dir}")
-                            refresh_listing(current_dir)
-                            continue
-                        else:
-                            # File selected -> choose in file mode
-                            if select_file:
-                                result = data['path']
-                                break
-                    except Exception:
-                        continue
-                # Enter/Space on list toggles selection -> use SelectionChanged to navigate/select
-                if w == list_box and ev.reason() == YEventReason.SelectionChanged:
-                    try:
-                        sel = list_box.selectedItems()
-                        if not sel:
-                            continue
-                        item = sel[0]
-                        data = item.data() if hasattr(item, 'data') else None
-                        if not data or 'path' not in data:
-                            continue
-                        if data.get('type') == 'dir':
-                            # Navigate into directory
-                            current_dir = data['path']
-                            path_lbl.setText(f"Current: {current_dir}")
-                            refresh_listing(current_dir)
-                            continue
-                        else:
-                            # File chosen via Enter in file mode
-                            if select_file:
-                                result = data['path']
-                                break
-                    except Exception:
-                        continue
-        try:
-            dlg.destroy()
-        except Exception:
-            pass
-        # For directory mode, if user navigated, return the current directory when no explicit file was selected.
-        if not select_file and result == "":
-            try:
-                # Return the current_dir as selection.
-                return current_dir
-            except Exception:
-                return ""
-        return result
-
-    def _save_path_dialog(self, start_dir: str, default_name: str, headline: str, filter_str: str = ""):
-        """Overlay dialog to navigate to a directory and enter a filename to save."""
-        current_dir = start_dir if os.path.isdir(start_dir) else os.path.expanduser('~')
-        patterns = self._parse_filter_patterns(filter_str)
-
-        dlg = YDialogCurses(YDialogType.YPopupDialog, YDialogColorMode.YDialogNormalColor)
-        root = YVBoxCurses(dlg)
-        YLabelCurses(root, headline, isHeading=True)
-        path_lbl = YLabelCurses(root, f"Current: {current_dir}")
-        list_box = YSelectionBoxCurses(root, label="Items", multi_selection=False)
-        try:
-            list_box.setWeight(YUIDimension.YD_VERT, 1)
-        except Exception:
-            pass
-        filename_input = YInputFieldCurses(root, label="Filename:")
-        try:
-            if default_name:
-                filename_input.setValue(default_name)
-        except Exception:
-            pass
-        buttons = YHBoxCurses(root)
-        btn_save = YPushButtonCurses(buttons, "Save")
-        btn_cancel = YPushButtonCurses(buttons, "Cancel")
-
-        def refresh_listing(dir_path):
-            try:
-                list_box.deleteAllItems()
-                for (label, path, typ) in self._list_entries(dir_path, select_file=True, patterns=patterns):
-                    it = YItem(label)
-                    try:
-                        it.setData({'path': path, 'type': typ})
-                    except Exception:
-                        pass
-                    list_box.addItem(it)
-            except Exception:
-                pass
-
-        refresh_listing(current_dir)
-        try:
-            dlg.open()
-        except Exception:
-            return ""
-
-        result = ""
-        while True:
-            ev = dlg.waitForEvent(0)
-            if isinstance(ev, YCancelEvent):
-                result = ""
-                break
-            if isinstance(ev, YWidgetEvent):
-                w = ev.widget()
-                if w == btn_cancel and ev.reason() == YEventReason.Activated:
-                    result = ""
-                    break
-                if w == btn_save and ev.reason() == YEventReason.Activated:
-                    try:
-                        name = filename_input.value()
-                        if name:
-                            result = os.path.join(current_dir, name)
-                            break
-                    except Exception:
-                        continue
-                if w == list_box and ev.reason() == YEventReason.SelectionChanged:
-                    try:
-                        sel = list_box.selectedItems()
-                        if not sel:
-                            continue
-                        item = sel[0]
-                        data = item.data() if hasattr(item, 'data') else None
-                        if not data or 'path' not in data:
-                            continue
-                        if data.get('type') == 'dir':
-                            current_dir = data['path']
-                            path_lbl.setText(f"Current: {current_dir}")
-                            refresh_listing(current_dir)
-                            continue
-                        else:
-                            # Pre-fill filename with selected file's name
+                        # If save: prefer filename_input value; if a file was selected,
+                        # use that name as default when input is empty.
+                        if reason == 'save':
+                            name = None
                             try:
-                                filename_input.setValue(os.path.basename(data['path']))
+                                if filename_input is not None:
+                                    name = filename_input.value()
+                            except Exception:
+                                name = None
+                            if selected_item_data and selected_item_data.get('type') == 'file':
+                                sel_base = os.path.basename(selected_item_data.get('path'))
+                                if not name:
+                                    name = sel_base
+                            if name:
+                                result = os.path.join(current_dir, name)
+                                break
+                            # if no name, ignore press
+                            continue
+
+                        # Directory selection: if a directory row is selected, return it,
+                        # otherwise return current_dir
+                        if reason == 'directory':
+                            if selected_item_data and selected_item_data.get('type') == 'dir':
+                                result = selected_item_data.get('path')
+                            else:
+                                result = current_dir
+                            break
+
+                        # File selection: if a file row is selected, return it
+                        if reason == 'file':
+                            if selected_item_data and selected_item_data.get('type') == 'file':
+                                result = selected_item_data.get('path')
+                                break
+                            # nothing selected: ignore
+                            continue
+                    except Exception:
+                        continue
+
+                # Table selection changed: either navigate into directories or update preview
+                if w == table and ev.reason() == YEventReason.SelectionChanged:
+                    try:
+                        sel = table.selectedItems()
+                        if not sel:
+                            selected_item_data = None
+                            try:
+                                selected_lbl.setText("Selected: ")
                             except Exception:
                                 pass
+                            continue
+                        item = sel[0]
+                        data = item.data() if hasattr(item, 'data') else None
+                        if not data or 'path' not in data:
+                            selected_item_data = None
+                            try:
+                                selected_lbl.setText("Selected: ")
+                            except Exception:
+                                pass
+                            continue
+                        if data.get('type') == 'dir':
+                            # navigate into directory
+                            current_dir = data['path']
+                            try:
+                                path_lbl.setText(f"Current: {current_dir}")
+                            except Exception:
+                                pass
+                            refresh_listing(current_dir)
+                            continue
+                        else:
+                            # file selected: update preview and prefill filename when saving
+                            selected_item_data = data
+                            try:
+                                selected_lbl.setText(f"Selected: {os.path.basename(data.get('path'))}")
+                            except Exception:
+                                pass
+                            if reason == 'save' and filename_input is not None:
+                                try:
+                                    filename_input.setValue(os.path.basename(data.get('path')))
+                                except Exception:
+                                    pass
                     except Exception:
                         continue
+
         try:
             dlg.destroy()
         except Exception:
             pass
         return result
+
 
 class YWidgetFactoryCurses:
     def __init__(self):
