@@ -29,6 +29,10 @@ try:
 except Exception as _e:
   print(f"Failed to configure file logger: {_e}")
 
+# Use current working directory (where the log file is written) as starting directory
+start_dir = os.path.abspath(os.getcwd())
+print(f"Using starting directory for dialogs: {start_dir}")
+
 
 def test_file_dialogs(backend_name=None):
     if backend_name:
@@ -58,16 +62,21 @@ def test_file_dialogs(backend_name=None):
 
         # main area: HBox with multiline edit on left and buttons on right
         h = factory.createHBox(vbox)
+
         mled = factory.createMultiLineEdit(h, "File content")
         mled.setStretchable(yui.YUIDimension.YD_VERT, True)
         mled.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        mled.setWeight(yui.YUIDimension.YD_HORIZ, 60)
 
         right = factory.createVBox(h)
+        right.setWeight(yui.YUIDimension.YD_HORIZ, 40)
         open_btn = factory.createPushButton(right, "Open")
         save_btn = factory.createPushButton(right, "Save")
-        testdir_btn = factory.createPushButton(right, "Test Dir")
+        select_dir_btn = factory.createPushButton(right, "Select Directory")
 
-        dir_label = factory.createLabel(vbox, "No dir selected")
+        hbox = factory.createHBox(vbox)
+        factory.createLabel(hbox, "Selected directory:")
+        dir_label = factory.createLabel(hbox, "No dir selected")
         dir_label.setStretchable(yui.YUIDimension.YD_VERT, False)
         dir_label.setStretchable(yui.YUIDimension.YD_HORIZ, True)
 
@@ -87,8 +96,8 @@ def test_file_dialogs(backend_name=None):
             elif typ == yui.YEventType.WidgetEvent:
                 wdg = event.widget()
                 if wdg == open_btn:
-                    # ask for text file
-                    fname = app.askForExistingFile("", "*.txt", "Open text file")
+                    # ask for text file (start in current working directory)
+                    fname = app.askForExistingFile(start_dir, "*.txt", "Open text file")
                     if fname:
                         try:
                             with open(fname, 'r', encoding='utf-8') as f:
@@ -97,7 +106,7 @@ def test_file_dialogs(backend_name=None):
                         except Exception as e:
                             print(f"Failed to read file: {e}")
                 elif wdg == save_btn:
-                    fname = app.askForSaveFileName("", "*.txt", "Save text file")
+                    fname = app.askForSaveFileName(start_dir, "*.txt", "Save text file")
                     if fname:
                         try:
                             data = mled.value()
@@ -105,8 +114,8 @@ def test_file_dialogs(backend_name=None):
                                 f.write(data)
                         except Exception as e:
                             print(f"Failed to save file: {e}")
-                elif wdg == testdir_btn:
-                    d = app.askForExistingDirectory("", "Select directory")
+                elif wdg == select_dir_btn:
+                    d = app.askForExistingDirectory(start_dir, "Select directory")
                     if d:
                         dir_label.setText(d)
                 elif wdg == close_btn:
