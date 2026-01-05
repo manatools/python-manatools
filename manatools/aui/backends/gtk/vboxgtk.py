@@ -40,7 +40,10 @@ class YVBoxGtk(YWidget):
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         
-        for child in self._children:
+        # Collect children first so we can apply weight-based heuristics
+        children = list(self._children)
+
+        for child in children:
             widget = child.get_backend_widget()
             try:
                 # Respect the child's stretchable/weight hints instead of forcing expansion
@@ -70,6 +73,60 @@ class YVBoxGtk(YWidget):
         self._backend_widget.set_sensitive(self._enabled)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
+
+        # If there are exactly two children and both declare positive vertical
+        # weights, attempt to enforce a proportional vertical split according
+        # to weights. Similar to horizontal HBox, Gtk.Box does not support
+        # per-child weight factors, so we set size requests on the children
+        # based on the container allocation.
+        try:
+            if len(children) == 2:
+                w0 = int(children[0].weight(YUIDimension.YD_VERT) or 0)
+                w1 = int(children[1].weight(YUIDimension.YD_VERT) or 0)
+                if w0 > 0 and w1 > 0:
+                    top = children[0].get_backend_widget()
+                    bottom = children[1].get_backend_widget()
+                    total_weight = max(1, w0 + w1)
+
+                    def _apply_vweights(*args):
+                        try:
+                            alloc = self._backend_widget.get_allocated_height()
+                            if not alloc or alloc <= 0:
+                                return True
+                            spacing = getattr(self._backend_widget, 'get_spacing', lambda: 5)()
+                            avail = max(0, alloc - spacing)
+                            top_px = int(avail * w0 / total_weight)
+                            bot_px = max(0, avail - top_px)
+                            try:
+                                top.set_size_request(-1, top_px)
+                            except Exception:
+                                pass
+                            try:
+                                bottom.set_size_request(-1, bot_px)
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                        return False
+
+                    try:
+                        GLib.idle_add(_apply_vweights)
+                    except Exception:
+                        try:
+                            _apply_vweights()
+                        except Exception:
+                            pass
+                    try:
+                        def _on_size_allocate(widget, allocation):
+                            try:
+                                _apply_vweights()
+                            except Exception:
+                                pass
+                        self._backend_widget.connect('size-allocate', _on_size_allocate)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
