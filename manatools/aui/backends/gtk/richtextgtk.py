@@ -27,6 +27,12 @@ class YRichTextGtk(YWidget):
         self._backend_widget = None
         self._content_widget = None  # TextView or Label
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        # Default: richtext should be stretchable both horizontally and vertically
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YRichText"
@@ -169,6 +175,11 @@ class YRichTextGtk(YWidget):
         try:
             sw.set_hexpand(True)
             sw.set_vexpand(True)
+            try:
+                sw.set_halign(Gtk.Align.FILL)
+                sw.set_valign(Gtk.Align.FILL)
+            except Exception:
+                pass
         except Exception:
             pass
 

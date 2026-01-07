@@ -27,6 +27,12 @@ class YRichTextQt(YWidget):
         self._auto_scroll = False
         self._last_url = None
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        # Default: richtext is stretchable in both dimensions
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YRichText"
@@ -140,6 +146,21 @@ class YRichTextQt(YWidget):
                 tb.linkActivated.connect(lambda _u: _on_anchor_clicked(QtCore.QUrl(str(_u))))
             except Exception:
                 pass
+        # Encourage expansion when placed in layouts
+        try:
+            sp = tb.sizePolicy()
+            try:
+                sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+            except Exception:
+                try:
+                    sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+                    sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
+                except Exception:
+                    pass
+            tb.setSizePolicy(sp)
+        except Exception:
+            pass
         self._backend_widget = tb
         # respect initial enabled state
         try:
