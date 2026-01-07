@@ -377,6 +377,10 @@ class YWidgetFactoryQt:
     def createHSpacing(self, parent, size_px: int = 8):
         """Create a Horizontal Spacing widget."""
         return self.createSpacing(parent, YUIDimension.Horizontal, stretchable=False, size_px=size_px)
+
+    def createSlider(self, parent, label: str, minVal: int, maxVal: int, initialVal: int):
+        """Create a Slider widget (Qt backend)."""
+        return YSliderQt(parent, label, minVal, maxVal, initialVal)
     
     def createVSpacing(self, parent, size_px: int = 16):
         """Create a Vertical Spacing widget."""

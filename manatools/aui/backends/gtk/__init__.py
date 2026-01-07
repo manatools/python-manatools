@@ -22,6 +22,7 @@ from .multilineeditgtk import YMultiLineEditGtk
 from .spacinggtk import YSpacingGtk
 from .imagegtk import YImageGtk
 from .dumbtabgtk import YDumbTabGtk
+from .slidergtk import YSliderGtk
 
 __all__ = [
     "YDialogGtk",
@@ -48,5 +49,6 @@ __all__ = [
     "YSpacingGtk",
     "YImageGtk",
     'YDumbTabGtk',
+    "YSliderGtk",
     # ...
 ]

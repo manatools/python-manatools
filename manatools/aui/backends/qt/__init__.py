@@ -22,6 +22,7 @@ from .multilineeditqt import YMultiLineEditQt
 from .spacingqt import YSpacingQt
 from .imageqt import YImageQt
 from .dumbtabqt import YDumbTabQt
+from .sliderqt import YSliderQt
 
 
 __all__ = [
@@ -49,5 +50,6 @@ __all__ = [
     "YSpacingQt",
     "YImageQt",
     "YDumbTabQt",
+    "YSliderQt",
     # ...
 ]

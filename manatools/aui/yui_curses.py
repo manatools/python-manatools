@@ -577,3 +577,7 @@ class YWidgetFactoryCurses:
         """Create a Vertical Spacing widget."""
         return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
 
+    def createSlider(self, parent, label: str, minVal: int, maxVal: int, initialVal: int):
+        """Create a Slider widget (ncurses backend)."""
+        return YSliderCurses(parent, label, minVal, maxVal, initialVal)
+
