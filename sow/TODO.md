@@ -48,18 +48,9 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
     [ ] YGraph
     [ ] Context menu support / hasContextMenu
 
-Skipped widgets:
-    
-    [-] YPackageSelector  (not ported)
-    [-] YRadioButtonGroup (not ported)
-    [-] YWizard           (not ported)
-    [-] YItemSelector     (not ported)
-    [-] YEmpty            (not ported)
-    [-] YSquash / createSquash (not ported)
-    [-] YMenuButton (legacy menus)
-
 To check/review:
     how to manage YEvents [X] and YItems [X] (verify selection attirbute).
+
     [X] YInputField password mode
     [X] askForExistingDirectory
     [X] askForExistingFile
@@ -70,8 +61,19 @@ To check/review:
     [ ] localization
 
 Nice to have: improvements outside YUI API
+
     [ ] window title
     [ ] window icons
     [ ] selected YItem(s) in event
     [ ] Improving YEvents management (adding info on widget event containing data
         such as item selection/s, checked item, rich text url, etc.)
+
+Skipped widgets:
+    
+    [-] YPackageSelector  (not ported)
+    [-] YRadioButtonGroup (not ported)
+    [-] YWizard           (not ported)
+    [-] YItemSelector     (not ported)
+    [-] YEmpty            (not ported)
+    [-] YSquash / createSquash (not ported)
+    [-] YMenuButton (legacy menus)
