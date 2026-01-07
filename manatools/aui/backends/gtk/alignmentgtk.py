@@ -61,8 +61,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.CENTER
             if self._halign_spec == YAlignmentType.YAlignEnd:
                 return Gtk.Align.END
-        #default
-        return Gtk.Align.CENTER
+        # default for Unchanged: let child fill available space
+        return Gtk.Align.FILL
     
     def _to_gtk_valign(self):
         """Convert Vertical YAlignmentType to Gtk.Align or Gtk.Align.CENTER."""        
@@ -73,8 +73,8 @@ class YAlignmentGtk(YSingleChildContainerWidget):
                 return Gtk.Align.CENTER
             if self._valign_spec == YAlignmentType.YAlignEnd:
                 return Gtk.Align.END
-        #default
-        return Gtk.Align.CENTER
+        # default for Unchanged: let child fill available space
+        return Gtk.Align.FILL
 
     #def stretchable(self, dim):
     #    """Report whether this alignment should expand in given dimension.
