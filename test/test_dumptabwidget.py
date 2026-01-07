@@ -2,9 +2,31 @@
 
 import os
 import sys
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+try:
+  log_name = os.path.splitext(os.path.basename(__file__))[0] + '.log'
+  fh = logging.FileHandler(log_name, mode='w')
+  fh.setLevel(logging.DEBUG)
+  fh.setFormatter(logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s'))
+  root_logger = logging.getLogger()
+  root_logger.setLevel(logging.DEBUG)
+  existing = False
+  for h in list(root_logger.handlers):
+    try:
+      if isinstance(h, logging.FileHandler) and os.path.abspath(getattr(h, 'baseFilename', '')) == os.path.abspath(log_name):
+        existing = True
+        break
+    except Exception:
+      pass
+  if not existing:
+    root_logger.addHandler(fh)
+  print(f"Logging test output to: {os.path.abspath(log_name)}")
+except Exception as _e:
+  print(f"Failed to configure file logger: {_e}")
 
 def test_dumbtab(backend_name=None):
     """Interactive test showcasing YDumbTab with three tabs and a ReplacePoint."""
@@ -24,6 +46,10 @@ def test_dumbtab(backend_name=None):
 
         backend = YUI.backend()
         print(f"Using backend: {backend.value}")
+
+        # Basic logging for diagnosis
+        import logging
+        logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
         ui = YUI_ui()
         factory = ui.widgetFactory()
@@ -46,6 +72,7 @@ def test_dumbtab(backend_name=None):
 
         # Content area: ReplacePoint as the single child
         rp = factory.createReplacePoint(dumbtab)
+        print("ReplacePoint created:", rp.widgetClass())
 
         # Helper to render content of the active tab
         def render_content(index: int):
@@ -61,6 +88,7 @@ def test_dumbtab(backend_name=None):
                 factory.createCheckBox(box, "Enable feature", is_checked=True)
                 factory.createLabel(box, "Use TAB/Shift+TAB to navigate")
                 rp.showChild()
+                print("Rendered tab 0: Options")
             elif index == 1:
                 box = factory.createVBox(rp)
                 factory.createLabel(box, "Notes:")
@@ -70,6 +98,7 @@ def test_dumbtab(backend_name=None):
                 except Exception:
                     factory.createLabel(box, text)
                 rp.showChild()
+                print("Rendered tab 1: Notes")
             else:
                 box = factory.createVBox(rp)
                 factory.createLabel(box, "Choose an action:")
@@ -77,9 +106,11 @@ def test_dumbtab(backend_name=None):
                 factory.createPushButton(h, "OK")
                 factory.createPushButton(h, "Cancel")
                 rp.showChild()
+                print("Rendered tab 2: Actions")
 
         # Initial content for the first tab
         render_content(0)
+        print("Initial content rendered for tab 0.")
 
         # Close button
         close_row = factory.createHBox(vbox)
@@ -106,6 +137,7 @@ def test_dumbtab(backend_name=None):
                             idx = tabs.index(sel.label())
                         except Exception:
                             idx = 0
+                        print("Tab Activated:", sel.label(), "index=", idx)
                         render_content(idx)
 
     except Exception as e:
