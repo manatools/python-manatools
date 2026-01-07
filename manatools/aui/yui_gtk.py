@@ -739,6 +739,10 @@ class YWidgetFactoryGtk:
         """Create a ReplacePoint widget (GTK backend)."""
         return YReplacePointGtk(parent)
 
+    def createDumbTab(self, parent):
+        from .backends.gtk import YDumbTabGtk
+        return YDumbTabGtk(parent)
+
     def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
         """Create a Spacing/Stretch widget.
 

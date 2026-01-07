@@ -21,6 +21,7 @@ from .intfieldgtk import YIntFieldGtk
 from .multilineeditgtk import YMultiLineEditGtk
 from .spacinggtk import YSpacingGtk
 from .imagegtk import YImageGtk
+from .dumbtabgtk import YDumbTabGtk
 
 __all__ = [
     "YDialogGtk",
@@ -46,5 +47,6 @@ __all__ = [
     "YMultiLineEditGtk",
     "YSpacingGtk",
     "YImageGtk",
+    'YDumbTabGtk',
     # ...
 ]
