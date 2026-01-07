@@ -86,17 +86,17 @@ def test_dumbtab(backend_name=None):
                 box = factory.createVBox(rp)
                 factory.createLabel(box, "Enable the option below:")
                 factory.createCheckBox(box, "Enable feature", is_checked=True)
-                factory.createLabel(box, "Use TAB/Shift+TAB to navigate")
+                factory.createLabel(box, "Use this feature to blah blah...")
                 rp.showChild()
                 print("Rendered tab 0: Options")
             elif index == 1:
                 box = factory.createVBox(rp)
                 factory.createLabel(box, "Notes:")
-                text = "This is a simple multi-tab demo.\nSwitch tabs with LEFT/RIGHT (or UI specific).\nThe content below changes per tab."
-                try:
-                    factory.createRichText(box, text, plainTextMode=True)
-                except Exception:
-                    factory.createLabel(box, text)
+                text = "This is a simple multi-tab demo.\nSwitch between tabs.\nThe content below changes per tab."
+                minsize = factory.createMinSize(box, 320, 200)
+                rt = factory.createRichText(minsize, text, plainTextMode=True)
+                rt.setStretchable(yui.YUIDimension.YD_VERT, True)
+                rt.setStretchable(yui.YUIDimension.YD_HORIZ, True)
                 rp.showChild()
                 print("Rendered tab 1: Notes")
             else:
