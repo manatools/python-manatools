@@ -107,7 +107,7 @@ class YAlignmentCurses(YSingleChildContainerWidget):
         if not self.hasChildren() or not hasattr(self.child(), "_draw"):
             return
         try:
-            # width to give to the child: minimal needed (so it can be pushed)
+            # width to give to the child: minimal needed or full width if stretchable
             ch_min_w = self._child_min_width(self.child(), width)
             # honor explicit minimum width in pixels, converting to character cells
             try:
@@ -122,10 +122,19 @@ class YAlignmentCurses(YSingleChildContainerWidget):
             # never exceed the available width
             try:
                 child_pref_w = getattr(self.child(), "_width", None)
-                if child_pref_w is not None:
-                    child_w = min(width, max(ch_min_w, int(child_pref_w)))
+                # If child is stretchable horizontally or has weight, let it use full width
+                is_h_stretch = False
+                try:
+                    is_h_stretch = bool(self.child().stretchable(YUIDimension.YD_HORIZ)) or bool(self.child().weight(YUIDimension.YD_HORIZ))
+                except Exception:
+                    is_h_stretch = False
+                if is_h_stretch:
+                    child_w = width
                 else:
-                    child_w = min(width, ch_min_w)
+                    if child_pref_w is not None:
+                        child_w = min(width, max(ch_min_w, int(child_pref_w)))
+                    else:
+                        child_w = min(width, ch_min_w)
             except Exception:
                 child_w = min(width, ch_min_w)
 
@@ -142,8 +151,14 @@ class YAlignmentCurses(YSingleChildContainerWidget):
                 cy = y + max(0, height - 1)
             else:
                 cy = y
-            # honor explicit minimum height in pixels for child
+            # height to give to the child: prefer full height if stretchable, else min/explicit
             ch_height = getattr(self.child(), "_height", 1)
+            try:
+                is_v_stretch = bool(self.child().stretchable(YUIDimension.YD_VERT)) or bool(self.child().weight(YUIDimension.YD_VERT))
+                if is_v_stretch:
+                    ch_height = height
+            except Exception:
+                pass
             try:
                 if getattr(self, '_min_height_px', 0) and self._min_height_px > 0:
                     min_h = pixels_to_chars(int(self._min_height_px), YUIDimension.YD_VERT)
