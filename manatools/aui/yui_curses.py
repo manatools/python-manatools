@@ -542,6 +542,10 @@ class YWidgetFactoryCurses:
         """Create a ReplacePoint widget (curses backend)."""
         return YReplacePointCurses(parent)
 
+    def createDumbTab(self, parent):
+        """Create a DumbTab widget (curses backend)."""
+        return YDumbTabCurses(parent)
+
     def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
         """Create a Spacing/Stretch widget.
 

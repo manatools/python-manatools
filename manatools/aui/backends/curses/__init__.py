@@ -21,6 +21,7 @@ from .intfieldcurses import YIntFieldCurses
 from .multilineeditcurses import YMultiLineEditCurses
 from .spacingcurses import YSpacingCurses
 from .imagecurses import YImageCurses
+from .dumbtabcurses import YDumbTabCurses
 
 __all__ = [
     "YDialogCurses",
@@ -46,5 +47,6 @@ __all__ = [
     "YMultiLineEditCurses",
     "YSpacingCurses",
     "YImageCurses",
+    "YDumbTabCurses",
     # ...
 ]
