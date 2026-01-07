@@ -34,7 +34,7 @@ Missing Widgets comparing libyui original factory:
 Optional/special widgets (from `YOptionalWidgetFactory`):
 
     [X] YDumbTab
-    [ ] YSlider
+    [X] YSlider
     [ ] YDateField
     [ ] YTimeField
     [ ] YBarGraph
