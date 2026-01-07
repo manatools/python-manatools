@@ -348,6 +348,10 @@ class YWidgetFactoryQt:
         """Create a ReplacePoint widget (Qt backend)."""
         return YReplacePointQt(parent)
 
+    def createDumbTab(self, parent):
+        """Create a DumbTab (tab bar with single content area, Qt backend)."""
+        return YDumbTabQt(parent)
+
     def createSpacing(self, parent, dim: YUIDimension, stretchable: bool = False, size_px: int = 0):
         """Create a Spacing/Stretch widget.
 
