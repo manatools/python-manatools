@@ -1,6 +1,15 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 '''
+Python manatools.aui.backends.curses contains all curses backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.curses
+'''
+'''
 NCurses backend DumbTab: simple single-selection tab bar with one content area.
 
 - Renders a one-line tab bar with labels; the selected tab is highlighted.

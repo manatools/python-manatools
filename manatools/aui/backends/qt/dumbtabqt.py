@@ -1,6 +1,15 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 '''
+Python manatools.aui.backends.qt contains all Qt backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.qt
+'''
+'''
 Qt backend DumbTab (tab bar + single content area)
 
 Implements a simple tab bar using QTabBar and exposes a single child
