@@ -22,10 +22,6 @@ class YDateFieldQt(YWidget):
         super().__init__(parent)
         self._label = label or ""
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
-        try:
-            self._logger.debug("%s.__init__ label=%s", self.__class__.__name__, self._label)
-        except Exception:
-            pass
         self._date = QtCore.QDate.currentDate()
 
     def widgetClass(self):
@@ -56,6 +52,17 @@ class YDateFieldQt(YWidget):
             except Exception:
                 pass
 
+    def _on_date_changed(self, qdate):
+        """Update internal date when the QDateEdit value changes in the UI."""
+        try:
+            # qdate is a QtCore.QDate
+            self._date = qdate
+        except Exception:
+            try:
+                self._logger.debug("_on_date_changed: couldn't set date from %r", qdate)
+            except Exception:
+                pass
+
     def _create_backend_widget(self):
         container = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(container)
@@ -83,6 +90,14 @@ class YDateFieldQt(YWidget):
             de.setDate(self._date)
         except Exception:
             pass
+        try:
+            # keep internal date in sync when user selects a new date
+            de.dateChanged.connect(self._on_date_changed)
+        except Exception:
+            try:
+                self._logger.debug("could not connect dateChanged signal")
+            except Exception:
+                pass
         # Do not emit any events; value is read on demand
         layout.addWidget(de)
         self._backend_widget = container
