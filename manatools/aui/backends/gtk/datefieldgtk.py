@@ -110,14 +110,6 @@ class YDateFieldGtk(YWidget):
 
         # MenuButton styled as dropdown
         self._cal_button = Gtk.MenuButton()
-        try:
-            img = Gtk.Image.new_from_icon_name("open-menu-symbolic")
-            self._cal_button.set_child(img)
-        except Exception:
-            try:
-                self._cal_button.set_label("▾")
-            except Exception:
-                pass
         row.append(self._cal_button)
 
         # Popover with Calendar
