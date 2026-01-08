@@ -58,7 +58,7 @@ def test_logview(backend_name=None):
 
         # Create LogView
         lv = factory.createLogView(vbox, "Log:", 10, 50)
-        lv.appendLines("Initial line 1\nInitial line 2\nLong line 3 that should be wrapped if the width is small enough to trigger wrapping behavior in the LogView widget.")
+        lv.appendLines("Initial line 1\nInitial line 2\nLong line 3 that should be horizontally scrolled if the width is small enough that cannot be fully displayed without scrolling.")
 
         # Buttons
         h = factory.createHBox(vbox)
