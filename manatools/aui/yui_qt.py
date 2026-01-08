@@ -389,3 +389,12 @@ class YWidgetFactoryQt:
     def createDateField(self, parent, label):
         """Create a DateField widget (Qt backend)."""
         return YDateFieldQt(parent, label)
+
+    def createLogView(self, parent, label, visibleLines, storedLines=0):
+        """Create a LogView widget (Qt backend)."""
+        from .backends.qt import YLogViewQt
+        try:
+            return YLogViewQt(parent, label, visibleLines, storedLines)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YLogViewQt: %s", e)
+            raise

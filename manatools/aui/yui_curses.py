@@ -585,3 +585,12 @@ class YWidgetFactoryCurses:
         """Create a DateField widget (curses backend)."""
         return YDateFieldCurses(parent, label)
 
+    def createLogView(self, parent, label, visibleLines, storedLines=0):
+        """Create a LogView widget (ncurses backend)."""
+        from .backends.curses import YLogViewCurses
+        try:
+            return YLogViewCurses(parent, label, visibleLines, storedLines)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YLogViewCurses: %s", e)
+            raise
+

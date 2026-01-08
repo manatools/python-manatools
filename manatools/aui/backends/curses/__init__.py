@@ -24,6 +24,7 @@ from .spacingcurses import YSpacingCurses
 from .imagecurses import YImageCurses
 from .dumbtabcurses import YDumbTabCurses
 from .slidercurses import YSliderCurses
+from .logviewcurses import YLogViewCurses
 
 __all__ = [
     "YDialogCurses",
@@ -52,5 +53,6 @@ __all__ = [
     "YImageCurses",
     "YDumbTabCurses",
     "YSliderCurses",
+    "YLogViewCurses",
     # ...
 ]

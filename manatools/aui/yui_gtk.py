@@ -782,6 +782,15 @@ class YWidgetFactoryGtk:
         """Create a DateField widget (GTK backend)."""
         return YDateFieldGtk(parent, label)
 
+    def createLogView(self, parent, label, visibleLines, storedLines=0):
+        """Create a LogView widget (GTK backend)."""
+        from .backends.gtk import YLogViewGtk
+        try:
+            return YLogViewGtk(parent, label, visibleLines, storedLines)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YLogViewGtk: %s", e)
+            raise
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
