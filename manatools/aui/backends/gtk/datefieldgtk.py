@@ -27,8 +27,6 @@ class YDateFieldGtk(YWidget):
         # store current value as a date object (use only the date portion)
         self._date = datetime.date(2000, 1, 1)
         self._calendar = None
-        self._menu_btn = None
-        self._date_label = None
         self._popover = None
         self._locale_date_fmt = None
 
@@ -120,12 +118,12 @@ class YDateFieldGtk(YWidget):
         gdate = GLib.DateTime.new_utc(self._date.year, self._date.month, self._date.day, 0, 0, 0)
         # Use set_date() for GTK 4.20+
         try:
-            self._calendar.set_date(gdate)
+            cal.set_date(gdate)
         except Exception as e:
             # Fall back to select_day() if set_date() fails unexpectedly
             self._logger.debug("Failed to set_date() on calendar: %s", e)
             try:
-                self._calendar.select_day(gdate)
+                cal.select_day(gdate)
             except Exception:
                 self._logger.exception("Failed to initialize calendar select_day()")
 
