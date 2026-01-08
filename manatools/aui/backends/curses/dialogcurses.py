@@ -203,9 +203,13 @@ class YDialogCurses(YSingleChildContainerWidget):
             if footer_x + len(footer_text) < width:
                 self._backend_widget.addstr(height - 1, footer_x, footer_text, curses.A_DIM)
             
-            # Draw focus indicator
+            # Draw focus indicator: prefer widget label, otherwise use debugLabel() or 'unknown'
             if self._focused_widget:
-                focus_text = f" Focus: {getattr(self._focused_widget, '_label', 'Unknown')} "
+                lbl = getattr(self._focused_widget, '_label', None)
+                if not lbl:
+                    lbl = (self._focused_widget.debugLabel()
+                           if hasattr(self._focused_widget, 'debugLabel') else 'Unknown')
+                focus_text = f" Focus: {lbl} "
                 if len(focus_text) < width:
                     self._backend_widget.addstr(height - 1, 2, focus_text, curses.A_REVERSE)
                 #if the focused widget has an expnded list (menus, combos,...), draw it on top
