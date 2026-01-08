@@ -120,9 +120,12 @@ class YLogViewGtk(YWidget):
             self._label_widget = lbl
             box.append(lbl)
         sw = Gtk.ScrolledWindow()
+        # Respect base stretchable properties
         try:
-            sw.set_hexpand(True)
-            sw.set_vexpand(True)
+            horiz = bool(self.stretchable(YUIDimension.YD_HORIZ))
+            vert = bool(self.stretchable(YUIDimension.YD_VERT))
+            sw.set_hexpand(horiz)
+            sw.set_vexpand(vert)
         except Exception:
             pass
         tv = Gtk.TextView()
@@ -130,8 +133,14 @@ class YLogViewGtk(YWidget):
             tv.set_editable(False)
             tv.set_wrap_mode(Gtk.WrapMode.NONE)
             tv.set_monospace(True)
-            tv.set_hexpand(True)
-            tv.set_vexpand(True)
+            # Respect base stretchable properties
+            try:
+                horiz = bool(self.stretchable(YUIDimension.YD_HORIZ))
+                vert = bool(self.stretchable(YUIDimension.YD_VERT))
+                tv.set_hexpand(horiz)
+                tv.set_vexpand(vert)
+            except Exception:
+                pass
         except Exception:
             pass
         # approximate min height from visible lines so it appears with some space
