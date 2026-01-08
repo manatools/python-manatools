@@ -18,6 +18,7 @@ from .richtextgtk import YRichTextGtk
 from .menubargtk import YMenuBarGtk
 from .replacepointgtk import YReplacePointGtk
 from .intfieldgtk import YIntFieldGtk
+from .datefieldgtk import YDateFieldGtk
 from .multilineeditgtk import YMultiLineEditGtk
 from .spacinggtk import YSpacingGtk
 from .imagegtk import YImageGtk
@@ -45,6 +46,7 @@ __all__ = [
     "YMenuBarGtk",
     "YReplacePointGtk",
     "YIntFieldGtk",
+    "YDateFieldGtk",
     "YMultiLineEditGtk",
     "YSpacingGtk",
     "YImageGtk",

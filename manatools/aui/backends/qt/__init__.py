@@ -18,6 +18,7 @@ from .richtextqt import YRichTextQt
 from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
 from .intfieldqt import YIntFieldQt
+from .datefieldqt import YDateFieldQt
 from .multilineeditqt import YMultiLineEditQt
 from .spacingqt import YSpacingQt
 from .imageqt import YImageQt
@@ -46,6 +47,7 @@ __all__ = [
     "YMenuBarQt",
     "YReplacePointQt",
     "YIntFieldQt",
+    "YDateFieldQt",
     "YMultiLineEditQt",
     "YSpacingQt",
     "YImageQt",

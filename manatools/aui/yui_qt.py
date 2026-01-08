@@ -385,3 +385,7 @@ class YWidgetFactoryQt:
     def createVSpacing(self, parent, size_px: int = 16):
         """Create a Vertical Spacing widget."""
         return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
+
+    def createDateField(self, parent, label):
+        """Create a DateField widget (Qt backend)."""
+        return YDateFieldQt(parent, label)

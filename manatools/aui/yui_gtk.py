@@ -778,6 +778,10 @@ class YWidgetFactoryGtk:
         """Create a Vertical Spacing widget."""
         return self.createSpacing(parent, YUIDimension.Vertical, stretchable=False, size_px=size_px)
 
+    def createDateField(self, parent, label):
+        """Create a DateField widget (GTK backend)."""
+        return YDateFieldGtk(parent, label)
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)

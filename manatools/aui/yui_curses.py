@@ -581,3 +581,7 @@ class YWidgetFactoryCurses:
         """Create a Slider widget (ncurses backend)."""
         return YSliderCurses(parent, label, minVal, maxVal, initialVal)
 
+    def createDateField(self, parent, label):
+        """Create a DateField widget (curses backend)."""
+        return YDateFieldCurses(parent, label)
+

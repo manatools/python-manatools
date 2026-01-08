@@ -18,6 +18,7 @@ from .richtextcurses import YRichTextCurses
 from .menubarcurses import YMenuBarCurses
 from .replacepointcurses import YReplacePointCurses
 from .intfieldcurses import YIntFieldCurses
+from .datefieldcurses import YDateFieldCurses
 from .multilineeditcurses import YMultiLineEditCurses
 from .spacingcurses import YSpacingCurses
 from .imagecurses import YImageCurses
@@ -45,6 +46,7 @@ __all__ = [
     "YMenuBarCurses",
     "YReplacePointCurses",
     "YIntFieldCurses",
+    "YDateFieldCurses",
     "YMultiLineEditCurses",
     "YSpacingCurses",
     "YImageCurses",
