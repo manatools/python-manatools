@@ -62,10 +62,6 @@ class YDateFieldCurses(YWidget):
         self._edit_buf = ""
         self._can_focus = True
         self._focused = False
-        try:
-            self._logger.debug("%s.__init__ label=%s", self.__class__.__name__, self._label)
-        except Exception:
-            pass
 
     def widgetClass(self):
         return "YDateField"
@@ -94,6 +90,10 @@ class YDateFieldCurses(YWidget):
 
     def _create_backend_widget(self):
         self._backend_widget = self
+        try:
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        except Exception:
+            pass
 
     def _set_backend_enabled(self, enabled):
         pass
@@ -112,11 +112,19 @@ class YDateFieldCurses(YWidget):
             parts = {'Y': f"{self._y:04d}", 'M': f"{self._m:02d}", 'D': f"{self._d:02d}"}
             disp = []
             for idx, p in enumerate(self._order):
-                text = parts[p]
+                seg_text = parts[p]
+                # when focused on segment, show edit buffer if editing
                 if self._focused and idx == self._seg_index:
-                    text = f"[{text}]"
+                    if self._editing:
+                        buf = self._edit_buf or ''
+                        seg_w = 4 if p == 'Y' else 2
+                        # right-align buffer into field width
+                        buf_disp = buf.rjust(seg_w)
+                        text = f"[{buf_disp}]"
+                    else:
+                        text = f"[{seg_text}]"
                 else:
-                    text = f" {text} "
+                    text = f" {seg_text} "
                 disp.append(text)
                 if idx < 2:
                     disp.append("-")
