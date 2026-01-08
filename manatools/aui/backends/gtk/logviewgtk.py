@@ -120,11 +120,24 @@ class YLogViewGtk(YWidget):
             self._label_widget = lbl
             box.append(lbl)
         sw = Gtk.ScrolledWindow()
+        try:
+            sw.set_hexpand(True)
+            sw.set_vexpand(True)
+        except Exception:
+            pass
         tv = Gtk.TextView()
         try:
             tv.set_editable(False)
             tv.set_wrap_mode(Gtk.WrapMode.NONE)
             tv.set_monospace(True)
+            tv.set_hexpand(True)
+            tv.set_vexpand(True)
+        except Exception:
+            pass
+        # approximate min height from visible lines so it appears with some space
+        try:
+            line_px = 18
+            sw.set_min_content_height(line_px * max(1, int(self._visible)))
         except Exception:
             pass
         buf = tv.get_buffer()
