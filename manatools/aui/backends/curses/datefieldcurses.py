@@ -62,6 +62,12 @@ class YDateFieldCurses(YWidget):
         self._edit_buf = ""
         self._can_focus = True
         self._focused = False
+        # Default: do not stretch horizontally or vertically; respects external overrides
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, False)
+            self.setStretchable(YUIDimension.YD_VERT, False)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YDateField"
