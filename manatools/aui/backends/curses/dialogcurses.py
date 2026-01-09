@@ -377,9 +377,15 @@ class YDialogCurses(YSingleChildContainerWidget):
                     continue
 
                 # Dispatch key to focused widget
+                handled = False
                 if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
                     handled = self._focused_widget._handle_key(key)
                     if handled:
+                        self._last_draw_time = 0
+
+                # Global mnemonic fallback for pushbuttons when not handled
+                if not handled and ((key >= ord('a') and key <= ord('z')) or (key >= ord('A') and key <= ord('Z'))):
+                    if self._activate_pushbutton_mnemonic(chr(key)):
                         self._last_draw_time = 0
 
             except KeyboardInterrupt:
@@ -401,3 +407,38 @@ class YDialogCurses(YSingleChildContainerWidget):
                 pass
 
         return self._event_result if self._event_result is not None else YEvent()
+
+    def _activate_pushbutton_mnemonic(self, ch):
+        """Find an enabled pushbutton with matching mnemonic and activate it.
+        Returns True if a button was found and an event posted.
+        """
+        try:
+            target = None
+            ch_low = ch.lower()
+
+            def visit(widget):
+                nonlocal target
+                if target is not None:
+                    return
+                try:
+                    if getattr(widget, 'widgetClass', lambda: '')() == 'YPushButton':
+                        if widget.isEnabled() and getattr(widget, '_mnemonic', None):
+                            if str(widget._mnemonic).lower() == ch_low:
+                                target = widget
+                                return
+                except Exception:
+                    pass
+                for c in getattr(widget, '_children', []) or []:
+                    visit(c)
+
+            if self.hasChildren():
+                visit(self.child())
+            if target is not None:
+                try:
+                    self._post_event(YWidgetEvent(target, YEventReason.Activated))
+                except Exception:
+                    pass
+                return True
+        except Exception:
+            pass
+        return False

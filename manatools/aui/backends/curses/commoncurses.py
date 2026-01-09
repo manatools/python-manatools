@@ -8,14 +8,141 @@ License: LGPLv2+
 Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.curses
+
+Also provides mnemonic extraction from labels that may use Qt ('&X' / '&&')
+or GTK ('_X' / '__') style markers.
 '''
+
 import curses
 import curses.ascii
 import sys
 import os
 import time
 import logging
+from typing import Tuple, Optional
 from ...yui_common import *
+
+def extract_mnemonic(label: Optional[str]) -> Tuple[Optional[str], str]:
+    """Extract mnemonic character and return (mnemonic_char, clean_label).
+
+    - Supports Qt-style '&' mnemonic: '&F' => mnemonic 'f'. '&&' => literal '&'.
+    - Supports GTK-style '_' mnemonic: '_F' => mnemonic 'f'. '__' => literal '_'.
+    - If no mnemonic found, returns (None, original_label).
+
+    The returned clean_label has mnemonic markers removed/unescaped.
+    """
+    if label is None:
+        return None, label
+    s = str(label)
+    if not s:
+        return None, s
+
+    # Prefer Qt-style '&' parsing first
+    mn: Optional[str] = None
+    out = []
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if ch == '&':
+            # literal '&&'
+            if i + 1 < n and s[i + 1] == '&':
+                out.append('&')
+                i += 2
+                continue
+            # mnemonic (single '&')
+            if i + 1 < n and mn is None:
+                mn = s[i + 1].lower()
+                # do not add '&' to output; just skip marker and continue
+                i += 1
+                continue
+            # stray '&' at end -> drop
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+
+    # If no '&' mnemonic found, try '_' GTK style
+    if mn is None and '_' in s:
+        out2 = []
+        i = 0
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            if ch == '_':
+                if i + 1 < n and s[i + 1] == '_':
+                    out2.append('_')
+                    i += 2
+                    continue
+                if i + 1 < n and mn is None:
+                    mn = s[i + 1].lower()
+                    i += 1
+                    continue
+                i += 1
+                continue
+            out2.append(ch)
+            i += 1
+        return mn, ''.join(out2)
+
+    return mn, ''.join(out)
+
+
+def split_mnemonic(label: Optional[str]) -> Tuple[Optional[str], Optional[int], str]:
+    """Return (mnemonic_char, mnemonic_index_in_clean, clean_label).
+
+    Works like extract_mnemonic but also returns the index in the cleaned
+    label where the mnemonic applies, or None if not present.
+    """
+    if label is None:
+        return None, None, label
+    s = str(label)
+    if not s:
+        return None, None, s
+
+    mn = None
+    idx = None
+    out = []
+    i = 0
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if ch == '&':
+            if i + 1 < n and s[i + 1] == '&':
+                out.append('&')
+                i += 2
+                continue
+            if i + 1 < n and mn is None:
+                mn = s[i + 1].lower()
+                idx = len(out)
+                i += 1
+                continue
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    if mn is None and '_' in s:
+        out2 = []
+        i = 0
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            if ch == '_':
+                if i + 1 < n and s[i + 1] == '_':
+                    out2.append('_')
+                    i += 2
+                    continue
+                if i + 1 < n and mn is None:
+                    mn = s[i + 1].lower()
+                    idx = len(out2)
+                    i += 1
+                    continue
+                i += 1
+                continue
+            out2.append(ch)
+            i += 1
+        return mn, idx, ''.join(out2)
+    return mn, idx, ''.join(out)
+ 
 
 __all__ = ["pixels_to_chars", "_curses_recursive_min_height", "_curses_recursive_min_width"]
 

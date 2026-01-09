@@ -16,6 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
+from .commoncurses import extract_mnemonic, split_mnemonic
 
 # Module-level logger for pushbutton curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.pushbutton.module")
@@ -35,6 +36,11 @@ class YPushButtonCurses(YWidget):
         self._icon_name = None
         self._height = 1  # Fixed height - buttons are always one line
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
+        # derive mnemonic and cleaned label if present
+        try:
+            self._mnemonic, self._mnemonic_index, self._clean_label = split_mnemonic(self._label)
+        except Exception:
+            self._mnemonic, self._mnemonic_index, self._clean_label = None, None, self._label
         if not self._logger.handlers and not logging.getLogger().handlers:
             for h in _mod_logger.handlers:
                 self._logger.addHandler(h)
@@ -48,6 +54,10 @@ class YPushButtonCurses(YWidget):
     
     def setLabel(self, label):
         self._label = label
+        try:
+            self._mnemonic, self._mnemonic_index, self._clean_label = split_mnemonic(self._label)
+        except Exception:
+            self._mnemonic, self._mnemonic_index, self._clean_label = None, None, self._label
     
     def _create_backend_widget(self):
         try:
@@ -82,8 +92,9 @@ class YPushButtonCurses(YWidget):
 
     def _draw(self, window, y, x, width, height):
         try:
-            # Center the button label within available width
-            button_text = f"[ {self._label} ]"
+            # Center the button label within available width, show underline for mnemonic
+            clean = getattr(self, "_clean_label", None) or self._label
+            button_text = f"[ {clean} ]"
             # Determine drawing position and clip text if necessary
             if width <= 0:
                 return
@@ -104,6 +115,14 @@ class YPushButtonCurses(YWidget):
 
             try:
                 window.addstr(y, text_x, draw_text, attr)
+                # underline mnemonic if visible
+                if self._mnemonic_index is not None:
+                    underline_pos = 2 + self._mnemonic_index  # within "[  ]"
+                    if 0 <= underline_pos < len(draw_text):
+                        try:
+                            window.addstr(y, text_x + underline_pos, draw_text[underline_pos], attr | curses.A_UNDERLINE)
+                        except curses.error:
+                            pass
             except curses.error:
                 # Best-effort: if even this fails, ignore
                 pass
@@ -129,6 +148,19 @@ class YPushButtonCurses(YWidget):
                     except Exception:
                         _mod_logger.error("_handle_key post event error", exc_info=True)
             return True
+        # mnemonic letter activates as well when focused
+        try:
+            if self._mnemonic:
+                if key == ord(self._mnemonic) or key == ord(self._mnemonic.upper()):
+                    dlg = self.findDialog()
+                    if dlg is not None:
+                        try:
+                            dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+                        except Exception:
+                            pass
+                    return True
+        except Exception:
+            pass
         return False
 
     def setIcon(self, icon_name: str):

@@ -9,7 +9,8 @@ NCurses backend: YMenuBar implementation with keyboard navigation.
 '''
 import curses
 import logging
-from ...yui_common import YWidget, YMenuEvent, YMenuItem
+from ...yui_common import YWidget, YMenuEvent, YMenuItem, YUIDimension
+from .commoncurses import extract_mnemonic, split_mnemonic
 
 
 class YMenuBarCurses(YWidget):
@@ -171,7 +172,8 @@ class YMenuBarCurses(YWidget):
             # reset menu positions
             self._menu_positions = []
             for idx, menu in enumerate(self._menus):
-                label = f" {menu.label()} "
+                mn, mpos, clean = split_mnemonic(menu.label())
+                label = f" {clean} "
                 attr = bar_attr
                 if idx == self._current_menu_index:
                     attr |= curses.A_BOLD
@@ -188,7 +190,19 @@ class YMenuBarCurses(YWidget):
                     except Exception:
                         pass
                     self._menu_positions.append(cx)
-                    window.addstr(y, cx, label[:max(0, width - (cx - x))], attr)
+                    # draw label with underline for mnemonic
+                    maxlen = max(0, width - (cx - x))
+                    vis = label[:maxlen]
+                    window.addstr(y, cx, vis, attr)
+                    if mpos is not None:
+                        try:
+                            # underline position inside label (account for leading space)
+                            ul_x = cx + 1 + mpos
+                            if ul_x < cx + len(vis):
+                                ch = clean[mpos] if 0 <= mpos < len(clean) else ' '
+                                window.addstr(y, ul_x, ch, attr | curses.A_UNDERLINE)
+                        except curses.error:
+                            pass
                 except curses.error:
                     self._menu_positions.append(cx)
                     pass
@@ -278,14 +292,22 @@ class YMenuBarCurses(YWidget):
                         continue
                     sel = (self._menu_indices[level] == real_i) if level < len(self._menu_indices) else (i == 0)
                     prefix = "* " if sel else "  "
-                    label_text = item.label()
+                    mn, mpos, clean = split_mnemonic(item.label())
                     marker = " ►" if item.isMenu() else ""
-                    text = prefix + label_text + marker
+                    text = prefix + clean + marker
                     attr = curses.A_REVERSE if sel else curses.A_NORMAL
                     if not item.enabled():
                         attr |= curses.A_DIM
                     try:
-                        window.addstr(popup_y + i, popup_x, text.ljust(popup_width)[:popup_width], attr)
+                        line = text.ljust(popup_width)[:popup_width]
+                        window.addstr(popup_y + i, popup_x, line, attr)
+                        if mpos is not None:
+                            try:
+                                ul_x = popup_x + len(prefix) + mpos
+                                if ul_x < popup_x + popup_width and (0 <= mpos < len(clean)):
+                                    window.addstr(popup_y + i, ul_x, clean[mpos], attr | curses.A_UNDERLINE)
+                            except curses.error:
+                                pass
                     except curses.error:
                         pass
                 # scroll indicators
@@ -571,5 +593,60 @@ class YMenuBarCurses(YWidget):
             self._menu_indices = []
             self._scroll_offsets = []
         else:
+            # mnemonic handling
+            ch = None
+            try:
+                ch = chr(key)
+            except Exception:
+                ch = None
+            if ch is not None and ch.isprintable():
+                letter = ch.lower()
+                if not self._expanded:
+                    # jump to top-level menu by mnemonic and expand
+                    for idx, menu in enumerate(self._menus):
+                        try:
+                            if not getattr(menu, 'visible', lambda: True)():
+                                continue
+                        except Exception:
+                            pass
+                        m, _ = extract_mnemonic(menu.label())
+                        if m and m.lower() == letter:
+                            self._current_menu_index = idx
+                            # expand this menu
+                            self._expanded = True
+                            self._menu_path = [self._menus[self._current_menu_index]]
+                            # select first selectable or the mnemonic-matching item if present
+                            items = list(self._menu_path[0]._children)
+                            first = self._first_selectable_index(items)
+                            self._menu_indices = [first if first is not None else 0]
+                            self._scroll_offsets = [0]
+                            return True
+                else:
+                    # when expanded: select/activate an item by mnemonic in current popup
+                    cur_menu = self._menu_path[-1]
+                    items = [it for it in list(cur_menu._children) if getattr(it, 'visible', lambda: True)()]
+                    target_idx = None
+                    for i, it in enumerate(items):
+                        m, _ = extract_mnemonic(it.label())
+                        if m and m.lower() == letter and self._is_selectable(it):
+                            target_idx = i
+                            break
+                    if target_idx is not None:
+                        self._menu_indices[-1] = target_idx
+                        it = items[target_idx]
+                        if it.isMenu():
+                            # descend into submenu
+                            self._menu_path.append(it)
+                            self._menu_indices.append(0)
+                            self._scroll_offsets.append(0)
+                        else:
+                            if it.enabled():
+                                self._emit_activation(it)
+                                # collapse after activation
+                                self._expanded = False
+                                self._menu_path = []
+                                self._menu_indices = []
+                                self._scroll_offsets = []
+                        return True
             handled = False
         return handled
