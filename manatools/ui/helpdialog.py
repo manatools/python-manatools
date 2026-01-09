@@ -12,9 +12,9 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 import webbrowser
 
-import manatools.ui.basedialog as basedialog
-import manatools.basehelpinfo as helpdata
-import yui
+from . import basedialog as basedialog
+from .. import basehelpinfo as helpdata
+from ..aui import yui as yui
 import gettext
 # https://pymotw.com/3/gettext/#module-localization
 t = gettext.translation(
@@ -43,12 +43,12 @@ class HelpDialog(basedialog.BaseDialog):
     '''
     layout implementation called in base class to setup UI
     '''
-    # URL events are sent as YMenuEvent by libyui
+    # URL events may be sent as MenuEvent by backends that support it
     self.eventManager.addMenuEvent(None, self.onURLEvent, False)
     self.text = self.factory.createRichText(layout, "", False)
     self.text.setValue(self.info.home())
     align = self.factory.createRight(layout)
-    self.quitButton = self.factory.createPushButton(align, _("&Quit"))
+    self.quitButton = self.factory.createPushButton(align, _("Quit"))
     self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent)
 
   def onQuitEvent(self) :

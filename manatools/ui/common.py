@@ -11,7 +11,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.ui.common
 '''
 
-import yui
+from ..aui import yui
 from enum import Enum
 import gettext
 # https://pymotw.com/3/gettext/#module-localization
@@ -25,14 +25,11 @@ ngettext = t.ngettext
 
 def destroyUI () :
     '''
-    destroy all the dialogs and delete YUI plugins. Use this at the very end of your application
-    to close everything correctly, expecially if you experience a crash in Qt plugin as explained 
-    into ussue https://github.com/libyui/libyui-qt/issues/41
+    Best-effort teardown for AUI dialogs. AUI manages backend lifecycle internally,
+    so there is typically no need to manually destroy UI plugins as in libyui.
+    This function exists for API compatibility and currently performs no action.
     '''
-    yui.YDialog.deleteAllDialogs()
-    # next line seems to be a workaround to prevent the qt-app from crashing
-    # see https://github.com/libyui/libyui-qt/issues/41
-    yui.YUILoader.deleteUI()
+    return
 
 
 def warningMsgBox (info) :
@@ -48,28 +45,27 @@ def warningMsgBox (info) :
     if (not info) :
         return 0
 
-    retVal = 0
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
-    dlg = factory.createDialogBox(yui.YMGAMessageBox.B_ONE, yui.YMGAMessageBox.D_WARNING)
-
-    if ('title' in info.keys()) :
-        dlg.setTitle(info['title'])
-
-    rt = False
-    if ("richtext" in info.keys()) :
-        rt = info['richtext']
-
-    if ('text' in info.keys()) :
-        dlg.setText(info['text'], rt)
-
-    dlg.setButtonLabel(_("&Ok"), yui.YMGAMessageBox.B_ONE )
-#   dlg.setMinSize(50, 5)
-
-    retVal = dlg.show()
-    dlg = None
-
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
+    if info.get('title'):
+        factory.createHeading(vbox, info.get('title'))
+    text = info.get('text', "")
+    rt = bool(info.get('richtext', False))
+    if rt:
+        t = factory.createRichText(vbox, "", False)
+        t.setValue(text)
+    else:
+        factory.createLabel(vbox, text)
+    align = factory.createRight(vbox)
+    ok_btn = factory.createPushButton(align, _("&Ok"))
+    while True:
+        ev = dlg.waitForEvent()
+        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+            break
+        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+            break
+    dlg.destroy()
     return 1
 
 
@@ -86,28 +82,27 @@ def infoMsgBox (info) :
     if (not info) :
         return 0
 
-    retVal = 0
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
-    dlg = factory.createDialogBox(yui.YMGAMessageBox.B_ONE, yui.YMGAMessageBox.D_INFO)
-
-    if ('title' in info.keys()) :
-        dlg.setTitle(info['title'])
-
-    rt = False
-    if ("richtext" in info.keys()) :
-        rt = info['richtext']
-
-    if ('text' in info.keys()) :
-        dlg.setText(info['text'], rt)
-
-    dlg.setButtonLabel(_("&Ok"), yui.YMGAMessageBox.B_ONE )
-#   dlg.setMinSize(50, 5)
-
-    retVal = dlg.show()
-    dlg = None
-
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
+    if info.get('title'):
+        factory.createHeading(vbox, info.get('title'))
+    text = info.get('text', "")
+    rt = bool(info.get('richtext', False))
+    if rt:
+        t = factory.createRichText(vbox, "", False)
+        t.setValue(text)
+    else:
+        factory.createLabel(vbox, text)
+    align = factory.createRight(vbox)
+    ok_btn = factory.createPushButton(align, _("&Ok"))
+    while True:
+        ev = dlg.waitForEvent()
+        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+            break
+        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+            break
+    dlg.destroy()
     return 1
 
 def msgBox (info) :
@@ -122,28 +117,27 @@ def msgBox (info) :
     if (not info) :
         return 0
 
-    retVal = 0
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
-    dlg = factory.createDialogBox(yui.YMGAMessageBox.B_ONE)
-
-    if ('title' in info.keys()) :
-        dlg.setTitle(info['title'])
-
-    rt = False
-    if ("richtext" in info.keys()) :
-        rt = info['richtext']
-
-    if ('text' in info.keys()) :
-        dlg.setText(info['text'], rt)
-
-    dlg.setButtonLabel(_("&Ok"), yui.YMGAMessageBox.B_ONE )
-#   dlg.setMinSize(50, 5)
-
-    retVal = dlg.show()
-    dlg = None
-
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
+    if info.get('title'):
+        factory.createHeading(vbox, info.get('title'))
+    text = info.get('text', "")
+    rt = bool(info.get('richtext', False))
+    if rt:
+        t = factory.createRichText(vbox, "", False)
+        t.setValue(text)
+    else:
+        factory.createLabel(vbox, text)
+    align = factory.createRight(vbox)
+    ok_btn = factory.createPushButton(align, _("&Ok"))
+    while True:
+        ev = dlg.waitForEvent()
+        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+            break
+        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+            break
+    dlg.destroy()
     return 1
 
 
@@ -165,36 +159,40 @@ def askOkCancel (info) :
     if (not info) :
         return False
 
-    retVal = False
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
-    dlg = factory.createDialogBox(yui.YMGAMessageBox.B_TWO)
-
-    if ('title' in info.keys()) :
-        dlg.setTitle(info['title'])
-
-    rt = False
-    if ("richtext" in info.keys()) :
-        rt = info['richtext']
-
-    if ('text' in info.keys()) :
-        dlg.setText(info['text'], rt)
-
-    dlg.setButtonLabel(_("&Ok"), yui.YMGAMessageBox.B_ONE )
-    dlg.setButtonLabel(_("&Cancel"), yui.YMGAMessageBox.B_TWO )
-
-    if ("default_button" in info.keys() and info["default_button"] == 1) :
-        dlg.setDefaultButton(yui.YMGAMessageBox.B_ONE)
-    else :
-        dlg.setDefaultButton(yui.YMGAMessageBox.B_TWO)
-
-    dlg.setMinSize(50, 5)
-
-    retVal = dlg.show() == yui.YMGAMessageBox.B_ONE;
-    dlg = None
-
-    return retVal
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
+    if info.get('title'):
+        factory.createHeading(vbox, info.get('title'))
+    text = info.get('text', "")
+    rt = bool(info.get('richtext', False))
+    if rt:
+        t = factory.createRichText(vbox, "", False)
+        t.setValue(text)
+    else:
+        factory.createLabel(vbox, text)
+    btns = factory.createHBox(vbox)
+    ok_btn = factory.createPushButton(btns, _("&Ok"))
+    cancel_btn = factory.createPushButton(btns, _("&Cancel"))
+    default_ok = bool(info.get('default_button', 0) == 1)
+    # simple default: ignore focusing specifics for now
+    result = False
+    while True:
+        ev = dlg.waitForEvent()
+        et = ev.eventType()
+        if et == yui.YEventType.CancelEvent:
+            result = False
+            break
+        if et == yui.YEventType.WidgetEvent:
+            w = ev.widget()
+            if w == ok_btn and ev.reason() == yui.YEventReason.Activated:
+                result = True
+                break
+            if w == cancel_btn and ev.reason() == yui.YEventReason.Activated:
+                result = False
+                break
+    dlg.destroy()
+    return result
 
 def askYesOrNo (info) :
     '''
@@ -215,35 +213,45 @@ def askYesOrNo (info) :
     if (not info) :
         return False
 
-    retVal = False
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
-    dlg = factory.createDialogBox(yui.YMGAMessageBox.B_TWO)
-
-    if ('title' in info.keys()) :
-        dlg.setTitle(info['title'])
-
-    rt = False
-    if ("richtext" in info.keys()) :
-        rt = info['richtext']
-
-    if ('text' in info.keys()) :
-        dlg.setText(info['text'], rt)
-
-    dlg.setButtonLabel(_("&Yes"), yui.YMGAMessageBox.B_ONE )
-    dlg.setButtonLabel(_("&No"), yui.YMGAMessageBox.B_TWO )
-    if ("default_button" in info.keys() and info["default_button"] == 1) :
-        dlg.setDefaultButton(yui.YMGAMessageBox.B_ONE)
-    else :
-        dlg.setDefaultButton(yui.YMGAMessageBox.B_TWO)
-    if ('size' in info.keys()) :
-        dlg.setMinSize(info['size'][0], info['size'][1])
-
-    retVal = dlg.show() == yui.YMGAMessageBox.B_ONE;
-    dlg = None
-
-    return retVal
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
+    if info.get('title'):
+        factory.createHeading(vbox, info.get('title'))
+    text = info.get('text', "")
+    rt = bool(info.get('richtext', False))
+    if rt:
+        t = factory.createRichText(vbox, "", False)
+        t.setValue(text)
+    else:
+        factory.createLabel(vbox, text)
+    if 'size' in info.keys():
+        try:
+            dims = info['size']
+            parent = factory.createMinSize(vbox, int(dims[0]), int(dims[1]))
+            vbox = parent
+        except Exception:
+            pass
+    btns = factory.createHBox(vbox)
+    yes_btn = factory.createPushButton(btns, _("&Yes"))
+    no_btn = factory.createPushButton(btns, _("&No"))
+    result = False
+    while True:
+        ev = dlg.waitForEvent()
+        et = ev.eventType()
+        if et == yui.YEventType.CancelEvent:
+            result = False
+            break
+        if et == yui.YEventType.WidgetEvent:
+            w = ev.widget()
+            if w == yes_btn and ev.reason() == yui.YEventReason.Activated:
+                result = True
+                break
+            if w == no_btn and ev.reason() == yui.YEventReason.Activated:
+                result = False
+                break
+    dlg.destroy()
+    return result
 
 class AboutDialogMode(Enum):
     '''
@@ -275,31 +283,62 @@ def AboutDialog (info) :
     if (not info) :
         raise ValueError("Missing AboutDialog parameters")
 
-    yui.YUI.widgetFactory
-    factory = yui.YExternalWidgets.externalWidgetFactory("mga")
-    factory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(factory)
+    # Build a simple About dialog using AUI widgets
+    factory = yui.YUI.widgetFactory()
+    dlg = factory.createPopupDialog()
+    vbox = factory.createVBox(dlg)
 
-    name        = info['name'] if 'name' in info.keys() else ""
-    version     = info['version'] if 'version' in info.keys() else ""
-    license     = info['license'] if 'license' in info.keys() else ""
-    authors     = info['authors'] if 'authors' in info.keys() else ""
-    description = info['description'] if 'description' in info.keys() else ""
-    logo        = info['logo'] if 'logo' in info.keys() else ""
-    icon        = info['icon'] if 'icon' in info.keys() else ""
-    credits     = info['credits'] if 'credits' in info.keys() else ""
-    information = info['information'] if 'information' in info.keys() else ""
-    dialog_mode = yui.YMGAAboutDialog.TABBED
-    if 'dialog_mode' in info.keys() :
-        dialog_mode = yui.YMGAAboutDialog.CLASSIC if info['dialog_mode'] == AboutDialogMode.CLASSIC else yui.YMGAAboutDialog.TABBED
+    name        = info.get('name', "")
+    version     = info.get('version', "")
+    license_txt = info.get('license', "")
+    authors     = info.get('authors', "")
+    description = info.get('description', "")
+    logo        = info.get('logo', "")
+    credits     = info.get('credits', "")
+    information = info.get('information', "")
 
-    dlg = factory.createAboutDialog(name, version, license,
-                                    authors, description, logo,
-                                    icon, credits, information
-    )
-    if 'size' in info.keys():
-        if not 'column' in info['size'] or  not 'lines' in info['size'] :
-            raise ValueError("size must contains <<column>> and <<lines>> keys")
-        dlg.setMinSize(info['size']['column'], info['size']['lines'])
+    title = _("About") + (f" {name}" if name else "")
+    factory.createHeading(vbox, title)
 
-    dlg.show(dialog_mode)
-    dlg = None
+    # Header block
+    header = factory.createHBox(vbox)
+    if logo:
+        try:
+            factory.createImage(header, logo)
+            factory.createHSpacing(header, 8)
+        except Exception:
+            pass
+    labels = factory.createVBox(header)
+    if name:
+        factory.createLabel(labels, name)
+    if version:
+        factory.createLabel(labels, version)
+    if license_txt:
+        factory.createLabel(labels, license_txt)
+
+    # Content block
+    if description:
+        rt = factory.createRichText(vbox, "", False)
+        rt.setValue(description)
+    if authors:
+        factory.createHeading(vbox, _("Authors"))
+        ra = factory.createRichText(vbox, "", False)
+        ra.setValue(authors)
+    if credits:
+        factory.createHeading(vbox, _("Credits"))
+        rc = factory.createRichText(vbox, "", False)
+        rc.setValue(credits)
+    if information:
+        factory.createHeading(vbox, _("Information"))
+        ri = factory.createRichText(vbox, "", False)
+        ri.setValue(information)
+
+    align = factory.createRight(vbox)
+    close_btn = factory.createPushButton(align, _("&Close"))
+    while True:
+        ev = dlg.waitForEvent()
+        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+            break
+        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == close_btn and ev.reason() == yui.YEventReason.Activated:
+            break
+    dlg.destroy()
