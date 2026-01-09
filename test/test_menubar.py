@@ -55,21 +55,22 @@ def test_menubar_example(backend_name=None):
 
     ui.app().setApplicationTitle(f"Menu Bar {backend.value} Test")
     dlg = factory.createMainDialog()
-    vbox = factory.createVBox(dlg)
+    minsize = factory.createMinSize(dlg, 640, 400)
+    vbox = factory.createVBox(minsize)
 
     # Menu bar
     menubar = factory.createMenuBar(vbox)
 
     # File menu
-    file_menu = menubar.addMenu("File", icon_name="application-menu")
+    file_menu = menubar.addMenu("&File", icon_name="application-menu")
     item_open = menubar.addItem(file_menu, "Open", icon_name="document-open", enabled=True)
     item_close = menubar.addItem(file_menu, "Close", icon_name="window-close", enabled=False)
     file_menu.addSeparator()
-    item_exit = menubar.addItem(file_menu, "Exit", icon_name="application-exit", enabled=True)
+    item_exit = menubar.addItem(file_menu, "E&xit", icon_name="application-exit", enabled=True)
 
     # Edit menu
-    edit_menu = menubar.addMenu("Edit")
-    menubar.addItem(edit_menu, "Copy", icon_name="edit-copy")
+    edit_menu = menubar.addMenu("&Edit")
+    menubar.addItem(edit_menu, "&Copy", icon_name="edit-copy")
     menubar.addItem(edit_menu, "Paste", icon_name="edit-paste")
     menubar.addItem(edit_menu, "Cut", icon_name="edit-cut")
 
@@ -103,7 +104,7 @@ def test_menubar_example(backend_name=None):
 
     # OK button
     ctrl_h = factory.createHBox(vbox)
-    ok_btn = factory.createPushButton(factory.createHCenter(ctrl_h), "OK")
+    ok_btn = factory.createPushButton(factory.createHCenter(ctrl_h), "&OK")
 
     root_logger.info("Opening MenuBar example dialog...")
 
