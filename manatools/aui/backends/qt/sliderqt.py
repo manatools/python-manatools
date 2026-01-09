@@ -1,5 +1,14 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
+'''
+Python manatools.aui.backends.qt contains all Qt backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.qt
+'''
 """
 Qt backend Slider widget.
 - Horizontal slider synchronized with a spin box.
