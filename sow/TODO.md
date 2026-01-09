@@ -57,7 +57,7 @@ To check/review:
     [X] askForSaveFileName
     [ ] YAboutDialog (aka YMGAAboutDialog)
     [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
-    [ ] managing shortcuts
+    [X] managing shortcuts (only menu and pushbutton)
     [ ] localization
 
 Nice to have: improvements outside YUI API
