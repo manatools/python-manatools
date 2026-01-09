@@ -7,9 +7,13 @@ import uuid
 from typing import Optional
 
 # Enums
+# Backwards-compatible aliases: allow using `YUIDimension.Horizontal` / `Vertical`
+# in code that expects more readable names.
 class YUIDimension(Enum):
     YD_HORIZ = 0
+    Horizontal = 0
     YD_VERT = 1
+    Vertical = 1
 
 class YAlignmentType(Enum):
     YAlignUnchanged = 0
