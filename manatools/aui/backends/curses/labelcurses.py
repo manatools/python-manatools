@@ -37,6 +37,8 @@ class YLabelCurses(YWidget):
         self._height = 1
         self._focused = False
         self._can_focus = False  # Labels don't get focus
+        self.setStretchable(YUIDimension.YD_HORIZ, False)
+        self.setStretchable(YUIDimension.YD_VERT, False)
         # per-instance logger
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
