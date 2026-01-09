@@ -19,13 +19,13 @@ import threading
 import os
 import logging
 from ...yui_common import *
-from .commongtk import _resolve_icon, _resolve_gicon
+from .commongtk import _resolve_icon, _convert_mnemonic_to_gtk
 
 
 class YPushButtonGtk(YWidget):
     def __init__(self, parent=None, label=""):
         super().__init__(parent)
-        self._label = label
+        self._label = _convert_mnemonic_to_gtk(label)
         self._icon_name = None
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
@@ -45,6 +45,7 @@ class YPushButtonGtk(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.Button(label=self._label)
+        self._backend_widget.set_use_underline(True)
         # apply icon if previously set
         try:
             if getattr(self, "_icon_name", None):

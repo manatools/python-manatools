@@ -11,7 +11,7 @@ from gi.repository import Gtk, Gio, GLib
 import logging
 import os
 from ...yui_common import YWidget, YMenuEvent, YMenuItem, YUIDimension
-from .commongtk import _resolve_gicon, _resolve_icon
+from .commongtk import _resolve_icon, _convert_mnemonic_to_gtk
 
 
 class YMenuBarGtk(YWidget):
@@ -25,6 +25,7 @@ class YMenuBarGtk(YWidget):
         self._item_to_row = {}
         self._row_to_item = {}
         self._row_to_popover = {}
+        self._item_to_button = {}
         self._pending_rebuild = False
         # Default stretch: horizontal True, vertical False
         try:
@@ -46,7 +47,7 @@ class YMenuBarGtk(YWidget):
         else:
             if not label:
                 raise ValueError("Menu label must be provided when no YMenuItem is given")
-            m = YMenuItem(label, icon_name, enabled=True, is_menu=True)
+            m = YMenuItem(_convert_mnemonic_to_gtk(label), icon_name, enabled=True, is_menu=True)
         self._menus.append(m)
         if self._backend_widget:
             self._ensure_menu_rendered(m)
@@ -54,7 +55,7 @@ class YMenuBarGtk(YWidget):
         return m
 
     def addItem(self, menu: YMenuItem, label: str, icon_name: str = "", enabled: bool = True) -> YMenuItem:
-        item = menu.addItem(label, icon_name)
+        item = menu.addItem(_convert_mnemonic_to_gtk(label), icon_name)
         item.setEnabled(enabled)
         if self._backend_widget:
             # update model for this menu and rebuild root
@@ -70,6 +71,12 @@ class YMenuBarGtk(YWidget):
             if row is not None:
                 try:
                     row.set_sensitive(bool(on))
+                except Exception:
+                    pass
+                try:
+                    btnw = self._item_to_button.get(item)
+                    if btnw is not None:
+                        btnw.set_sensitive(bool(on))
                 except Exception:
                     pass
                 return
@@ -153,9 +160,29 @@ class YMenuBarGtk(YWidget):
         if hb is None:
             return
         btn = Gtk.MenuButton()
+        btn.set_use_underline(True)
         try:
-            btn.set_label(menu.label())
+            btn.set_label(_convert_mnemonic_to_gtk(menu.label()))
             btn.set_has_frame(False)
+        except Exception:
+            pass
+        # Ensure mnemonic-activate opens the popover (Alt+Key)
+        try:
+            def _on_mnemonic(btn_widget, _cycle):
+                try:
+                    pop = btn_widget.get_popover()
+                    if pop is not None:
+                        try:
+                            pop.popup()
+                        except Exception:
+                            try:
+                                pop.set_visible(True)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                return True
+            btn.connect('mnemonic-activate', _on_mnemonic)
         except Exception:
             pass
 
@@ -171,6 +198,26 @@ class YMenuBarGtk(YWidget):
                         try:
                             hb_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                             hb_box.append(img)
+                            # Add a mnemonic label so Alt+Key continues to work
+                            try:
+                                conv = menu.label()
+                                lbl = Gtk.Label(label=conv)
+                                try:
+                                    lbl.set_use_underline(True)
+                                except Exception:
+                                    pass
+                                try:
+                                    lbl.set_xalign(0.0)
+                                except Exception:
+                                    pass
+                                hb_box.append(lbl)
+                                # route label mnemonic to the button
+                                try:
+                                    lbl.set_mnemonic_widget(btn)
+                                except Exception:
+                                    pass
+                            except Exception:
+                                pass
                             btn.set_child(hb_box)
                         except Exception:
                             self._logger.exception("Failed to set icon on MenuButton for '%s'", menu.label())
@@ -227,9 +274,28 @@ class YMenuBarGtk(YWidget):
             if child.isMenu():
                 # submenu: create a nested MenuButton inside the row
                 sub_btn = Gtk.MenuButton()
+                sub_btn.set_use_underline(True)
                 try:
-                    sub_btn.set_label(child.label())
+                    sub_btn.set_label(_convert_mnemonic_to_gtk(child.label()))
                     sub_btn.set_has_frame(False)
+                except Exception:
+                    pass
+                try:
+                    def _on_mnemonic_sub(bw, _cycle):
+                        try:
+                            sp = bw.get_popover()
+                            if sp is not None:
+                                try:
+                                    sp.popup()
+                                except Exception:
+                                    try:
+                                        sp.set_visible(True)
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                        return True
+                    sub_btn.connect('mnemonic-activate', _on_mnemonic_sub)
                 except Exception:
                     pass
                 sub_pop = Gtk.Popover()
@@ -249,6 +315,25 @@ class YMenuBarGtk(YWidget):
                                 try:
                                     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                                     box.append(img)
+                                    # Add a mnemonic label for submenu button too
+                                    try:
+                                        conv = child.label()
+                                        slbl = Gtk.Label(label=conv)
+                                        try:
+                                            slbl.set_use_underline(True)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            slbl.set_xalign(0.0)
+                                        except Exception:
+                                            pass
+                                        box.append(slbl)
+                                        try:
+                                            slbl.set_mnemonic_widget(sub_btn)
+                                        except Exception:
+                                            pass
+                                    except Exception:
+                                        pass
                                     sub_btn.set_child(box)
                                 except Exception:
                                     self._logger.exception("Failed to set icon on submenu button '%s'", child.label())
@@ -290,8 +375,17 @@ class YMenuBarGtk(YWidget):
                             row_box.append(img)
                     except Exception:
                         self._logger.exception("Failed to resolve icon for menu item '%s'", child.label())
+                # Display item label (no button) for reliable visibility across GTK versions
                 lbl = Gtk.Label(label=child.label())
-                lbl.set_xalign(0.0)
+                try:
+                    # interpret '_' as mnemonic underline visually (no activation here)
+                    lbl.set_use_underline(True)
+                except Exception:
+                    pass
+                try:
+                    lbl.set_xalign(0.0)
+                except Exception:
+                    pass
                 row_box.append(lbl)
                 row.set_child(row_box)
                 row.set_sensitive(child.enabled())
@@ -426,6 +520,10 @@ class YMenuBarGtk(YWidget):
             except Exception:
                 self._item_to_row = {}
             try:
+                self._item_to_button.clear()
+            except Exception:
+                self._item_to_button = {}
+            try:
                 self._row_to_item.clear()
             except Exception:
                 self._row_to_item = {}
@@ -514,6 +612,10 @@ class YMenuBarGtk(YWidget):
             except Exception:
                 self._item_to_row = {}
             try:
+                self._item_to_button.clear()
+            except Exception:
+                self._item_to_button = {}
+            try:
                 self._row_to_item.clear()
             except Exception:
                 self._row_to_item = {}
@@ -574,3 +676,31 @@ class YMenuBarGtk(YWidget):
                     self._logger.exception("Error closing popovers after activation")
         except Exception:
             self._logger.exception("Error handling row activation")
+
+    def _on_menu_button_clicked(self, item: YMenuItem):
+        try:
+            if item and item.enabled():
+                self._emit_activation(item)
+                # close all popovers
+                try:
+                    for btn, _lb in list(self._menu_to_button.values()):
+                        try:
+                            pop = btn.get_popover()
+                            if pop is None:
+                                continue
+                            try:
+                                pop.popdown()
+                            except Exception:
+                                try:
+                                    pop.set_visible(False)
+                                except Exception:
+                                    try:
+                                        pop.hide()
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass

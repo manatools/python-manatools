@@ -21,7 +21,7 @@ import logging
 from ...yui_common import *
 
 
-__all__ = ["_resolve_icon", "_resolve_gicon"]
+__all__ = ["_resolve_icon", "_resolve_gicon", "_convert_mnemonic_to_gtk"]
 
 
 def _resolve_icon(icon_name, size=16):
@@ -146,3 +146,50 @@ def _resolve_gicon(icon_spec):
         except Exception:
             pass
         return None
+
+
+def _convert_mnemonic_to_gtk(label: str) -> str:
+    """Convert a Qt-style mnemonic in a label to GTK format.
+
+    - Qt: uses '&' before a character to mark the mnemonic (e.g., "&Quit").
+           A literal ampersand is written as "&&".
+    - GTK: uses '_' before the mnemonic character (e.g., "_Quit").
+
+    If no mnemonic marker ('&' not present), the string is returned unchanged.
+    Literal "&&" sequences are converted to a single '&'. Only the first
+    single '&' is converted to a mnemonic; subsequent single '&' are dropped.
+
+    This function does not attempt to escape underscores; GTK treats '_' as
+    mnemonic when present, but the input is expected to be Qt-style.
+    """
+    if label is None:
+        return label
+    s = str(label)
+    if '&' not in s:
+        return s
+
+    out = []
+    i = 0
+    mnemonic_done = False
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if ch == '&':
+            # Handle literal ampersand
+            if i + 1 < n and s[i + 1] == '&':
+                out.append('&')
+                i += 2
+                continue
+            # Single '&' indicates mnemonic; convert the first occurrence
+            if not mnemonic_done:
+                # Insert '_' before the next character (if any)
+                if i + 1 < n:
+                    out.append('_')
+                mnemonic_done = True
+            # Skip this '&' (do not add to output)
+            i += 1
+            continue
+        else:
+            out.append(ch)
+            i += 1
+    return ''.join(out)
