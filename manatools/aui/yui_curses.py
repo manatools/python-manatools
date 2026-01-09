@@ -594,3 +594,12 @@ class YWidgetFactoryCurses:
             logging.getLogger(__name__).exception("Failed to create YLogViewCurses: %s", e)
             raise
 
+    def createTimeField(self, parent, label):
+        """Create a TimeField widget (ncurses backend)."""
+        from .backends.curses import YTimeFieldCurses
+        try:
+            return YTimeFieldCurses(parent, label)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YTimeFieldCurses: %s", e)
+            raise
+

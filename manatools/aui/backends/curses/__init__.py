@@ -25,6 +25,7 @@ from .imagecurses import YImageCurses
 from .dumbtabcurses import YDumbTabCurses
 from .slidercurses import YSliderCurses
 from .logviewcurses import YLogViewCurses
+from .timefieldcurses import YTimeFieldCurses
 
 __all__ = [
     "YDialogCurses",
@@ -54,5 +55,6 @@ __all__ = [
     "YDumbTabCurses",
     "YSliderCurses",
     "YLogViewCurses",
+    "YTimeFieldCurses",
     # ...
 ]
