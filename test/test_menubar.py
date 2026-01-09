@@ -103,7 +103,7 @@ def test_menubar_example(backend_name=None):
 
     # OK button
     ctrl_h = factory.createHBox(vbox)
-    ok_btn = factory.createPushButton(ctrl_h, "OK")
+    ok_btn = factory.createPushButton(factory.createHCenter(ctrl_h), "OK")
 
     root_logger.info("Opening MenuBar example dialog...")
 
