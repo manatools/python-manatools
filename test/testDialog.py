@@ -77,7 +77,7 @@ class TestDialog(basedialog.BaseDialog):
     self.factory.createVStretch(layout)
     align = self.factory.createHVCenter(layout)
     # Let's test a quitbutton (same handle as Quit menu)
-    self.quitButton = self.factory.createPushButton(align, "Quit")
+    self.quitButton = self.factory.createPushButton(align, "&Quit")
     self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent, sendObjOnEvent)
     
     # Let's test a cancel event
