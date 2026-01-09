@@ -16,6 +16,12 @@ class YMenuBarQt(YWidget):
         self._menus = []  # list of YMenuItem (is_menu=True)
         self._menu_to_qmenu = {}
         self._item_to_qaction = {}
+        # Default stretch: horizontal True, vertical False
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, False)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YMenuBar"
@@ -176,15 +182,42 @@ class YMenuBarQt(YWidget):
         mb = QtWidgets.QMenuBar()
         self._backend_widget = mb
         try:
-            # Prevent vertical stretching: fix height to size hint and set fixed vertical size policy
-            h = mb.sizeHint().height()
-            if h and h > 0:
-                mb.setMinimumHeight(h)
-                mb.setMaximumHeight(h)
+            # Size policies based on current stretchable flags
             sp = mb.sizePolicy()
-            sp.setVerticalPolicy(QtWidgets.QSizePolicy.Fixed)
-            sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
+            # Vertical: default Fixed unless user made it stretchable
+            try:
+                v_stretch = bool(self.stretchable(YUIDimension.YD_VERT))
+            except Exception:
+                v_stretch = False
+            try:
+                sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding if v_stretch else QtWidgets.QSizePolicy.Fixed)
+            except Exception:
+                try:
+                    sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if v_stretch else QtWidgets.QSizePolicy.Policy.Fixed)
+                except Exception:
+                    pass
+            # Horizontal: default Expanding unless user disabled stretchable
+            try:
+                h_stretch = bool(self.stretchable(YUIDimension.YD_HORIZ))
+            except Exception:
+                h_stretch = True
+            try:
+                sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding if h_stretch else QtWidgets.QSizePolicy.Fixed)
+            except Exception:
+                try:
+                    sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding if h_stretch else QtWidgets.QSizePolicy.Policy.Fixed)
+                except Exception:
+                    pass
             mb.setSizePolicy(sp)
+            # Prevent vertical stretching by bounding height when not stretchable
+            try:
+                if not v_stretch:
+                    h = mb.sizeHint().height()
+                    if h and h > 0:
+                        mb.setMinimumHeight(h)
+                        mb.setMaximumHeight(h)
+            except Exception:
+                pass
         except Exception:
             pass
         # render any menus added before creation

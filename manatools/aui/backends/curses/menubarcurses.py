@@ -35,6 +35,12 @@ class YMenuBarCurses(YWidget):
         self._bar_y = 0
         self._bar_x = 0
         self._bar_width = 0
+        # Default stretch flags: horizontal True, vertical False
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, False)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YMenuBar"

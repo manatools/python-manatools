@@ -26,6 +26,12 @@ class YMenuBarGtk(YWidget):
         self._row_to_item = {}
         self._row_to_popover = {}
         self._pending_rebuild = False
+        # Default stretch: horizontal True, vertical False
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, False)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YMenuBar"
@@ -300,10 +306,18 @@ class YMenuBarGtk(YWidget):
 
     def _create_backend_widget(self):
         hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        # Do not allow the menubar box to expand vertically
+        # Expansion based on current stretchable flags: default hexpand True, vexpand False
         try:
-            hb.set_vexpand(False)
-            hb.set_hexpand(True)
+            try:
+                v_stretch = bool(self.stretchable(YUIDimension.YD_VERT))
+            except Exception:
+                v_stretch = False
+            try:
+                h_stretch = bool(self.stretchable(YUIDimension.YD_HORIZ))
+            except Exception:
+                h_stretch = True
+            hb.set_vexpand(v_stretch)
+            hb.set_hexpand(h_stretch)
         except Exception:
             pass
         self._backend_widget = hb
