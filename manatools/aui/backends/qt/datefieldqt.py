@@ -23,6 +23,8 @@ class YDateFieldQt(YWidget):
         self._label = label or ""
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._date = QtCore.QDate.currentDate()
+        self.setStretchable(YUIDimension.YD_HORIZ, False)
+        self.setStretchable(YUIDimension.YD_VERT, False)
 
     def widgetClass(self):
         return "YDateField"
@@ -107,18 +109,33 @@ class YDateFieldQt(YWidget):
         except Exception:
             pass
 
-        # Apply size policy from stretchable hints
+        # Apply size policy based on stretchable hints to both the date edit and its container
         try:
-            sp = container.sizePolicy()
+            # derive policies from stretchable flags
             try:
-                horiz = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Preferred
-                vert = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Fixed
+                horiz_policy = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Fixed
+                vert_policy = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Fixed
             except Exception:
-                horiz = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Preferred
-                vert = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed
-            sp.setHorizontalPolicy(horiz)
-            sp.setVerticalPolicy(vert)
-            container.setSizePolicy(sp)
+                horiz_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Fixed
+                vert_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed
+
+            # apply to date edit
+            try:
+                sp_de = de.sizePolicy()
+                sp_de.setHorizontalPolicy(horiz_policy)
+                sp_de.setVerticalPolicy(vert_policy)
+                de.setSizePolicy(sp_de)
+            except Exception:
+                pass
+
+            # apply to container as well so layout won't force expansion contrary to stretchable()
+            try:
+                sp_cont = container.sizePolicy()
+                sp_cont.setHorizontalPolicy(horiz_policy)
+                sp_cont.setVerticalPolicy(vert_policy)
+                container.setSizePolicy(sp_cont)
+            except Exception:
+                pass
         except Exception:
             pass
 
