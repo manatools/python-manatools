@@ -24,11 +24,8 @@ class YTimeFieldQt(YWidget):
         self._label = label or ""
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._time = datetime.time(0, 0, 0)
-        try:
-            self.setStretchable(YUIDimension.YD_HORIZ, True)
-            self.setStretchable(YUIDimension.YD_VERT, False)
-        except Exception:
-            pass
+        self.setStretchable(YUIDimension.YD_HORIZ, False)
+        self.setStretchable(YUIDimension.YD_VERT, False)
 
     def widgetClass(self):
         return "YTimeField"
@@ -62,8 +59,9 @@ class YTimeFieldQt(YWidget):
 
     def _create_backend_widget(self):
         cont = QtWidgets.QWidget()
-        lay = QtWidgets.QHBoxLayout(cont)
+        lay = QtWidgets.QVBoxLayout(cont)
         lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
         if self._label:
             lbl = QtWidgets.QLabel(self._label)
             lay.addWidget(lbl)
@@ -73,7 +71,8 @@ class YTimeFieldQt(YWidget):
             edit.setDisplayFormat("HH:mm:ss")
             edit.setTime(QtCore.QTime(self._time.hour, self._time.minute, self._time.second))
         except Exception:
-            pass
+            self._logger.exception("_create_backend_widget: couldn't set time edit format or time")
+
         def _on_time_changed(qt: QtCore.QTime):
             try:
                 self._time = datetime.time(qt.hour(), qt.minute(), qt.second())
@@ -83,23 +82,30 @@ class YTimeFieldQt(YWidget):
             edit.timeChanged.connect(_on_time_changed)
         except Exception:
             pass
-        # Respect stretchable flags via size policy
+        # Apply size policy based on stretchable hints to both the time edit and its container
         try:
-            sp = edit.sizePolicy()
             try:
-                horiz = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Preferred
-                vert = QtWidgets.QSizePolicy.Policy.Fixed if not self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Expanding
-                sp.setHorizontalPolicy(horiz)
-                sp.setVerticalPolicy(vert)
+                horiz_policy = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Policy.Fixed
+                vert_policy = QtWidgets.QSizePolicy.Policy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Policy.Fixed
             except Exception:
-                try:
-                    horiz = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Preferred
-                    vert = QtWidgets.QSizePolicy.Fixed if not self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Expanding
-                    sp.setHorizontalPolicy(horiz)
-                    sp.setVerticalPolicy(vert)
-                except Exception:
-                    pass
-            edit.setSizePolicy(sp)
+                horiz_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_HORIZ) else QtWidgets.QSizePolicy.Fixed
+                vert_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed
+
+            try:
+                sp_edit = edit.sizePolicy()
+                sp_edit.setHorizontalPolicy(horiz_policy)
+                sp_edit.setVerticalPolicy(vert_policy)
+                edit.setSizePolicy(sp_edit)
+            except Exception:
+                pass
+
+            try:
+                sp_cont = cont.sizePolicy()
+                sp_cont.setHorizontalPolicy(horiz_policy)
+                sp_cont.setVerticalPolicy(vert_policy)
+                cont.setSizePolicy(sp_cont)
+            except Exception:
+                pass
         except Exception:
             pass
         lay.addWidget(edit)
