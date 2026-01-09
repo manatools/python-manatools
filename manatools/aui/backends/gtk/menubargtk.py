@@ -10,7 +10,7 @@ gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Gio, GLib
 import logging
 import os
-from ...yui_common import YWidget, YMenuEvent, YMenuItem
+from ...yui_common import YWidget, YMenuEvent, YMenuItem, YUIDimension
 from .commongtk import _resolve_gicon, _resolve_icon
 
 
