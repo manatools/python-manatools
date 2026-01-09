@@ -791,6 +791,15 @@ class YWidgetFactoryGtk:
             logging.getLogger(__name__).exception("Failed to create YLogViewGtk: %s", e)
             raise
 
+    def createTimeField(self, parent, label):
+        """Create a TimeField widget (GTK backend)."""
+        from .backends.gtk import YTimeFieldGtk
+        try:
+            return YTimeFieldGtk(parent, label)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YTimeFieldGtk: %s", e)
+            raise
+
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
