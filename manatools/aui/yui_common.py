@@ -115,7 +115,7 @@ class YMenuEvent(YEvent):
 class YTimeoutEvent(YEvent):
     """Event generated on timeout"""
     def __init__(self):
-        super().__init__()
+        super().__init__(YEventType.TimeoutEvent)
 
 class YCancelEvent(YEvent):
     def __init__(self):
