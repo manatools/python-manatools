@@ -25,6 +25,7 @@ from .imageqt import YImageQt
 from .dumbtabqt import YDumbTabQt
 from .sliderqt import YSliderQt
 from .logviewqt import YLogViewQt
+from .timefieldqt import YTimeFieldQt
 
 
 __all__ = [
@@ -55,5 +56,6 @@ __all__ = [
     "YDumbTabQt",
     "YSliderQt",
     "YLogViewQt",
+    "YTimeFieldQt",
     # ...
 ]

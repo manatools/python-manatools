@@ -398,3 +398,12 @@ class YWidgetFactoryQt:
         except Exception as e:
             logging.getLogger(__name__).exception("Failed to create YLogViewQt: %s", e)
             raise
+
+    def createTimeField(self, parent, label):
+        """Create a TimeField widget (Qt backend)."""
+        from .backends.qt import YTimeFieldQt
+        try:
+            return YTimeFieldQt(parent, label)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YTimeFieldQt: %s", e)
+            raise
