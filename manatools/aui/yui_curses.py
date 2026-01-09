@@ -81,6 +81,15 @@ class YApplicationCurses:
         self._product_name = "manatools AUI Curses"
         self._icon_base_path = ""
         self._icon = ""
+        # About dialog metadata
+        self._app_name = ""
+        self._version = ""
+        self._authors = ""
+        self._description = ""
+        self._license = ""
+        self._credits = ""
+        self._information = ""
+        self._logo = ""
         # Default directories
         try:
             self._default_documents_dir = os.path.expanduser('~/Documenti')
@@ -102,6 +111,55 @@ class YApplicationCurses:
     def setApplicationIcon(self, Icon):
         """Set the application icon."""
         self._icon = Icon
+
+    # --- About metadata getters/setters ---
+    def setApplicationName(self, name: str):
+        self._app_name = name or ""
+
+    def applicationName(self) -> str:
+        return self._app_name or self._product_name or ""
+
+    def setVersion(self, version: str):
+        self._version = version or ""
+
+    def version(self) -> str:
+        return self._version or ""
+
+    def setAuthors(self, authors: str):
+        self._authors = authors or ""
+
+    def authors(self) -> str:
+        return self._authors or ""
+
+    def setDescription(self, description: str):
+        self._description = description or ""
+
+    def description(self) -> str:
+        return self._description or ""
+
+    def setLicense(self, license_text: str):
+        self._license = license_text or ""
+
+    def license(self) -> str:
+        return self._license or ""
+
+    def setCredits(self, credits: str):
+        self._credits = credits or ""
+
+    def credits(self) -> str:
+        return self._credits or ""
+
+    def setInformation(self, information: str):
+        self._information = information or ""
+
+    def information(self) -> str:
+        return self._information or ""
+
+    def setLogo(self, logo_path: str):
+        self._logo = logo_path or ""
+
+    def logo(self) -> str:
+        return self._logo or ""
 
     def askForExistingDirectory(self, startDir: str, headline: str):
         """
