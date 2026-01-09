@@ -273,7 +273,7 @@ class YAlignmentGtk(YSingleChildContainerWidget):
             self._child_attached = True
 
             col_index = 0 if hal == Gtk.Align.START else 2 if hal == Gtk.Align.END else 1  # center default
-            self._logger.debug("Successfully attached child %s %s [%d,%d]", child.widgetClass(), child.label(), row_index, col_index)
+            self._logger.debug("Successfully attached child %s %s [%d,%d]", child.widgetClass(), child.debugLabel(), row_index, col_index)
         except Exception as e:
             self._logger.error("Error building CenterBox layout: %s", e, exc_info=True)
 
