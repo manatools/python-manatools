@@ -36,7 +36,7 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
     [X] YDumbTab
     [X] YSlider
     [X] YDateField
-    [ ] YTimeField
+    [X] YTimeField
     [ ] YBarGraph
     [ ] YPatternSelector (createPatternSelector)
     [ ] YSimplePatchSelector (createSimplePatchSelector)
