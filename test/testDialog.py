@@ -11,8 +11,12 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools
 '''
 
+import os
+import sys
+# Prefer using the local workspace package when running this test directly
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import manatools.ui.basedialog as basedialog
-import yui
+from manatools.aui import yui
 import time
 
 ######################################################################
@@ -41,46 +45,49 @@ def TimeFunction(func):
 
 class TestDialog(basedialog.BaseDialog):
   def __init__(self):
-    basedialog.BaseDialog.__init__(self, "Test dialog", "", basedialog.DialogType.POPUP, 80, 10)
+    basedialog.BaseDialog.__init__(self, "Test dialog", "", basedialog.DialogType.POPUP, 320, 200)
     
   def UIlayout(self, layout):
     '''
     layout implementation called in base class to setup UI
     '''
     
-    # Let's test a Menu widget
-    menu = self.factory.createMenuButton(self.factory.createLeft(layout), "Test &menu")
-    tm1 = yui.YMenuItem("menu item 1")
-    tm2 = yui.YMenuItem("menu item 2")
-    qm = yui.YMenuItem("&Quit")
-    menu.addItem(tm1)
-    menu.addItem(tm2)
-    menu.addItem(qm)
-    menu.rebuildMenuTree()
-    sendObjOnEvent=True
+    # Menu bar (top-level menubar)
+    menubar = self.factory.createMenuBar(layout)
+    top_menu = menubar.addMenu("Test menu")
+    tm1 = menubar.addItem(top_menu, "menu item 1")
+    tm2 = menubar.addItem(top_menu, "menu item 2")
+    qm = menubar.addItem(top_menu, "Quit")
+    # Ensure event handlers receive the menu item object
+    sendObjOnEvent = True
     self.eventManager.addMenuEvent(tm1, self.onMenuItem, sendObjOnEvent)
     self.eventManager.addMenuEvent(tm2, self.onMenuItem, sendObjOnEvent)
     self.eventManager.addMenuEvent(qm, self.onQuitEvent, sendObjOnEvent)
     
     #let's test some buttons
     hbox = self.factory.createHBox(layout)
-    self.pressButton = self.factory.createPushButton(hbox, "&Press")
+    self.pressButton = self.factory.createPushButton(hbox, "Press")
     self.eventManager.addWidgetEvent(self.pressButton, self.onPressButton)
 
     #Let's enable a time out on events
-    self.timeoutButton = self.factory.createPushButton(hbox, "&Test timeout")
+    self.timeoutButton = self.factory.createPushButton(hbox, "Test timeout")
     self.eventManager.addWidgetEvent(self.timeoutButton, self.onTimeOutButtonEvent)
     self.eventManager.addTimeOutEvent(self.onTimeOutEvent)
 
+    self.factory.createVStretch(layout)
+    align = self.factory.createHVCenter(layout)
     # Let's test a quitbutton (same handle as Quit menu)
-    self.quitButton = self.factory.createPushButton(layout, "&Quit")
+    self.quitButton = self.factory.createPushButton(align, "Quit")
     self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent, sendObjOnEvent)
     
     # Let's test a cancel event
     self.eventManager.addCancelEvent(self.onCancelEvent)
     
   def onMenuItem(self, item):
-      print ("Menu item <<", item.label(), ">>")
+      try:
+        print ("Menu item <<", item.label(), ">>")
+      except Exception:
+        print("Menu item activated")
       
   def onTimeOutButtonEvent(self):
     if self.timeout > 0 :
@@ -103,15 +110,21 @@ class TestDialog(basedialog.BaseDialog):
     print ("Got a cancel event")
 
   def onQuitEvent(self, obj) :
-    if isinstance(obj, yui.YItem):
-      print ("Quit menu pressed")
-    else:
-      print ("Quit button pressed")
+    # obj can be a menu item (YMenuItem) or a widget (button)
+    try:
+      if isinstance(obj, yui.YMenuItem):
+        print ("Quit menu pressed")
+      else:
+        print ("Quit button pressed")
+    except Exception:
+      print ("Quit invoked")
     # BaseDialog needs to force to exit the handle event loop 
     self.ExitLoop()
 
-if __name__ == '__main__':
-      
+if __name__ == '__main__':        
+  if len(sys.argv) > 1:
+    os.environ['YUI_BACKEND'] = sys.argv[1]
+
   td = TestDialog()
   td.run()
   
