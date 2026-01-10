@@ -38,6 +38,18 @@ class YCheckBoxQt(YWidget):
                     self._backend_widget.blockSignals(False)
                 except Exception:
                     pass
+
+    def isChecked(self):
+        '''
+            Simplified access to value(): Return 'true' if the CheckBox is checked.        
+        '''
+        return self.value()
+
+    def setChecked(self, checked: bool = True):
+        '''
+            Simplified access to setValue(): Set the CheckBox to 'checked' state if 'checked' is true.
+        '''
+        self.setValue(checked)
     
     def label(self):
         return self._label

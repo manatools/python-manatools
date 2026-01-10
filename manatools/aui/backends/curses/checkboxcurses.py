@@ -49,6 +49,18 @@ class YCheckBoxCurses(YWidget):
     
     def setValue(self, checked):
         self._is_checked = checked
+
+    def isChecked(self):
+        '''
+            Simplified access to value(): Return 'true' if the CheckBox is checked.        
+        '''
+        return self.value()
+
+    def setChecked(self, checked: bool = True):
+        '''
+            Simplified access to setValue(): Set the CheckBox to 'checked' state if 'checked' is true.
+        '''
+        self.setValue(checked)
     
     def label(self):
         return self._label
