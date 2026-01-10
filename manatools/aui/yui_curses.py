@@ -240,6 +240,10 @@ class YApplicationCurses:
     def applicationIcon(self):
         """Get the application title."""
         return self.__icon
+    
+    def isTextMode(self) -> bool:
+        """Indicate that this is a text-mode (ncurses) application."""
+        return True
 
     # --- Internal helpers for ncurses file/directory chooser ---
     def _parse_filter_patterns(self, filter_str: str):

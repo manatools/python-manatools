@@ -194,6 +194,10 @@ class YApplicationQt:
 
     def logo(self) -> str:
         return self._logo or ""
+    
+    def isTextMode(self) -> bool:
+        """Indicate that this is not a text-mode (Qt) application."""
+        return False
 
     def askForExistingDirectory(self, startDir: str, headline: str):
         """

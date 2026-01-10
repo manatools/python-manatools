@@ -247,6 +247,10 @@ class YApplicationGtk:
 
     def logo(self) -> str:
         return self._logo or ""
+    
+    def isTextMode(self) -> bool:
+        """Indicate that this is not a text-mode (GTK) application."""
+        return False
 
     def _create_gtk4_filters(self, filter_str: str) -> List[Gtk.FileFilter]:
         """
