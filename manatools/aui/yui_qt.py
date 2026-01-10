@@ -324,10 +324,7 @@ class YWidgetFactoryQt:
 
     def createProgressBar(self, parent, label, max_value=100):
         return YProgressBarQt(parent, label, max_value)
-    
-    def createComboBox(self, parent, label, editable=False):
-        return YComboBoxQt(parent, label, editable)
-    
+
     # Alignment helpers
     def createLeft(self, parent):
         return YAlignmentQt(parent, horAlign=YAlignmentType.YAlignBegin, vertAlign=YAlignmentType.YAlignUnchanged)
