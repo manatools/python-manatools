@@ -225,6 +225,9 @@ class YComboBoxQt(YSelectionWidget):
             self._value = text
         # update selected items: only one selected in combo
         try:
+            old_item = self._selected_items[0] if self._selected_items else None
+            if old_item:
+                old_item.setSelected( False )
             self._selected_items = []
             for it in self._items:
                 try:
