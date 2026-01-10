@@ -55,13 +55,20 @@ class YComboBoxCurses(YSelectionWidget):
     
     def setValue(self, text):
         self._value = text
-        # Update selected items
-        self._selected_items = []
-        for item in self._items:
-            if item.label() == text:
-                self._selected_items.append(item)
-                break
-    
+        # Update selected items and ensure only one item selected
+        try:
+            self._selected_items = []
+            for it in self._items:
+                try:
+                    sel = (it.label() == text)
+                    it.setSelected(sel)
+                    if sel:
+                        self._selected_items.append(it)
+                except Exception:
+                    pass
+        except Exception:
+            self._selected_items = []
+
     def editable(self):
         return self._editable
     
@@ -272,3 +279,40 @@ class YComboBoxCurses(YSelectionWidget):
                 handled = False
         
         return handled
+
+    # New: addItem at runtime
+    def addItem(self, item):
+        try:
+            super().addItem(item)
+        except Exception:
+            try:
+                if isinstance(item, str):
+                    super().addItem(item)
+                else:
+                    self._items.append(item)
+            except Exception:
+                return
+        try:
+            new_item = self._items[-1]
+            new_item.setIndex(len(self._items) - 1)
+        except Exception:
+            pass
+
+        # enforce single-selection semantics
+        try:
+            if new_item.selected():
+                for it in self._items[:-1]:
+                    try:
+                        it.setSelected(False)
+                    except Exception:
+                        pass
+                self._value = new_item.label()
+                self._selected_items = [new_item]
+        except Exception:
+            pass
+
+    def deleteAllItems(self):
+        super().deleteAllItems()     
+        self._value = ""
+        self._expanded = False
+        self._hover_index = 0

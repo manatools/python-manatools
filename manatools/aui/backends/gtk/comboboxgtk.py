@@ -19,6 +19,7 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _resolve_icon
 
 
 class YComboBoxGtk(YSelectionWidget):
@@ -91,21 +92,37 @@ class YComboBoxGtk(YSelectionWidget):
             # Build a simple Gtk.DropDown backed by a Gtk.StringList (if available)
             try:
                 if hasattr(Gtk, "StringList") and hasattr(Gtk, "DropDown"):
-                    model = Gtk.StringList()
+                    # keep model reference for runtime updates
+                    self._string_list_model = Gtk.StringList()
                     for it in self._items:
-                        model.append(it.label())
-                    dropdown = Gtk.DropDown.new(model, None)
-                    # select initial value
-                    if self._value:
-                        for idx, it in enumerate(self._items):
-                            if it.label() == self._value:
-                                dropdown.set_selected(idx)
+                        self._string_list_model.append(it.label())
+                    dropdown = Gtk.DropDown.new(self._string_list_model, None)
+                    # prefer explicit selected item flag in model; only one allowed
+                    selected_idx = -1
+                    for idx, it in enumerate(self._items):
+                        try:
+                            if it.selected():
+                                selected_idx = idx
                                 break
+                        except Exception:
+                            pass
+                    if selected_idx >= 0:
+                        dropdown.set_selected(selected_idx)
+                        self._value = self._items[selected_idx].label()
+                        self._selected_items = [self._items[selected_idx]]
+                    else:
+                        # fallback to explicit value string if provided
+                        if self._value:
+                            for idx, it in enumerate(self._items):
+                                if it.label() == self._value:
+                                    dropdown.set_selected(idx)
+                                    self._selected_items = [it]
+                                    break
                     dropdown.connect("notify::selected", lambda w, pspec: self._on_changed_dropdown(w))
                     self._combo_widget = dropdown
                     hbox.append(dropdown)
                 else:
-                    # fallback: simple Gtk.Button that cycles items on click (very simple)
+                     # fallback: simple Gtk.Button that cycles items on click (very simple)
                     btn = Gtk.Button(label=self._value or (self._items[0].label() if self._items else ""))
                     btn.connect("clicked", self._on_fallback_button_clicked)
                     self._combo_widget = btn
@@ -178,65 +195,70 @@ class YComboBoxGtk(YSelectionWidget):
                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
 
     def _on_changed_dropdown(self, dropdown):
+        # Prefer using the selected index to get a reliable label
+        idx = None
         try:
-            # Prefer using the selected index to get a reliable label
-            idx = None
-            try:
-                idx = dropdown.get_selected()
-            except Exception:
-                idx = None
-
-            if isinstance(idx, int) and 0 <= idx < len(self._items):
-                self._value = self._items[idx].label()
-            else:
-                # Fallback: try to extract text from the selected-item object
-                val = None
-                try:
-                    val = dropdown.get_selected_item()
-                except Exception:
-                    val = None
-
-                self._value = ""
-                if isinstance(val, str):
-                    self._value = val
-                elif val is not None:
-                    # Try common accessor names that GTK objects may expose
-                    for meth in ("get_string", "get_text", "get_value", "get_label", "get_name", "to_string"):
-                        try:
-                            fn = getattr(val, meth, None)
-                            if callable(fn):
-                                v = fn()
-                                if isinstance(v, str) and v:
-                                    self._value = v
-                                    break
-                        except Exception:
-                            continue
-                    # Try properties if available
-                    if not self._value:
-                        try:
-                            props = getattr(val, "props", None)
-                            if props:
-                                for attr in ("string", "value", "label", "name", "text"):
-                                    try:
-                                        pv = getattr(props, attr)
-                                        if isinstance(pv, str) and pv:
-                                            self._value = pv
-                                            break
-                                    except Exception:
-                                        pass
-                        except Exception:
-                            pass
-                    # final fallback to str()
-                    if not self._value:
-                        try:
-                            self._value = str(val)
-                        except Exception:
-                            self._value = ""
-
-            # update selected_items using reliable labels
-            self._selected_items = [it for it in self._items if it.label() == self._value][:1]
+            idx = dropdown.get_selected()
         except Exception:
-            pass
+            idx = None
+
+        if isinstance(idx, int) and 0 <= idx < len(self._items):
+            self._value = self._items[idx].label()
+        else:
+            # Fallback: try to extract text from the selected-item object
+            val = None
+            try:
+                val = dropdown.get_selected_item()
+            except Exception:
+                val = None
+
+            self._value = ""
+            if isinstance(val, str):
+                self._value = val
+            elif val is not None:
+                # Try common accessor names that GTK objects may expose
+                for meth in ("get_string", "get_text", "get_value", "get_label", "get_name", "to_string"):
+                    try:
+                        fn = getattr(val, meth, None)
+                        if callable(fn):
+                            v = fn()
+                            if isinstance(v, str) and v:
+                                self._value = v
+                                break
+                    except Exception:
+                        continue
+                # Try properties if available
+                if not self._value:
+                    try:
+                        props = getattr(val, "props", None)
+                        if props:
+                            for attr in ("string", "value", "label", "name", "text"):
+                                try:
+                                    pv = getattr(props, attr)
+                                    if isinstance(pv, str) and pv:
+                                        self._value = pv
+                                        break
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                # final fallback to str()
+                if not self._value:
+                    try:
+                        self._value = str(val)
+                    except Exception:
+                        self._value = ""
+
+        # update selected_items and ensure only one item is selected in model
+        self._selected_items = []
+        for it in self._items:
+            try:
+                sel = (it.label() == self._value)
+                it.setSelected(sel)
+                if sel:
+                    self._selected_items.append(it)
+            except Exception:
+                pass
 
         if self.notify():
             dlg = self.findDialog()
@@ -246,3 +268,87 @@ class YComboBoxGtk(YSelectionWidget):
             self._logger.debug("_on_changed_dropdown: value=%s selected_items=%s", self._value, [it.label() for it in self._selected_items])
         except Exception:
             pass
+
+    # Runtime: add a single item (model + view)
+    def addItem(self, item):
+        try:
+            super().addItem(item)
+        except Exception:
+            # fall back if super fails
+            try:
+                if isinstance(item, str):
+                    super().addItem(item)
+                else:
+                    self._items.append(item)
+            except Exception:
+                return
+        try:
+            new_item = self._items[-1]
+            new_item.setIndex(len(self._items) - 1)
+        except Exception:
+            return
+
+        # ensure only one selected in combo semantics
+        try:
+            if new_item.selected():
+                for it in self._items[:-1]:
+                    try:
+                        it.setSelected(False)
+                    except Exception:
+                        pass
+                new_item.setSelected(True)
+                self._value = new_item.label()
+                self._selected_items = [new_item]
+        except Exception:
+            pass
+
+        # update GTK backing widget
+        if getattr(self, "_combo_widget", None):
+            try:
+                if isinstance(self._combo_widget, Gtk.Entry):
+                    # nothing special: entries are freeform
+                    pass
+                elif hasattr(self, "_string_list_model") and isinstance(self._string_list_model, Gtk.StringList):
+                    try:
+                        self._string_list_model.append(new_item.label())
+                        # if the new item was selected, update dropdown selection
+                        if new_item.selected():
+                            self._combo_widget.set_selected(len(self._string_list_model) - 1)
+                    except Exception:
+                        pass
+                else:
+                    # fallback: update button label if single item and selected
+                    try:
+                        if getattr(self._combo_widget, "set_label", None) and new_item.selected():
+                            self._combo_widget.set_label(new_item.label())
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    def deleteAllItems(self):
+        super().deleteAllItems()
+        self._value = ""
+        # update GTK widgets
+        if getattr(self, "_combo_widget", None):
+            try:
+                if hasattr(self, "_string_list_model") and isinstance(self._string_list_model, Gtk.StringList):
+                    try:
+                        # recreate model
+                        self._string_list_model = Gtk.StringList()
+                        self._combo_widget.set_model(self._string_list_model)
+                    except Exception:
+                        pass
+                elif isinstance(self._combo_widget, Gtk.Entry):
+                    try:
+                        self._combo_widget.set_text("")
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        if getattr(self._combo_widget, "set_label", None):
+                            self._combo_widget.set_label("")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
