@@ -70,6 +70,25 @@ class YDialogCurses(YSingleChildContainerWidget):
         '''Return whether this dialog is the topmost open dialog.'''
         return YDialogCurses._open_dialogs[-1] == self if YDialogCurses._open_dialogs else False
 
+    @classmethod
+    def deleteAllDialogs(cls, doThrow=True):
+        """Delete all open dialogs (best-effort)."""
+        ok = True
+        try:
+            while cls._open_dialogs:
+                try:
+                    dlg = cls._open_dialogs[-1]
+                    dlg.destroy(doThrow)
+                except Exception:
+                    ok = False
+                    try:
+                        cls._open_dialogs.pop()
+                    except Exception:
+                        break
+        except Exception:
+            ok = False
+        return ok
+
     def open(self):
         if not self._window:
             self._create_backend_widget()

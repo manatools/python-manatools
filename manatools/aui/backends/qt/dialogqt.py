@@ -92,6 +92,25 @@ class YDialogQt(YSingleChildContainerWidget):
             dialog = cls._open_dialogs[-1]
             return dialog.destroy(doThrow)
         return False
+
+    @classmethod
+    def deleteAllDialogs(cls, doThrow=True):
+        """Delete all open dialogs (best-effort)."""
+        ok = True
+        try:
+            while cls._open_dialogs:
+                try:
+                    dlg = cls._open_dialogs[-1]
+                    dlg.destroy(doThrow)
+                except Exception:
+                    ok = False
+                    try:
+                        cls._open_dialogs.pop()
+                    except Exception:
+                        break
+        except Exception:
+            ok = False
+        return ok
     
     @classmethod
     def currentDialog(cls, doThrow=True):
