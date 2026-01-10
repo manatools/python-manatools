@@ -157,14 +157,17 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
         """Attach child's backend widget into content area."""
         if not (self._backend_widget and self._content_layout and self.child()):
             return
+
+        # Safely clear existing content layout
         try:
-            # clear content layout
             while self._content_layout.count():
                 it = self._content_layout.takeAt(0)
                 if it and it.widget():
                     it.widget().setParent(None)
         except Exception:
             pass
+
+        # Try to obtain/create child's backend widget and insert it
         try:
             child = self.child()
             w = None
@@ -172,110 +175,81 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
                 w = child.get_backend_widget()
             except Exception:
                 w = None
+
             if w is None:
-                # if backend not created, attempt to create it
                 try:
                     child._create_backend_widget()
                     w = child.get_backend_widget()
                 except Exception:
                     w = None
+
             if w is not None:
+                # determine stretch factor from child's weight()/stretchable()
                 try:
-                    self._content_layout.addWidget(w)
+                    weight = int(child.weight(YUIDimension.YD_VERT))
                 except Exception:
+                    weight = 0
+                try:
+                    stretchable_vert = bool(child.stretchable(YUIDimension.YD_VERT))
+                except Exception:
+                    stretchable_vert = False
+                stretch = weight if weight > 0 else (1 if stretchable_vert else 0)
+
+                # set child's Qt size policy according to logical stretchable flags
+                try:
+                    sp = w.sizePolicy()
                     try:
-                        w.setParent(self._content_widget)
+                        horiz = QtWidgets.QSizePolicy.Expanding if bool(child.stretchable(YUIDimension.YD_HORIZ)) else QtWidgets.QSizePolicy.Fixed
+                    except Exception:
+                        horiz = QtWidgets.QSizePolicy.Fixed
+                    try:
+                        vert = QtWidgets.QSizePolicy.Expanding if stretch > 0 else QtWidgets.QSizePolicy.Fixed
+                    except Exception:
+                        vert = QtWidgets.QSizePolicy.Fixed
+                    sp.setHorizontalPolicy(horiz)
+                    sp.setVerticalPolicy(vert)
+                    # When autoscale/height-for-width semantics are used by the child,
+                    # preserve its existing height-for-width capability.
+                    try:
+                        if hasattr(sp, "setHeightForWidth"):
+                            sp.setHeightForWidth(bool(getattr(child, "_auto_scale", False)))
                     except Exception:
                         pass
-            # apply current enablement state
+                    w.setSizePolicy(sp)
+                except Exception:
+                    pass
+
+                # add widget with stretch factor if supported
+                added = False
+                try:
+                    # Some PySide/PyQt bindings accept (widget, stretch)
+                    self._content_layout.addWidget(w, stretch)
+                    added = True
+                except TypeError:
+                    added = False
+                except Exception:
+                    added = False
+
+                if not added:
+                    try:
+                        self._content_layout.addWidget(w)
+                        added = True
+                    except Exception:
+                        added = False
+
+                if not added:
+                    # final fallback: parent the widget to content container
+                    try:
+                        w.setParent(self._content_widget)
+                        added = True
+                    except Exception:
+                        added = False
+        except Exception:
+            # top-level protection; do not raise to caller
+            pass
+
+        # apply current enablement state (outside try that manipulates the layout)
+        try:
             self.handleChildrenEnablement(self.value())
         except Exception:
             pass
-
-    def _on_checkbox_toggled(self, checked):
-        try:
-            self._checked = bool(checked)
-            if self._auto_enable:
-                self.handleChildrenEnablement(self._checked)
-            # notify logical selection change through YWidgetEvent if needed
-            try:
-                if self.notify():
-                    dlg = self.findDialog()
-                    if dlg:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def handleChildrenEnablement(self, isChecked: bool):
-        """Enable/disable child widgets according to autoEnable and invertAutoEnable."""
-        try:
-            if not self._auto_enable:
-                return
-            state = bool(isChecked)
-            if self._invert_auto:
-                state = not state
-            # propagate to logical child(s)
-            try:
-                child = self.child()
-                child.setEnabled(state)
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-    def addChild(self, child):
-        super().addChild(child)
-        self._attach_child_backend()
-
-    def _set_backend_enabled(self, enabled: bool):
-        try:
-            if self._backend_widget is not None:
-                try:
-                    self._backend_widget.setEnabled(bool(enabled))
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        # propagate to logical child(s)
-        try:
-            child = self.child()
-            if child is not None:
-                child.setEnabled(enabled)
-        except Exception:
-                pass
-
-    def setProperty(self, propertyName, val):
-        try:
-            if propertyName == "label":
-                self.setLabel(str(val))
-                return True
-            if propertyName == "value" or propertyName == "checked":
-                self.setValue(bool(val))
-                return True
-        except Exception:
-            pass
-        return False
-
-    def getProperty(self, propertyName):
-        try:
-            if propertyName == "label":
-                return self.label()
-            if propertyName == "value" or propertyName == "checked":
-                return self.value()
-        except Exception:
-            pass
-        return None
-
-    def propertySet(self):
-        try:
-            props = YPropertySet()
-            try:
-                props.add(YProperty("label", YPropertyType.YStringProperty))
-                props.add(YProperty("value", YPropertyType.YBoolProperty))
-            except Exception:
-                pass
-            return props
-        except Exception:
-            return None

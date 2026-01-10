@@ -158,10 +158,18 @@ class YSelectionBoxGtk(YSelectionWidget):
         # Use Gtk.ListBox inside a ScrolledWindow for Gtk4
         listbox = Gtk.ListBox()
         listbox.set_selection_mode(Gtk.SelectionMode.MULTIPLE if self._multi_selection else Gtk.SelectionMode.SINGLE)
-        # allow listbox to expand if parent allocates more space
+        # allow listbox to expand if parent allocates more space (only when logical stretch/weight allows)
         try:
-            listbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
-            listbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            try:
+                vexpand_flag = bool(self.stretchable(YUIDimension.YD_VERT)) or bool(int(self.weight(YUIDimension.YD_VERT)))
+            except Exception:
+                vexpand_flag = bool(self.stretchable(YUIDimension.YD_VERT))
+            try:
+                hexpand_flag = bool(self.stretchable(YUIDimension.YD_HORIZ)) or bool(int(self.weight(YUIDimension.YD_HORIZ)))
+            except Exception:
+                hexpand_flag = bool(self.stretchable(YUIDimension.YD_HORIZ))
+            listbox.set_vexpand(vexpand_flag)
+            listbox.set_hexpand(hexpand_flag)
         except Exception:
             pass
         # populate rows
@@ -308,15 +316,14 @@ class YSelectionBoxGtk(YSelectionWidget):
             pass
 
         sw = Gtk.ScrolledWindow()
-        # allow scrolled window to expand vertically and horizontally
+        # allow scrolled window to expand vertically and horizontally only when allowed
         try:
-            sw.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
-            sw.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            sw.set_vexpand(vexpand_flag)
+            sw.set_hexpand(hexpand_flag)
             # give a reasonable minimum content height so layout initially shows several rows;
             # Gtk4 expects pixels — try a conservative estimate (rows * ~20px)
             min_h = int(getattr(self, "_preferred_rows", 6) * 20)
             try:
-                # some Gtk4 bindings expose set_min_content_height
                 sw.set_min_content_height(min_h)
             except Exception:
                 pass
@@ -333,8 +340,8 @@ class YSelectionBoxGtk(YSelectionWidget):
 
         # also request vexpand on the outer vbox so parent layout sees it can grow
         try:
-            vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
-            vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+            vbox.set_vexpand(vexpand_flag)
+            vbox.set_hexpand(hexpand_flag)
         except Exception:
             pass
 

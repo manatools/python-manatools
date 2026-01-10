@@ -76,7 +76,47 @@ class YFrameQt(YSingleChildContainerWidget):
                             it.widget().setParent(None)
                 except Exception:
                     pass
-                self._group_layout.addWidget(w)
+
+                # determine stretch factor from child's weight()/stretchable()
+                try:
+                    try:
+                        weight = int(self.child().weight(YUIDimension.YD_VERT))
+                    except Exception:
+                        weight = 0
+                    try:
+                        stretchable_vert = bool(self.child().stretchable(YUIDimension.YD_VERT))
+                    except Exception:
+                        stretchable_vert = False
+                    stretch = weight if weight > 0 else (1 if stretchable_vert else 0)
+                except Exception:
+                    stretch = 0
+
+                # set child's Qt size policy according to logical stretchable flags
+                try:
+                    sp = w.sizePolicy()
+                    try:
+                        horiz_expand = QtWidgets.QSizePolicy.Expanding if bool(self.child().stretchable(YUIDimension.YD_HORIZ)) else QtWidgets.QSizePolicy.Fixed
+                    except Exception:
+                        horiz_expand = QtWidgets.QSizePolicy.Fixed
+                    try:
+                        vert_expand = QtWidgets.QSizePolicy.Expanding if stretch > 0 else QtWidgets.QSizePolicy.Fixed
+                    except Exception:
+                        vert_expand = QtWidgets.QSizePolicy.Fixed
+                    sp.setHorizontalPolicy(horiz_expand)
+                    sp.setVerticalPolicy(vert_expand)
+                    w.setSizePolicy(sp)
+                except Exception:
+                    pass
+
+                # add with layout stretch factor so parent layout distributes extra space correctly
+                try:
+                    self._group_layout.addWidget(w, stretch)
+                except Exception:
+                    # fallback if addWidget signature doesn't accept stretch in this binding
+                    try:
+                        self._group_layout.addWidget(w)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
