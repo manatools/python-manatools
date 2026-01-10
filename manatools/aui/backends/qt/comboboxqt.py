@@ -9,9 +9,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtGui
 import logging
 from ...yui_common import *
+from .commonqt import _resolve_icon as _qt_resolve_icon
 
 class YComboBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label="", editable=False):
@@ -21,6 +22,7 @@ class YComboBoxQt(YSelectionWidget):
         self._value = ""
         self._selected_items = []
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+        self._combo_widget = None
     
     def widgetClass(self):
         return "YComboBox"
@@ -42,7 +44,16 @@ class YComboBoxQt(YSelectionWidget):
             if item.label() == text:
                 self._selected_items.append(item)
                 break
-    
+        try:
+            # ensure selected flags consistent: only one selected
+            for it in self._items:
+                try:
+                    it.setSelected(it.label() == text)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def editable(self):
         return self._editable
     
@@ -63,11 +74,52 @@ class YComboBoxQt(YSelectionWidget):
         
         # Add items to combo box
         for item in self._items:
-            combo.addItem(item.label())
+            try:
+                icon_name = None
+                try:
+                    fn = getattr(item, 'iconName', None)
+                    icon_name = fn() if callable(fn) else fn
+                except Exception:
+                    icon_name = None
+                qicon = None
+                if icon_name:
+                    try:
+                        qicon = _qt_resolve_icon(icon_name)
+                    except Exception:
+                        qicon = None
+                if qicon is not None:
+                    combo.addItem(qicon, item.label())
+                else:
+                    combo.addItem(item.label())
+            except Exception:
+                try:
+                    combo.addItem(item.label())
+                except Exception:
+                    pass
+
         
         combo.currentTextChanged.connect(self._on_text_changed)
         # also handle index change (safer for some input methods)
         combo.currentIndexChanged.connect(lambda idx: self._on_text_changed(combo.currentText()))
+
+        # pick initial selection: first item marked selected
+        try:
+            selected_idx = -1
+            for idx, it in enumerate(self._items):
+                try:
+                    if it.selected():
+                        selected_idx = idx
+                        break
+                except Exception:
+                    pass
+            if selected_idx >= 0:
+                combo.setCurrentIndex(selected_idx)
+                self._value = self._items[selected_idx].label()
+                self._selected_items = [self._items[selected_idx]]
+            else:
+                self._selected_items = []
+        except Exception:
+            pass
         layout.addWidget(combo)
         
         self._backend_widget = container
@@ -97,16 +149,95 @@ class YComboBoxQt(YSelectionWidget):
         except Exception:
             pass
 
+    # New: add single item at runtime
+    def addItem(self, item):
+        super().addItem(item)
+        new_item = self._items[-1]
+        
+        # update backend widget if present
+        if getattr(self, "_combo_widget", None):
+            try:
+                icon_name = None
+                try:
+                    fn = getattr(new_item, 'iconName', None)
+                    icon_name = fn() if callable(fn) else fn
+                except Exception:
+                    icon_name = None
+                qicon = None
+                if icon_name:
+                    try:
+                        qicon = _qt_resolve_icon(icon_name)
+                    except Exception:
+                        qicon = None
+                if qicon is not None:
+                    self._combo_widget.addItem(qicon, new_item.label())
+                else:
+                    self._combo_widget.addItem(new_item.label())
+                # reflect selection state
+                try:
+                    if new_item.selected():
+                        # ensure only one is selected
+                        for it in self._items:
+                            try:
+                                it.setSelected(False)
+                            except Exception:
+                                pass
+                        new_item.setSelected(True)
+                        idx = len(self._items) - 1
+                        self._combo_widget.setCurrentIndex(idx)
+                        self._selected_items = [new_item]
+                        self._value = new_item.label()
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+    # New: delete all items at runtime
+    def deleteAllItems(self):
+        try:
+            self._items = []
+            self._selected_items = []
+            self._value = ""
+        except Exception:
+            pass
+        if getattr(self, "_combo_widget", None):
+            try:
+                self._combo_widget.clear()
+            except Exception:
+                # fallback: recreate widget if clear not supported
+                try:
+                    parent = self._combo_widget.parent()
+                    layout = self._combo_widget.parent().layout() if parent is not None else None
+                    if layout is not None:
+                        try:
+                            layout.removeWidget(self._combo_widget)
+                            self._combo_widget.deleteLater()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
     def _on_text_changed(self, text):
-        self._value = text
-        # Update selected items
-        self._selected_items = []
-        for item in self._items:
-            if item.label() == text:
-                self._selected_items.append(item)
-                break
+        # keep previous behaviour, but update model selection flags robustly
+        try:
+            self._value = text
+        except Exception:
+            self._value = text
+        # update selected items: only one selected in combo
+        try:
+            self._selected_items = []
+            for it in self._items:
+                try:
+                    was = (it.label() == text)
+                    it.setSelected(was)
+                    if was:
+                        self._selected_items.append(it)
+                except Exception:
+                    pass
+        except Exception:
+            self._selected_items = []
+        # notify
         if self.notify():
-            # Post selection-changed event to containing dialog
             try:
                 dlg = self.findDialog()
                 if dlg is not None:
