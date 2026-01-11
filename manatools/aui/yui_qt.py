@@ -199,6 +199,20 @@ class YApplicationQt:
         """Indicate that this is not a text-mode (Qt) application."""
         return False
 
+    def busyCursor(self):
+        """Set busy cursor (Qt backend)."""
+        try:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        except Exception:
+            pass
+
+    def normalCursor(self):
+        """Set normal cursor (Qt backend)."""
+        try:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        except Exception:
+            pass
+
     def askForExistingDirectory(self, startDir: str, headline: str):
         """
         Prompt user to select an existing directory.
@@ -290,6 +304,11 @@ class YWidgetFactoryQt:
     
     def createPushButton(self, parent, label):
         return YPushButtonQt(parent, label)
+    
+    def createIconButton(self, parent, iconName, fallbackTextLabel):
+        btn = YPushButtonQt(parent, fallbackTextLabel)
+        btn.setIcon(iconName)
+        return btn
     
     def createLabel(self, parent, text, isHeading=False, isOutputField=False):
         return YLabelQt(parent, text, isHeading, isOutputField)
