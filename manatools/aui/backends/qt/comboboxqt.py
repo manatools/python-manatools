@@ -23,6 +23,8 @@ class YComboBoxQt(YSelectionWidget):
         self._selected_items = []
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._combo_widget = None
+        # reference to the visual label widget (if any)
+        self._label_widget = None
     
     def widgetClass(self):
         return "YComboBox"
@@ -57,6 +59,26 @@ class YComboBoxQt(YSelectionWidget):
     def editable(self):
         return self._editable
     
+    def setLabel(self, new_label: str):
+        """Set logical label and update/create the visual QLabel in the container."""
+        try:
+            super().setLabel(new_label)
+            if self._label_widget is not None:
+                self._label_widget.setText(new_label)
+            else:
+                # create and insert label before combo in layout
+                if getattr(self, "_backend_widget", None) is not None and getattr(self, "_combo_widget", None) is not None:
+                    try:
+                        layout = self._backend_widget.layout()
+                        if layout is not None:
+                            label = QtWidgets.QLabel(new_label)
+                            layout.insertWidget(0, label)
+                            self._label_widget = label
+                    except Exception:
+                        self._logger.exception("setLabel: failed to insert new QLabel")
+        except Exception:
+            self._logger.exception("setLabel: error updating label=%r", new_label)
+
     def _create_backend_widget(self):
         container = QtWidgets.QWidget()
         layout = QtWidgets.QHBoxLayout(container)
@@ -64,6 +86,7 @@ class YComboBoxQt(YSelectionWidget):
         
         if self._label:
             label = QtWidgets.QLabel(self._label)
+            self._label_widget = label
             layout.addWidget(label)
         
         if self._editable:
@@ -125,10 +148,8 @@ class YComboBoxQt(YSelectionWidget):
         self._backend_widget = container
         self._combo_widget = combo
         self._backend_widget.setEnabled(bool(self._enabled))
-        try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-        except Exception:
-            pass
+        # allow logger to raise if misconfigured
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the combobox and its container."""

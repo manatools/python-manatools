@@ -42,6 +42,8 @@ class YComboBoxGtk(YSelectionWidget):
         self._selected_items = []
         self._combo_widget = None
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
+        # reference to the visible label widget (if any)
+        self._label_widget = None
 
     def widgetClass(self):
         return "YComboBox"
@@ -86,6 +88,7 @@ class YComboBoxGtk(YSelectionWidget):
 
         if self._label:
             label = Gtk.Label(label=self._label)
+            self._label_widget = label
             try:
                 if hasattr(label, "set_xalign"):
                     label.set_xalign(0.0)
@@ -94,10 +97,7 @@ class YComboBoxGtk(YSelectionWidget):
             try:
                 hbox.append(label)
             except Exception:
-                try:
-                    hbox.add(label)
-                except Exception:
-                    self._logger.exception("_create_backend_widget: failed to add label to hbox")
+                self._logger.exception("_create_backend_widget: failed to add label to hbox")
 
         # For Gtk4 there is no ComboBoxText; try DropDown for non-editable,
         # and Entry for editable combos (simple fallback).
@@ -189,6 +189,37 @@ class YComboBoxGtk(YSelectionWidget):
             self._logger.exception("_create_backend_widget: failed to set backend widget sensitivity")
         # Allow logger to raise if misconfigured so failures are visible during debugging
         self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+    
+    def setLabel(self, new_label: str):
+        """Set logical label and update/create the visual Gtk.Label in the box."""
+        try:
+            super().setLabel(new_label)
+            if self._label_widget is not None:
+                self._label_widget.set_text(new_label)
+            else:
+                # create and prepend label to the hbox
+                if getattr(self, "_backend_widget", None) is not None:
+                    try:
+                        new_lbl = Gtk.Label(label=new_label)
+                        try:
+                            if hasattr(new_lbl, "set_xalign"):
+                                new_lbl.set_xalign(0.0)
+                        except Exception:
+                            pass
+                        # prepend so label appears before the combo control
+                        try:
+                            self._backend_widget.prepend(new_lbl)
+                        except Exception:
+                            # fallback: append and hope layout is acceptable
+                            try:
+                                self._backend_widget.append(new_lbl)
+                            except Exception:
+                                self._logger.exception("setLabel: failed to add new Gtk.Label to backend box")
+                        self._label_widget = new_lbl
+                    except Exception:
+                        self._logger.exception("setLabel: error creating/inserting Gtk.Label")
+        except Exception:
+            self._logger.exception("setLabel: error updating label=%r", new_label)
 
     def _set_backend_enabled(self, enabled):
         """
