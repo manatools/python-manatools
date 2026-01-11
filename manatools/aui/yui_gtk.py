@@ -251,6 +251,41 @@ class YApplicationGtk:
     def isTextMode(self) -> bool:
         """Indicate that this is not a text-mode (GTK) application."""
         return False
+    
+    def busyCursor(self):
+        """Set busy cursor (GTK implementation)."""
+        display = Gdk.Display.get_default()
+        if display is None:
+            return
+        seat = display.get_default_seat()
+        if seat is None:
+            return
+        pointer = seat.get_pointer()
+        if pointer is None:
+            return
+        window = pointer.get_window()
+        if window is None:
+            return
+        cursor = Gdk.Cursor.new_from_name(display, "wait")
+        if cursor is None:
+            return
+        window.set_cursor(cursor)
+
+    def normalCursor(self):
+        """Set normal cursor (GTK implementation)."""
+        display = Gdk.Display.get_default()
+        if display is None:
+            return
+        seat = display.get_default_seat()
+        if seat is None:
+            return
+        pointer = seat.get_pointer()
+        if pointer is None:
+            return
+        window = pointer.get_window()
+        if window is None:
+            return
+        window.set_cursor(None)
 
     def _create_gtk4_filters(self, filter_str: str) -> List[Gtk.FileFilter]:
         """

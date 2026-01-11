@@ -245,6 +245,14 @@ class YApplicationCurses:
         """Indicate that this is a text-mode (ncurses) application."""
         return True
 
+    def busyCursor(self):
+        """Set busy cursor (not applicable in ncurses)."""
+        pass
+
+    def normalCursor(self):
+        """Set normal cursor (not applicable in ncurses)."""
+        pass
+
     # --- Internal helpers for ncurses file/directory chooser ---
     def _parse_filter_patterns(self, filter_str: str):
         try:
