@@ -143,8 +143,59 @@ class YComboBoxQt(YSelectionWidget):
                 self._selected_items = []
         except Exception:
             pass
-        layout.addWidget(combo)
-        
+        # Honor logical stretch/weight: set QSizePolicy and add with layout stretch factor
+        try:
+            try:
+                weight_v = int(self.weight(YUIDimension.YD_VERT))
+            except Exception:
+                weight_v = 0
+            try:
+                stretchable_v = bool(self.stretchable(YUIDimension.YD_VERT))
+            except Exception:
+                stretchable_v = False
+            stretch = weight_v if weight_v > 0 else (1 if stretchable_v else 0)
+
+            # set QSizePolicy according to logical flags
+            try:
+                sp = combo.sizePolicy()
+                try:
+                    horiz = QtWidgets.QSizePolicy.Expanding if bool(self.stretchable(YUIDimension.YD_HORIZ)) else QtWidgets.QSizePolicy.Fixed
+                except Exception:
+                    horiz = QtWidgets.QSizePolicy.Fixed
+                try:
+                    vert = QtWidgets.QSizePolicy.Expanding if stretch > 0 else QtWidgets.QSizePolicy.Fixed
+                except Exception:
+                    vert = QtWidgets.QSizePolicy.Fixed
+                sp.setHorizontalPolicy(horiz)
+                sp.setVerticalPolicy(vert)
+                combo.setSizePolicy(sp)
+            except Exception:
+                pass
+
+            # add to layout with stretch factor when supported
+            added = False
+            try:
+                layout.addWidget(combo, stretch)
+                added = True
+            except TypeError:
+                added = False
+            except Exception:
+                added = False
+
+            if not added:
+                try:
+                    layout.addWidget(combo)
+                except Exception:
+                    try:
+                        combo.setParent(container)
+                    except Exception:
+                        pass
+        except Exception:
+            try:
+                layout.addWidget(combo)
+            except Exception:
+                pass
+
         self._backend_widget = container
         self._combo_widget = combo
         self._backend_widget.setEnabled(bool(self._enabled))

@@ -80,66 +80,88 @@ class YComboBoxGtk(YSelectionWidget):
         return self._editable
     
     def _create_backend_widget(self):
-        """
-        Create GTK widgets backing the combo: label + entry/dropdown/button.
-        Uses conservative fallbacks and logs failures for diagnostics.
-        """
         hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
 
         if self._label:
             label = Gtk.Label(label=self._label)
-            self._label_widget = label
             try:
                 if hasattr(label, "set_xalign"):
                     label.set_xalign(0.0)
             except Exception:
-                self._logger.exception("_create_backend_widget: label.set_xalign failed")
+                pass
             try:
                 hbox.append(label)
             except Exception:
-                self._logger.exception("_create_backend_widget: failed to add label to hbox")
+                hbox.add(label)
+
+        # Determine expansion flags from logical widget before creating the control
+        try:
+            try:
+                vexpand_flag = bool(self.stretchable(YUIDimension.YD_VERT)) or bool(int(self.weight(YUIDimension.YD_VERT)))
+            except Exception:
+                vexpand_flag = bool(self.stretchable(YUIDimension.YD_VERT))
+            try:
+                hexpand_flag = bool(self.stretchable(YUIDimension.YD_HORIZ)) or bool(int(self.weight(YUIDimension.YD_HORIZ)))
+            except Exception:
+                hexpand_flag = bool(self.stretchable(YUIDimension.YD_HORIZ))
+        except Exception:
+            vexpand_flag = False
+            hexpand_flag = False
 
         # For Gtk4 there is no ComboBoxText; try DropDown for non-editable,
         # and Entry for editable combos (simple fallback).
         if self._editable:
             entry = Gtk.Entry()
-            entry.set_text(self._value)
-            entry.connect("changed", self._on_text_changed)
+            try:
+                entry.set_text(self._value)
+            except Exception:
+                pass
+            # apply expansion policies
+            try:
+                entry.set_hexpand(hexpand_flag)
+            except Exception:
+                pass
+            try:
+                entry.set_vexpand(vexpand_flag)
+            except Exception:
+                pass
+            try:
+                entry.connect("changed", self._on_text_changed)
+            except Exception:
+                pass
             self._combo_widget = entry
             try:
                 hbox.append(entry)
             except Exception:
-                try:
-                    hbox.add(entry)
-                except Exception:
-                    self._logger.exception("_create_backend_widget: failed to add editable entry to hbox")
+                hbox.add(entry)
         else:
             # Build a simple Gtk.DropDown backed by a Gtk.StringList (if available)
             try:
                 if hasattr(Gtk, "StringList") and hasattr(Gtk, "DropDown"):
-                    # keep model reference for runtime updates
                     self._string_list_model = Gtk.StringList()
                     for it in self._items:
-                        self._string_list_model.append(it.label())
+                        try:
+                            self._string_list_model.append(it.label())
+                        except Exception:
+                            pass
                     dropdown = Gtk.DropDown.new(self._string_list_model, None)
-                    # prefer explicit selected item flag in model; only one allowed
-                    selected_idx = -1
+                    # select initial value (prefer explicit selected() flag)
+                    sel_idx = -1
                     for idx, it in enumerate(self._items):
                         try:
                             if it.selected():
-                                selected_idx = idx
+                                sel_idx = idx
                                 break
                         except Exception:
-                            self._logger.exception("_create_backend_widget: error checking item.selected() for index %d", idx)
-                    if selected_idx >= 0:
+                            pass
+                    if sel_idx >= 0:
                         try:
-                            dropdown.set_selected(selected_idx)
-                            self._value = self._items[selected_idx].label()
-                            self._selected_items = [self._items[selected_idx]]
+                            dropdown.set_selected(sel_idx)
+                            self._value = self._items[sel_idx].label()
+                            self._selected_items = [self._items[sel_idx]]
                         except Exception:
-                            self._logger.exception("_create_backend_widget: failed to set selected index %d", selected_idx)
+                            pass
                     else:
-                        # fallback to explicit value string if provided
                         if self._value:
                             for idx, it in enumerate(self._items):
                                 try:
@@ -148,47 +170,77 @@ class YComboBoxGtk(YSelectionWidget):
                                         self._selected_items = [it]
                                         break
                                 except Exception:
-                                    self._logger.exception("_create_backend_widget: matching value to items failed at index %d", idx)
+                                    pass
                     try:
                         dropdown.connect("notify::selected", lambda w, pspec: self._on_changed_dropdown(w))
-                        self._combo_widget = dropdown
+                    except Exception:
+                        pass
+                    # apply expansion policies
+                    try:
+                        dropdown.set_hexpand(hexpand_flag)
+                    except Exception:
+                        pass
+                    try:
+                        dropdown.set_vexpand(vexpand_flag)
+                    except Exception:
+                        pass
+                    self._combo_widget = dropdown
+                    try:
                         hbox.append(dropdown)
                     except Exception:
-                        self._logger.exception("_create_backend_widget: failed to connect/append dropdown")
+                        hbox.add(dropdown)
                 else:
-                     # fallback: simple Gtk.Button that cycles items on click (very simple)
+                    # fallback: simple Gtk.Button that cycles items on click (very simple)
                     btn = Gtk.Button(label=self._value or (self._items[0].label() if self._items else ""))
-                    btn.connect("clicked", self._on_fallback_button_clicked)
+                    try:
+                        btn.connect("clicked", self._on_fallback_button_clicked)
+                    except Exception:
+                        pass
+                    # apply expansion policies to button as best-effort
+                    try:
+                        btn.set_hexpand(hexpand_flag)
+                    except Exception:
+                        pass
+                    try:
+                        btn.set_vexpand(vexpand_flag)
+                    except Exception:
+                        pass
                     self._combo_widget = btn
                     try:
                         hbox.append(btn)
                     except Exception:
-                        try:
-                            hbox.add(btn)
-                        except Exception:
-                            self._logger.exception("_create_backend_widget: failed to add fallback button")
+                        hbox.add(btn)
             except Exception:
                 # final fallback: entry
-                self._logger.exception("_create_backend_widget: unexpected failure building non-editable control; falling back to Entry")
                 entry = Gtk.Entry()
-                entry.set_text(self._value)
-                entry.connect("changed", self._on_text_changed)
+                try:
+                    entry.set_text(self._value or "")
+                except Exception:
+                    pass
+                try:
+                    entry.connect("changed", self._on_text_changed)
+                except Exception:
+                    pass
+                try:
+                    entry.set_hexpand(hexpand_flag)
+                except Exception:
+                    pass
+                try:
+                    entry.set_vexpand(vexpand_flag)
+                except Exception:
+                    pass
                 self._combo_widget = entry
                 try:
                     hbox.append(entry)
                 except Exception:
-                    try:
-                        hbox.add(entry)
-                    except Exception:
-                        self._logger.exception("_create_backend_widget: failed to add fallback entry")
+                    hbox.add(entry)
 
         self._backend_widget = hbox
+        self._backend_widget.set_sensitive(self._enabled)
         try:
-            self._backend_widget.set_sensitive(self._enabled)
+            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
-            self._logger.exception("_create_backend_widget: failed to set backend widget sensitivity")
-        # Allow logger to raise if misconfigured so failures are visible during debugging
-        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            pass
     
     def setLabel(self, new_label: str):
         """Set logical label and update/create the visual Gtk.Label in the box."""
