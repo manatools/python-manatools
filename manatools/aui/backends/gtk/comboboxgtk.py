@@ -84,6 +84,7 @@ class YComboBoxGtk(YSelectionWidget):
 
         if self._label:
             label = Gtk.Label(label=self._label)
+            self._label_widget = label
             try:
                 if hasattr(label, "set_xalign"):
                     label.set_xalign(0.0)
