@@ -212,8 +212,8 @@ class YHBoxCurses(YWidget):
                 except Exception:
                     wv = 0
                 details.append((i, lbl, min_reserved[i], pref_reserved[i], sw, wv))
-            self._logger.debug("HBox allocation inputs: available=%d spacing=%d details=%s",
-                               available, spacing, details)
+            #self._logger.debug("HBox allocation inputs: available=%d spacing=%d details=%s",
+            #                   available, spacing, details)
         except Exception:
             pass
 
@@ -275,10 +275,7 @@ class YHBoxCurses(YWidget):
                         overflow -= take
 
         # Final debug of allocated widths
-        try:
-            self._logger.debug("HBox allocated widths=%s total=%d (available=%d)", widths, sum(widths), available)
-        except Exception:
-            pass
+        #self._logger.debug("HBox allocated widths=%s total=%d (available=%d)", widths, sum(widths), available)
 
         # Ensure containers get at least the width required by their children
         def _required_width_for(widget):
@@ -354,12 +351,9 @@ class YHBoxCurses(YWidget):
             else:
                 ch = min(height, max(1, getattr(child, "_height", 1)))
             if hasattr(child, "_draw"):
-                try:
-                    self._logger.debug("HBox drawing child %d: lbl=%s alloc_w=%d x=%d height=%d ch_h=%d", i,
-                                       (child.debugLabel() if hasattr(child, 'debugLabel') else f'child_{i}'),
-                                       w, cx, height, ch)
-                except Exception:
-                    pass
+                #self._logger.debug("HBox drawing child %d: lbl=%s alloc_w=%d x=%d height=%d ch_h=%d", i,
+                #                    (child.debugLabel() if hasattr(child, 'debugLabel') else f'child_{i}'),
+                #                    w, cx, height, ch)
                 child._draw(window, y, cx, w, ch)
             cx += w
             if i < num_children - 1:
