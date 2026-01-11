@@ -684,6 +684,11 @@ class YWidgetFactoryGtk:
     
     def createPushButton(self, parent, label):
         return YPushButtonGtk(parent, label)
+
+    def createIconButton(self, parent, iconName, fallbackTextLabel):
+        btn = YPushButtonGtk(parent, fallbackTextLabel)
+        btn.setIcon(iconName)
+        return btn
     
     def createLabel(self, parent, text, isHeading=False, isOutputField=False):
         return YLabelGtk(parent, text, isHeading, isOutputField)

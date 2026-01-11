@@ -504,6 +504,11 @@ class YWidgetFactoryCurses:
     
     def createPushButton(self, parent, label):
         return YPushButtonCurses(parent, label)
+
+    def createIconButton(self, parent, iconName, fallbackTextLabel):
+        btn = YPushButtonCurses(parent, fallbackTextLabel)
+        btn.setIcon(iconName)
+        return btn
     
     def createCheckBox(self, parent, label, is_checked=False):
         return YCheckBoxCurses(parent, label, is_checked)
