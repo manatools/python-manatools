@@ -130,11 +130,13 @@ from .yui_common import (
     YWidget, YSingleChildContainerWidget, YSelectionWidget,
     YSimpleInputField, YItem, YTreeItem, YTableHeader, YTableItem, YTableCell,
     # Events
-    YEvent, YWidgetEvent, YKeyEvent, YMenuEvent, YCancelEvent,
+    YEvent, YWidgetEvent, YKeyEvent, YMenuEvent, YTimeoutEvent, YCancelEvent,
     # Exceptions
-    YUIException, YUIWidgetNotFoundException, YUINoDialogException,
-    # Other common classes
-    YProperty, YPropertyValue, YPropertySet, YShortcut
+    YUIException, YUIWidgetNotFoundException, YUINoDialogException, YUIInvalidWidgetException,
+    # Menu model
+    YMenuItem,
+    # Property system
+    YPropertyType, YProperty, YPropertyValue, YPropertySet, YShortcut
 )
 
 # Re-export everything for easy importing
@@ -144,8 +146,9 @@ __all__ = [
     'YEventType', 'YEventReason', 'YCheckBoxState', 'YButtonRole',
     'YWidget', 'YSingleChildContainerWidget', 'YSelectionWidget', 
     'YSimpleInputField', 'YItem', 'YTreeItem', 'YTableHeader', 'YTableItem', 'YTableCell',
-    'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YCancelEvent',
-    'YUIException', 'YUIWidgetNotFoundException', 'YUINoDialogException',
-    'YProperty', 'YPropertyValue', 'YPropertySet', 'YShortcut',
+    'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YTimeoutEvent', 'YCancelEvent',
+    'YUIException', 'YUIWidgetNotFoundException', 'YUINoDialogException', 'YUIInvalidWidgetException',
+    'YMenuItem',
+    'YPropertyType', 'YProperty', 'YPropertyValue', 'YPropertySet', 'YShortcut',
     'Backend'
 ]
