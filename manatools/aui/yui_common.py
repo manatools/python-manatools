@@ -553,8 +553,11 @@ class YTreeItem(YItem):
         return iter([])
     
     def addChild(self, item):
+        if isinstance(item, str):
+            item = YTreeItem(item)
         self._children.append(item)
         item._parent_item = self
+        return item
     
     def isOpen(self):
         return self._is_open
