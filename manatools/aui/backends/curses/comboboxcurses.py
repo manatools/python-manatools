@@ -34,7 +34,8 @@ class YComboBoxCurses(YSelectionWidget):
         self._value = ""
         self._focused = False
         self._can_focus = True
-        self._height = 1
+        # Reserve two lines: one for the label (caption) and one for the control
+        self._height = 2
         self._expanded = False
         self._hover_index = 0
         self._combo_x = 0
@@ -112,49 +113,56 @@ class YComboBoxCurses(YSelectionWidget):
 
     def _draw(self, window, y, x, width, height):
         # Store position and dimensions for dropdown drawing
-        self._combo_y = y
+        # Label is drawn on row `y`, combo control on row `y+1`.
+        self._combo_y = y + 1
         self._combo_x = x
         self._combo_width = width
 
-        try:
-            # Calculate available space for combo box
-            label_space = len(self._label) + 1 if self._label else 0
-            combo_space = width - label_space
+        # require at least two rows (label + control)
+        if height < 2:
+            return
 
+        try:
+            # Calculate available space for combo box (full width, label is above)
+            combo_space = width
             if combo_space <= 3:
                 return
 
-            # Draw label
+            # Draw label on top row
             if self._label:
                 label_text = self._label
-                if len(label_text) > label_space - 1:
-                    label_text = label_text[:label_space - 1]
+                # clip label if too long for width
+                if len(label_text) > width:
+                    label_text = label_text[:max(0, width - 3)] + "..."
                 lbl_attr = curses.A_NORMAL
                 if not self.isEnabled():
                     lbl_attr |= curses.A_DIM
-                window.addstr(y, x, label_text, lbl_attr)
-                x += len(label_text) + 1
+                try:
+                    window.addstr(y, x, label_text, lbl_attr)
+                except curses.error:
+                    pass
 
-            # Prepare display value
+            # Prepare display value and draw combo on next row
             display_value = self._value if self._value else "Select..."
             max_display_width = combo_space - 3
             if len(display_value) > max_display_width:
                 display_value = display_value[:max_display_width] + "..."
 
-            # Draw combo box background
+            # Draw combo box background on the control row
             if not self.isEnabled():
                 attr = curses.A_DIM
             else:
                 attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
 
-            combo_bg = " " * combo_space
-            window.addstr(y, x, combo_bg, attr)
-
-            combo_text = f" {display_value} ▼"
-            if len(combo_text) > combo_space:
-                combo_text = combo_text[:combo_space]
-
-            window.addstr(y, x, combo_text, attr)
+            try:
+                combo_bg = " " * combo_space
+                window.addstr(self._combo_y, x, combo_bg, attr)
+                combo_text = f" {display_value} ▼"
+                if len(combo_text) > combo_space:
+                    combo_text = combo_text[:combo_space]
+                window.addstr(self._combo_y, x, combo_text, attr)
+            except curses.error:
+                pass
 
             # Draw expanded list if active and enabled
             if self._expanded and self.isEnabled():
@@ -165,61 +173,60 @@ class YComboBoxCurses(YSelectionWidget):
             except Exception:
                 _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
-    
     def _draw_expanded_list(self, window):
         """Draw the expanded dropdown list at correct position"""
         if not self._expanded or not self._items:
             return
-            
+
         try:
             # Make sure we don't draw outside screen
             screen_height, screen_width = window.getmaxyx()
 
             list_height = min(len(self._items), screen_height)
-           
-            # Calculate dropdown position - right below the combo box
+
+            # Calculate dropdown position - right below the combo control row
             dropdown_y = self._combo_y + 1
-            dropdown_x = self._combo_x + (len(self._label) + 1 if self._label else 0)
-            dropdown_width = self._combo_width - (len(self._label) + 1 if self._label else 0)
-           
+            dropdown_x = self._combo_x
+            dropdown_width = self._combo_width
+
             # If not enough space below, draw above
             if dropdown_y + list_height >= screen_height:
                 dropdown_y = max(1, self._combo_y - list_height - 1)
-            
+
             # Ensure dropdown doesn't go beyond right edge
             if dropdown_x + dropdown_width >= screen_width:
                 dropdown_width = screen_width - dropdown_x - 1
-            
+
             if dropdown_width <= 5:  # Need reasonable width
                 return
-            
+
             # Draw dropdown background for each item
             for i in range(list_height):
                 if i >= len(self._items):
                     break
-                    
+
                 item = self._items[i]
                 item_text = item.label()
                 if len(item_text) > dropdown_width - 2:
                     item_text = item_text[:dropdown_width - 2] + "..."
-                
+
                 # Highlight hovered item
                 attr = curses.A_REVERSE if i == self._hover_index else curses.A_NORMAL
-                
+
                 # Create background for the item
                 bg_text = " " + item_text.ljust(dropdown_width - 2)
                 if len(bg_text) > dropdown_width:
                     bg_text = bg_text[:dropdown_width]
-                
+
                 # Ensure we don't write beyond screen bounds
-                if (dropdown_y + i < screen_height and 
-                    dropdown_x < screen_width and 
+                if (dropdown_y + i < screen_height and
+                    dropdown_x < screen_width and
                     dropdown_x + len(bg_text) <= screen_width):
                     try:
                         window.addstr(dropdown_y + i, dropdown_x, bg_text, attr)
                     except curses.error:
-                        pass  # Ignore out-of-bounds errors
-                
+                        pass
+
         except curses.error as e:
             try:
                 self._logger.error("_draw_expanded_list curses.error: %s", e, exc_info=True)

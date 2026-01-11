@@ -81,7 +81,8 @@ class YComboBoxQt(YSelectionWidget):
 
     def _create_backend_widget(self):
         container = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout(container)
+        # use vertical layout so label sits above the combo control
+        layout = QtWidgets.QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         
         if self._label:
@@ -172,7 +173,7 @@ class YComboBoxQt(YSelectionWidget):
             except Exception:
                 pass
 
-            # add to layout with stretch factor when supported
+            # add to layout with stretch factor when supported (vertical layout: label above, combo below)
             added = False
             try:
                 layout.addWidget(combo, stretch)
@@ -195,7 +196,7 @@ class YComboBoxQt(YSelectionWidget):
                 layout.addWidget(combo)
             except Exception:
                 pass
-
+         
         self._backend_widget = container
         self._combo_widget = combo
         self._backend_widget.setEnabled(bool(self._enabled))

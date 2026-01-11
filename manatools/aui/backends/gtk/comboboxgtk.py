@@ -80,7 +80,8 @@ class YComboBoxGtk(YSelectionWidget):
         return self._editable
     
     def _create_backend_widget(self):
-        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        # use vertical box so label is above the control
+        hbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
 
         if self._label:
             label = Gtk.Label(label=self._label)
@@ -90,6 +91,8 @@ class YComboBoxGtk(YSelectionWidget):
                     label.set_xalign(0.0)
             except Exception:
                 pass
+            # store the label widget so setLabel() can update it later
+            self._label_widget = label
             try:
                 hbox.append(label)
             except Exception:
@@ -176,7 +179,7 @@ class YComboBoxGtk(YSelectionWidget):
                         dropdown.connect("notify::selected", lambda w, pspec: self._on_changed_dropdown(w))
                     except Exception:
                         pass
-                    # apply expansion policies
+                    # apply expansion policies so the control grows according to widget settings
                     try:
                         dropdown.set_hexpand(hexpand_flag)
                     except Exception:
@@ -237,7 +240,10 @@ class YComboBoxGtk(YSelectionWidget):
                     hbox.add(entry)
 
         self._backend_widget = hbox
-        self._backend_widget.set_sensitive(self._enabled)
+        try:
+            self._backend_widget.set_sensitive(self._enabled)
+        except Exception:
+            pass
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
