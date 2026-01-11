@@ -177,10 +177,7 @@ class YDialogCurses(YSingleChildContainerWidget):
             
         try:
             height, width = self._backend_widget.getmaxyx()
-            try:
-                self._logger.debug("Dialog window size: height=%d width=%d", height, width)
-            except Exception:
-                pass
+            #self._logger.debug("Dialog window size: height=%d width=%d", height, width)
             
             # Clear screen
             self._backend_widget.clear()
@@ -207,10 +204,7 @@ class YDialogCurses(YSingleChildContainerWidget):
             content_width = width - 4
             content_y = 2
             content_x = 2
-            try:
-                self._logger.debug("Dialog content area: y=%d x=%d h=%d w=%d", content_y, content_x, content_height, content_width)
-            except Exception:
-                pass
+            #self._logger.debug("Dialog content area: y=%d x=%d h=%d w=%d", content_y, content_x, content_height, content_width)
             
             # Draw child content
             if self.hasChildren():
