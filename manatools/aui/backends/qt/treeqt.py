@@ -145,7 +145,7 @@ class YTreeQt(YSelectionWidget):
                     ico = _resolve_icon(icon_name)
                     if ico is not None:
                         try:
-                            self._logger.debug("Column count for item %d", qitem.columnCount())
+                            #self._logger.debug("Column count for item %d", qitem.columnCount())
                             qitem.setIcon(0, ico)
                         except Exception:
                             pass
