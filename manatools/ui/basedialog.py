@@ -64,6 +64,7 @@ class BaseDialog :
     @param minWidth > 0 min width size in pixels
     @param minHeight > 0 min height size in pixels
     '''
+    print(f"BaseDialog init title={title} icon={icon} dialogType={dialogType} minWidth={minWidth} minHeight={minHeight}")
     self._dialogType = dialogType
     self._icon = icon
     self._title = title
@@ -130,10 +131,10 @@ class BaseDialog :
     #restore old application title
     yui.YUI.app().setApplicationTitle(self.backupTitle)
     if self._icon:
-      yui.YUI.app().setApplicationTitle(backupIcon)
-
-    self.dialog.destroy()
-    self.dialog = None
+      yui.YUI.app().setApplicationIcon(backupIcon)
+    if self.dialog is not None:
+      self.dialog.destroy()
+      self.dialog = None
 
   @property
   def eventManager(self):
@@ -161,11 +162,11 @@ class BaseDialog :
     vbox = self.factory.createVBox(parent)
     self.UIlayout(vbox)
 
-  def pollEvent(self):
-    '''
-    perform yui pollEvent
-    '''
-    return self.dialog.pollEvent()
+  #def pollEvent(self):
+  #  '''
+  #  perform yui pollEvent
+  #  '''
+  #  return self.dialog.pollEvent()
 
   def _handleEvents(self):
     '''
@@ -174,26 +175,30 @@ class BaseDialog :
     while self._running == True:
 
       event = self.dialog.waitForEvent(self.timeout)
-      eventType = event.eventType()
+      if event is not None:
+        eventType = event.eventType()
 
-      rebuild_package_list = False
-      group = None
-      #event type checking
-      if (eventType == yui.YEventType.WidgetEvent) :
-        # widget selected
-        widget  = event.widget()
-        self.eventManager.widgetEvent(widget, event)
-      elif (eventType == yui.YEventType.MenuEvent) :
-        ### MENU ###
-        item = event.item()
-        self.eventManager.menuEvent(item, event)
-      elif (eventType == yui.YEventType.CancelEvent) :
-        self.eventManager.cancelEvent()
-        break
-      elif (eventType == yui.YEventType.TimeoutEvent) :
-        self.eventManager.timeoutEvent()
+        rebuild_package_list = False
+        group = None
+        #event type checking
+        if (eventType == yui.YEventType.WidgetEvent) :
+          # widget selected
+          widget  = event.widget()
+          self.eventManager.widgetEvent(widget, event)
+        elif (eventType == yui.YEventType.MenuEvent) :
+          ### MENU ###
+          item = event.item()
+          self.eventManager.menuEvent(item, event)
+        elif (eventType == yui.YEventType.CancelEvent) :
+          self.eventManager.cancelEvent()
+          break
+        elif (eventType == yui.YEventType.TimeoutEvent) :
+          self.eventManager.timeoutEvent()
+        else:
+          print(f"Unmanaged event type {eventType}")
       else:
-        print(f"Unmanaged event type {eventType}")
+        #TODO logging
+        pass
 
       self.doSomethingIntoLoop()
 
