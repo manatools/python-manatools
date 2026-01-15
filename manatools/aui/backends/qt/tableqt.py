@@ -462,15 +462,25 @@ class YTableQt(YSelectionWidget):
         else:
             self._logger.error("YTable.addItem: invalid item type %s", type(item))
             raise TypeError("YTable.addItem expects a YTableItem or string label")
-        try:
+        
+        item.setIndex(len(self._items) - 1)
+        if getattr(self, '_table', None) is not None:
+            self.rebuildTable()
+
+    def addItems(self, items):
+        '''add multiple items to the table. This is more efficient than calling addItem repeatedly.'''
+        for item in items:
+            if isinstance(item, str):
+                item = YTableItem(item)
+                super().addItem(item)
+            elif isinstance(item, YTableItem):
+                super().addItem(item)
+            else:
+                self._logger.error("YTable.addItem: invalid item type %s", type(item))
+                raise TypeError("YTable.addItem expects a YTableItem or string label")
             item.setIndex(len(self._items) - 1)
-        except Exception:
-            pass
-        try:
-            if getattr(self, '_table', None) is not None:
-                self.rebuildTable()
-        except Exception:
-            pass
+        if getattr(self, '_table', None) is not None:
+            self.rebuildTable()
 
     def selectItem(self, item, selected=True):
         # update model and view
