@@ -79,6 +79,8 @@ class YMenuBarQt(YWidget):
             pass
 
     def _ensure_menu_rendered(self, menu: YMenuItem):
+        if self._backend_widget is None:
+            return
         # skip invisible top-level menus
         if not menu.visible():
            return
