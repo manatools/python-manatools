@@ -39,6 +39,9 @@ class YVBoxQt(YWidget):
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self._backend_widget)
         layout.setContentsMargins(10, 10, 10, 10)
+        # Keep the layout constrained to its minimum sizeHint so children are not
+        # compressed to invisible sizes by parent layouts. This matches HBox/Frame behavior.
+        layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
         layout.setSpacing(5)
         
         # Map YWidget weights and stretchable flags to Qt layout stretch factors.
