@@ -397,7 +397,7 @@ class YTableGtk(YSelectionWidget):
             else:
                 self._logger.error("YTable.addItem: invalid item type %s", type(item))
                 raise TypeError("YTableGtk.addItem expects a YTableItem or string label")
-        item.setIndex(len(self._items) - 1)
+            item.setIndex(len(self._items) - 1)
         if getattr(self, '_listbox', None) is not None:
             self.rebuildTable()
 
