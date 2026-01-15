@@ -382,19 +382,25 @@ class YTableGtk(YSelectionWidget):
         if not isinstance(item, YTableItem):
             raise TypeError("YTableGtk.addItem expects a YTableItem or string label")
         super().addItem(item)
-        try:
-            item.setIndex(len(self._items) - 1)
-        except Exception:
-            pass
-        try:
-            if getattr(self, '_listbox', None) is not None:
-                self.rebuildTable()
-        except Exception:
-            pass
+        item.setIndex(len(self._items) - 1)
+        if getattr(self, '_listbox', None) is not None:
+            self.rebuildTable()
 
     def addItems(self, items):
-        for it in items:
-            self.addItem(it)
+        '''add multiple items to the table. This is more efficient than calling addItem repeatedly.'''
+        for item in items:
+            if isinstance(item, str):
+                item = YTableItem(item)
+                super().addItem(item)
+            elif isinstance(item, YTableItem):
+                super().addItem(item)
+            else:
+                self._logger.error("YTable.addItem: invalid item type %s", type(item))
+                raise TypeError("YTableGtk.addItem expects a YTableItem or string label")
+        item.setIndex(len(self._items) - 1)
+        if getattr(self, '_listbox', None) is not None:
+            self.rebuildTable()
+
 
     def selectItem(self, item, selected=True):
         try:
