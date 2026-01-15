@@ -254,6 +254,7 @@ class YApplicationGtk:
     
     def busyCursor(self):
         """Set busy cursor (GTK implementation)."""
+        return
         display = Gdk.Display.get_default()
         if display is None:
             return
@@ -273,6 +274,7 @@ class YApplicationGtk:
 
     def normalCursor(self):
         """Set normal cursor (GTK implementation)."""
+        return
         display = Gdk.Display.get_default()
         if display is None:
             return
