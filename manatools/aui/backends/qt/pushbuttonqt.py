@@ -11,15 +11,17 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 from PySide6 import QtWidgets, QtGui
 import logging
+from typing import Optional
 from ...yui_common import *
 from .commonqt import _resolve_icon
 
 
 class YPushButtonQt(YWidget):
-    def __init__(self, parent=None, label=""):
+    def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
         super().__init__(parent)
         self._label = label
-        self._icon_name = None
+        self._icon_name = icon_name
+        self._icon_only = bool(icon_only)
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -30,11 +32,16 @@ class YPushButtonQt(YWidget):
     
     def setLabel(self, label):
         self._label = label
-        if self._backend_widget:
+        if self._backend_widget and self._icon_only is False:
             self._backend_widget.setText(label)
     
     def _create_backend_widget(self):
-        self._backend_widget = QtWidgets.QPushButton(self._label)
+        if self._icon_only:
+            self._backend_widget = QtWidgets.QPushButton()
+        else:
+            self._backend_widget = QtWidgets.QPushButton(self._label)
+        if self._help_text:
+            self._backend_widget.setToolTip(self._help_text)
         # apply icon if previously set
         try:
             if getattr(self, "_icon_name", None):
@@ -93,10 +100,7 @@ class YPushButtonQt(YWidget):
             dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
         else:
             # fallback logging for now
-            try:
-                self._logger.warning("Button clicked (no dialog found): %s", self._label)
-            except Exception:
-                pass
+            self._logger.warning("Button clicked (no dialog found): %s", self._label)
 
     def setIcon(self, icon_name: str):
         """Set/clear the icon for this pushbutton (icon_name may be theme name or path)."""
@@ -121,3 +125,22 @@ class YPushButtonQt(YWidget):
                 self._logger.exception("setIcon failed")
             except Exception:
                 pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                if visible:
+                    self._backend_widget.show()
+                else:
+                    self._backend_widget.hide()    
+        except Exception:
+            self._logger.exception("setVisible failed")
+    
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed")

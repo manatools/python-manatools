@@ -306,9 +306,7 @@ class YWidgetFactoryQt:
         return YPushButtonQt(parent, label)
     
     def createIconButton(self, parent, iconName, fallbackTextLabel):
-        btn = YPushButtonQt(parent, fallbackTextLabel)
-        btn.setIcon(iconName)
-        return btn
+        return YPushButtonQt(parent, label=fallbackTextLabel, icon_name=iconName, icon_only=True)
     
     def createLabel(self, parent, text, isHeading=False, isOutputField=False):
         return YLabelQt(parent, text, isHeading, isOutputField)

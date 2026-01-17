@@ -28,12 +28,13 @@ if not logging.getLogger().handlers:
 
 
 class YPushButtonCurses(YWidget):
-    def __init__(self, parent=None, label=""):
+    def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
         super().__init__(parent)
         self._label = label
         self._focused = False
         self._can_focus = True
-        self._icon_name = None
+        self._icon_name = icon_name
+        self._icon_only = bool(icon_only)
         self._height = 1  # Fixed height - buttons are always one line
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         # derive mnemonic and cleaned label if present
@@ -91,6 +92,8 @@ class YPushButtonCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # Center the button label within available width, show underline for mnemonic
             clean = getattr(self, "_clean_label", None) or self._label
@@ -169,3 +172,7 @@ class YPushButtonCurses(YWidget):
             self._icon_name = icon_name
         except Exception:
             pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        self._can_focus = visible

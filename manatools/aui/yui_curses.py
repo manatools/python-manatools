@@ -505,8 +505,10 @@ class YWidgetFactoryCurses:
     
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldCurses(parent, label, password_mode)
+
     def createIntField(self, parent, label, minVal, maxVal, initialVal):
         return YIntFieldCurses(parent, label, minVal, maxVal, initialVal)
+
     def createMultiLineEdit(self, parent, label):
         return YMultiLineEditCurses(parent, label)
     
@@ -514,9 +516,8 @@ class YWidgetFactoryCurses:
         return YPushButtonCurses(parent, label)
 
     def createIconButton(self, parent, iconName, fallbackTextLabel):
-        btn = YPushButtonCurses(parent, fallbackTextLabel)
-        btn.setIcon(iconName)
-        return btn
+        ''' create a button with a fallback text label in ncurses'''
+        return YPushButtonCurses(parent, label=fallbackTextLabel, icon_name=iconName, icon_only=True)
     
     def createCheckBox(self, parent, label, is_checked=False):
         return YCheckBoxCurses(parent, label, is_checked)

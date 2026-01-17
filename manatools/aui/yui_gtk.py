@@ -723,10 +723,8 @@ class YWidgetFactoryGtk:
         return YPushButtonGtk(parent, label)
 
     def createIconButton(self, parent, iconName, fallbackTextLabel):
-        btn = YPushButtonGtk(parent, fallbackTextLabel)
-        btn.setIcon(iconName)
-        return btn
-    
+        return YPushButtonGtk(parent, label=fallbackTextLabel, icon_name=iconName, icon_only=True)
+
     def createLabel(self, parent, text, isHeading=False, isOutputField=False):
         return YLabelGtk(parent, text, isHeading, isOutputField)
     
@@ -735,8 +733,10 @@ class YWidgetFactoryGtk:
     
     def createInputField(self, parent, label, password_mode=False):
         return YInputFieldGtk(parent, label, password_mode)
+
     def createMultiLineEdit(self, parent, label):
         return YMultiLineEditGtk(parent, label)
+
     def createIntField(self, parent, label, minVal, maxVal, initialVal):
         return YIntFieldGtk(parent, label, minVal, maxVal, initialVal)
     
