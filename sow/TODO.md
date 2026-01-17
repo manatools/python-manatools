@@ -77,3 +77,21 @@ Skipped widgets:
     [-] YEmpty            (not ported)
     [-] YSquash / createSquash (not ported)
     [-] YMenuButton (legacy menus)
+
+Documentation gaps and recommendations
+--------------------------------------
+During review of backend implementations, several simple accessors and setters lack explicit docstrings. To improve developer experience:
+
+1. Add concise docstrings to all public getters/setters in:
+   - yui_qt.py (e.g., iconBasePath, setIconBasePath, productName)
+   - yui_gtk.py (same setters/getters, note GTK version dependencies)
+   - yui_curses.py (document NCurses-specific behaviors and filter parsing)
+2. Document file chooser semantics and supported filter syntax for NCurses and GTK fallbacks.
+3. Add a short README or reference page (this file) in the repository to explain expected cross-backend behavior and caveats.
+
+Checklist for maintainers
+-------------------------
+- [ ] Add one-line docstrings to all public methods in YApplication* classes.
+- [ ] Document minimum runtime dependencies and GTK/Qt version notes.
+- [ ] Provide examples for common tasks (file chooser, setting icon/title) in README or docs.
+- [ ] Ensure unit tests or integration tests cover file chooser fallbacks.
