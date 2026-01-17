@@ -135,6 +135,7 @@ class YWidget:
         self._parent = parent
         self._children = []
         self._enabled = True
+        self._visible = True
         self._help_text = ""
         self._backend_widget = None
         self._stretchable_horiz = False
@@ -165,9 +166,11 @@ class YWidget:
         return f"{self.widgetClass()}({self._id})"
     
     def helpText(self):
+        ''' Return the help text (tooltip) for this widget. '''
         return self._help_text
     
     def setHelpText(self, help_text):
+        ''' Set the help text (tooltip) for this widget. '''
         self._help_text = help_text
     
     def hasChildren(self):
@@ -246,10 +249,16 @@ class YWidget:
         self._set_backend_enabled(enabled)
     
     def setDisabled(self):
+        ''' Disenable the widget. '''
         self.setEnabled(False)
     
     def isEnabled(self):
+        ''' Return whether the widget is enabled. '''
         return self._enabled
+    
+    def setVisible(self, visible=True):
+        ''' Set the visibility of the widget. Backend-specific implementation required. '''
+        pass
     
     def stretchable(self, dim):
         if dim == YUIDimension.YD_HORIZ:
