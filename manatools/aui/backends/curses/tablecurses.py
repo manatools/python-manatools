@@ -262,9 +262,9 @@ class YTableCurses(YSelectionWidget):
             if self._focused and len(self._items) > visible and width > 0 and self.isEnabled():
                 try:
                     if self._scroll_offset > 0:
-                        window.addch(y + 1, x + width - 1, '^')
+                        window.addch(y + 1, x + width - 1, '↑', curses.A_REVERSE)
                     if (self._scroll_offset + visible) < len(self._items):
-                        window.addch(y + visible, x + width - 1, 'v')
+                        window.addch(y + visible, x + width - 1, '↓', curses.A_REVERSE)
                 except curses.error:
                     pass
         except curses.error:
