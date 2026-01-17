@@ -257,7 +257,7 @@ class YWidget:
         else:
             return self._stretchable_vert
     
-    def setStretchable(self, dim, new_stretch):
+    def setStretchable(self, dim, new_stretch: bool):
         if dim == YUIDimension.YD_HORIZ:
             self._stretchable_horiz = new_stretch
         else:
