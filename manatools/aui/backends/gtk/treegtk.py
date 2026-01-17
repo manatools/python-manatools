@@ -126,7 +126,7 @@ class YTreeGtk(YSelectionWidget):
         # populate if items already exist
         try:
             if getattr(self, "_items", None):
-                self.rebuildTree()
+                self._rebuildTree()
         except Exception:
             try:
                 self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
@@ -228,7 +228,7 @@ class YTreeGtk(YSelectionWidget):
                         except Exception:
                             self._last_selected_ids = set()
                         try:
-                            self.rebuildTree()
+                            self._rebuildTree()
                         except Exception:
                             pass
                     finally:
@@ -342,7 +342,7 @@ class YTreeGtk(YSelectionWidget):
                 except Exception:
                     self._last_selected_ids = set()
                 try:
-                    self.rebuildTree()
+                    self._rebuildTree()
                 except Exception:
                     pass
             finally:
@@ -373,6 +373,11 @@ class YTreeGtk(YSelectionWidget):
         return out
 
     def rebuildTree(self):
+        """RebuildTree to maintain compatibility."""
+        self._logger.warning("rebuildTree is deprecated and should not be needed anymore")
+        self._rebuildTree()
+
+    def _rebuildTree(self):
         """Flatten visible items according to _is_open and populate the ListBox."""
         _suppress_selection_handler = True
         if self._backend_widget is None or self._listbox is None:
@@ -992,11 +997,27 @@ class YTreeGtk(YSelectionWidget):
         try:
             if getattr(self, '_listbox', None) is not None:
                 try:
-                    self.rebuildTree()
+                    self._rebuildTree()
                 except Exception:
                     pass
         except Exception:
             pass
+
+    def addItems(self, items):
+        '''Add multiple items to the table. This is more efficient than calling addItem repeatedly.'''
+        for item in items:
+            if isinstance(item, str):
+                item = YTreeItem(item)
+                super().addItem(item)
+            else:
+                super().addItem(item)
+            item.setIndex(len(self._items) - 1)        
+        try:
+            if getattr(self, '_listbox', None) is not None:
+                self._rebuildTree()
+        except Exception:
+            pass
+
 
     def selectItem(self, item, selected=True):
         """Select/deselect a logical YTreeItem and reflect changes in the Gtk.ListBox."""
@@ -1021,7 +1042,7 @@ class YTreeGtk(YSelectionWidget):
             if getattr(self, '_listbox', None) is None:
                 return
             # ensure mapping exists
-            self.rebuildTree()
+            self._rebuildTree()
         except Exception:
             pass
 

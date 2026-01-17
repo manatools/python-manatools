@@ -88,7 +88,7 @@ class YTreeCurses(YSelectionWidget):
             # associate placeholder backend widget to avoid None
             self._backend_widget = self
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-            self.rebuildTree()
+            self._rebuildTree()
         except Exception as e:
             try:
                 self._logger.critical("_create_backend_widget critical error: %s", e, exc_info=True)
@@ -109,7 +109,26 @@ class YTreeCurses(YSelectionWidget):
         finally:
             try:
                 # mark rebuild so new items are visible without waiting for external trigger
-                self.rebuildTree()
+                self._rebuildTree()
+            except Exception:
+                pass
+
+    def addItems(self, items):
+        '''Add multiple items to the table. This is more efficient than calling addItem repeatedly.'''
+        try:
+            for item in items:
+                # prefer base implementation if present
+                try:
+                    super().addItem(item)
+                except Exception:
+                    # fallback: append to _items list used by this backend
+                    if not hasattr(self, "_items") or self._items is None:
+                        self._items = []
+                    self._items.append(item)
+        finally:
+            try:
+                # mark rebuild so new items are visible without waiting for external trigger
+                self._rebuildTree()
             except Exception:
                 pass
 
@@ -126,7 +145,7 @@ class YTreeCurses(YSelectionWidget):
                         pass
         finally:
             try:
-                self.rebuildTree()
+                self._rebuildTree()
             except Exception:
                 pass
 
@@ -218,6 +237,11 @@ class YTreeCurses(YSelectionWidget):
         _visit(roots, 0)
 
     def rebuildTree(self):
+        """RebuildTree to maintain compatibility."""
+        self._logger.warning("rebuildTree is deprecated and should not be needed anymore")
+        self._rebuildTree()
+
+    def _rebuildTree(self):
         """Recompute visible items and restore selection from item.selected() or last_selected_ids.
 
         Ensures ancestors of selected items are opened so selections are visible.
@@ -420,7 +444,7 @@ class YTreeCurses(YSelectionWidget):
                 self._last_selected_ids = set(id(i) for i in getattr(self, "_selected_items", []) or [])
             except Exception:
                 self._last_selected_ids = set()
-            self.rebuildTree()
+            self._rebuildTree()
         finally:
             try:
                 self._suppress_selection_handler = False
@@ -737,7 +761,7 @@ class YTreeCurses(YSelectionWidget):
                 self._last_selected_ids = set()
             # after programmatic selection, rebuild visible list to reflect opened parents
             try:
-                self.rebuildTree()
+                self._rebuildTree()
             except Exception:
                 pass
         except Exception:

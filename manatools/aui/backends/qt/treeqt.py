@@ -70,12 +70,16 @@ class YTreeQt(YSelectionWidget):
         self._backend_widget.setEnabled(bool(self._enabled))
         # populate if items already present
         try:
-            self.rebuildTree()
+            self._rebuildTree()
         except Exception:            
             self._logger.error("rebuildTree failed during _create_backend_widget", exc_info=True)
 
-
     def rebuildTree(self):
+        """RebuildTree to maintain compatibility."""
+        self._logger.warning("rebuildTree is deprecated and should not be needed anymore")
+        self._rebuildTree()
+
+    def _rebuildTree(self):
         """Rebuild the QTreeWidget from self._items (calls helper recursively)."""
         self._logger.debug("rebuildTree: rebuilding tree with %d items", len(self._items) if self._items else 0)
         self._suppress_selection_handler = True
@@ -509,10 +513,27 @@ class YTreeQt(YSelectionWidget):
         # if backend exists, refresh tree to reflect new item (including icon/selection)
         try:
             if getattr(self, '_tree_widget', None) is not None:
-                try:
-                    self.rebuildTree()
-                except Exception:
-                    pass
+               self._rebuildTree()
+        except Exception:
+            pass
+
+    def addItems(self, items):
+        '''Add multiple items to the table. This is more efficient than calling addItem repeatedly.'''
+        for item in items:
+            if isinstance(item, str):
+                item = YTreeItem(item)            
+                super().addItem(item)
+            elif isinstance(item, YTreeItem):
+                super().addItem(item)
+            else:
+                self._logger.error("YTree.addItem: invalid item type %s", type(item))
+                raise TypeError("YTree.addItem expects a YTreeItem or string label")
+            # ensure index set
+            item.setIndex(len(self._items) - 1)
+        # if backend exists, refresh tree to reflect new item (including icon/selection)
+        try:
+            if getattr(self, '_tree_widget', None) is not None:
+               self._rebuildTree()
         except Exception:
             pass
 
@@ -584,7 +605,7 @@ class YTreeQt(YSelectionWidget):
             if qit is None:
                 # item may be newly added — rebuild tree and retry
                 try:
-                    self.rebuildTree()
+                    self._rebuildTree()
                     qit = self._item_to_qitem.get(item, None)
                 except Exception:
                     qit = None
