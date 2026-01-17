@@ -42,6 +42,8 @@ class YInputFieldQt(YWidget):
 
         self._qlbl = QtWidgets.QLabel(self._label)
         layout.addWidget(self._qlbl)
+        if not self._label:
+            self._qlbl.hide()
 
         entry = QtWidgets.QLineEdit()
         if self._password_mode:
@@ -99,6 +101,10 @@ class YInputFieldQt(YWidget):
         try:
             if hasattr(self, '_qlbl') and self._qlbl is not None:
                 self._qlbl.setText(str(label))
+                if not label:
+                    self._qlbl.hide()
+                else:
+                    self._qlbl.show()
         except Exception:
             pass
 
