@@ -23,11 +23,12 @@ setup(
     author='Angelo Naselli',
     author_email='anaselli@linux.it',
     packages=[
-        'manatools', 
-        'manatools.aui', 
-        'manatools.aui.backends.qt', 
-        'manatools.aui.backends.gtk', 
-        'manatools.aui.backends.curses', 
+        'manatools',
+        'manatools.aui',
+        'manatools.aui.backends',
+        'manatools.aui.backends.qt',
+        'manatools.aui.backends.gtk',
+        'manatools.aui.backends.curses',
         'manatools.ui'
     ],
     include_package_data=True,
