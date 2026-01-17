@@ -167,14 +167,12 @@ class YAlignmentCurses(YSingleChildContainerWidget):
                 pass
             # give the computed width to the child (at least 1 char)
             final_w = max(1, child_w)
-            try:
-                self._logger.debug("Alignment draw: child=%s halign=%s valign=%s container=(%d,%d) size=(%d,%d) child_min=%d child_pref=%s child_w=%d cx=%d cy=%d",
-                                   self.child().debugLabel() if hasattr(self.child(), 'debugLabel') else '<child>',
-                                   self._halign_spec, self._valign_spec,
-                                   x, y, width, height,
-                                   ch_min_w, getattr(self.child(), '_width', None), final_w, cx, cy)
-            except Exception:
-                pass
+
+            #self._logger.debug("Alignment draw: child=%s halign=%s valign=%s container=(%d,%d) size=(%d,%d) child_min=%d child_pref=%s child_w=%d cx=%d cy=%d",
+            #                    self.child().debugLabel() if hasattr(self.child(), 'debugLabel') else '<child>',
+            #                    self._halign_spec, self._valign_spec,
+            #                    x, y, width, height,
+            #                    ch_min_w, getattr(self.child(), '_width', None), final_w, cx, cy)
             self.child()._draw(window, cy, cx, final_w, min(height, ch_height))
         except Exception:
             pass
