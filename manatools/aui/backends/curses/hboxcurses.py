@@ -150,6 +150,8 @@ class YHBoxCurses(YWidget):
         pref_reserved = [0] * num_children
         child_weights = [0] * num_children
         for i, child in enumerate(self._children):
+            if child.visible() is False:
+                continue
             # compute each child's minimal width (best-effort)
             m = self._child_min_width(child, available)
             min_reserved[i] = max(1, m)
@@ -311,6 +313,8 @@ class YHBoxCurses(YWidget):
 
         # try to satisfy required widths by borrowing from others
         for i, child in enumerate(self._children):
+            if child.visible() is False:
+                continue
             req = _required_width_for(child)
             if widths[i] < req:
                 need = req - widths[i]
@@ -336,7 +340,7 @@ class YHBoxCurses(YWidget):
         cx = x
         for i, child in enumerate(self._children):
             w = widths[i]
-            if w <= 0:
+            if w <= 0 or child.visible() is False:
                 continue
             # Give full container height to vertically-stretchable children
             # and to nested VBoxes so their internal layout can use the
@@ -351,9 +355,6 @@ class YHBoxCurses(YWidget):
             else:
                 ch = min(height, max(1, getattr(child, "_height", 1)))
             if hasattr(child, "_draw"):
-                #self._logger.debug("HBox drawing child %d: lbl=%s alloc_w=%d x=%d height=%d ch_h=%d", i,
-                #                    (child.debugLabel() if hasattr(child, 'debugLabel') else f'child_{i}'),
-                #                    w, cx, height, ch)
                 child._draw(window, y, cx, w, ch)
             cx += w
             if i < num_children - 1:

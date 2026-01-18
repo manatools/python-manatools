@@ -94,6 +94,10 @@ class YVBoxCurses(YWidget):
         fixed_height_total = 0
 
         for i, child in enumerate(self._children):
+            if child.visible() is False:
+                child_min_heights.append(0)
+                child_pref_heights.append(0)
+                continue
             # Minimal height (hard lower bound)
             min_h = max(1, _curses_recursive_min_height(child))
             # Preferred/requested height (may be larger than min_h)
@@ -223,6 +227,8 @@ class YVBoxCurses(YWidget):
         cy = y
         gaps_allowed = spacing_allowed
         for i, child in enumerate(self._children):
+            if child.visible() is False:
+                continue
             ch = allocated[i]
             if ch <= 0:
                 continue
