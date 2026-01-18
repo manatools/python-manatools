@@ -36,7 +36,9 @@ class YInputFieldCurses(YWidget):
         self._focused = False
         self._can_focus = True
         # one row for field + optional label row on top
-        self._height = 1 + (1 if bool(self._label) else 0)
+        self._height = 2 if self._label else 1
+        self._x = 0
+        self._y = 0
         # per-instance logger
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
@@ -59,10 +61,7 @@ class YInputFieldCurses(YWidget):
     
     def setLabel(self, label):
         self._label = label
-        try:
-            self._height = 1 + (1 if bool(self._label) else 0)
-        except Exception:
-            pass
+        self._height = 2 if self._label else 1
     
     def _create_backend_widget(self):
         try:
@@ -100,7 +99,11 @@ class YInputFieldCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
+            self._x = x
+            self._y = y
             line = y
             # Draw label on its own row above field
             if self._label:
@@ -202,6 +205,10 @@ class YInputFieldCurses(YWidget):
 
     def _desired_height_for_width(self, width: int) -> int:
         try:
-            return max(1, 1 + (1 if bool(self._label) else 0))
+            return max(1, 2 if self._label else 1)
         except Exception:
             return 1
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        self._can_focus = visible
