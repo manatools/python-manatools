@@ -255,10 +255,14 @@ class YWidget:
     def isEnabled(self):
         ''' Return whether the widget is enabled. '''
         return self._enabled
+
+    def visible(self) -> bool:
+        ''' Retunr the visibility of the widget. '''
+        return bool(self._visible)
     
-    def setVisible(self, visible=True):
+    def setVisible(self, visible:bool=True):
         ''' Set the visibility of the widget. Backend-specific implementation required. '''
-        pass
+        self._visible = bool(visible)
     
     def stretchable(self, dim):
         if dim == YUIDimension.YD_HORIZ:
