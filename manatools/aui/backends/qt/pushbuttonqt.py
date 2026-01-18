@@ -134,10 +134,7 @@ class YPushButtonQt(YWidget):
         super().setVisible(visible)
         try:
             if getattr(self, "_backend_widget", None) is not None:
-                if visible:
-                    self._backend_widget.show()
-                else:
-                    self._backend_widget.hide()    
+                self._backend_widget.setVisible(visible)
         except Exception:
             self._logger.exception("setVisible failed")
     
