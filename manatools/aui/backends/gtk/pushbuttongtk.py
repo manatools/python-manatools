@@ -85,6 +85,10 @@ class YPushButtonGtk(YWidget):
                 self._backend_widget.set_tooltip_text(self._help_text)
             except Exception:
                 self._logger.exception("Failed to set tooltip text", exc_info=True)
+        try:
+            self._backend_widget.set_visible(self.visible())
+        except Exception:
+            self._logger.exception("Failed to set widget visibility", exc_info=True)
 
         # Prevent button from being stretched horizontally by default.
         try:

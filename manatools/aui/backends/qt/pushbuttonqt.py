@@ -42,6 +42,10 @@ class YPushButtonQt(YWidget):
             self._backend_widget = QtWidgets.QPushButton(self._label)
         if self._help_text:
             self._backend_widget.setToolTip(self._help_text)
+        if self.visible():
+            self._backend_widget.show()
+        else:
+            self._backend_widget.hide()
         # apply icon if previously set
         try:
             if getattr(self, "_icon_name", None):
