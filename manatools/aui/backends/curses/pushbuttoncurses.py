@@ -35,6 +35,8 @@ class YPushButtonCurses(YWidget):
         self._can_focus = True
         self._icon_name = icon_name
         self._icon_only = bool(icon_only)
+        self._x = 0
+        self._y = 0
         self._height = 1  # Fixed height - buttons are always one line
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         # derive mnemonic and cleaned label if present
@@ -95,6 +97,8 @@ class YPushButtonCurses(YWidget):
         if self._visible is False:
             return
         try:
+            self._x = x
+            self._y = y
             # Center the button label within available width, show underline for mnemonic
             clean = getattr(self, "_clean_label", None) or self._label
             button_text = f"[ {clean} ]"
