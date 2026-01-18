@@ -35,7 +35,7 @@ class YComboBoxCurses(YSelectionWidget):
         self._focused = False
         self._can_focus = True
         # Reserve two lines: one for the label (caption) and one for the control
-        self._height = 2
+        self._height = 2 if self._label else 1
         self._expanded = False
         self._hover_index = 0
         self._combo_x = 0
@@ -111,15 +111,21 @@ class YComboBoxCurses(YSelectionWidget):
         except Exception:
             pass
 
+    def setLabel(self, new_label):
+        super().setLabel(new_label)
+        self._height = 2 if self._label else 1
+    
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         # Store position and dimensions for dropdown drawing
         # Label is drawn on row `y`, combo control on row `y+1`.
-        self._combo_y = y + 1
+        self._combo_y = y + 1 if self._label else y
         self._combo_x = x
         self._combo_width = width
 
         # require at least two rows (label + control)
-        if height < 2:
+        if height < self._height:
             return
 
         try:
@@ -144,7 +150,7 @@ class YComboBoxCurses(YSelectionWidget):
 
             # Prepare display value and draw combo on next row
             display_value = self._value if self._value else "Select..."
-            max_display_width = combo_space - 3
+            max_display_width = combo_space - 6  # account for " ▼" and padding
             if len(display_value) > max_display_width:
                 display_value = display_value[:max_display_width] + "..."
 
@@ -323,3 +329,7 @@ class YComboBoxCurses(YSelectionWidget):
         self._value = ""
         self._expanded = False
         self._hover_index = 0
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        self._can_focus = visible

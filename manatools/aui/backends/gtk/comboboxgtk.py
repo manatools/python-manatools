@@ -83,21 +83,22 @@ class YComboBoxGtk(YSelectionWidget):
         # use vertical box so label is above the control
         hbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
 
+        self._label_widget = Gtk.Label()
+        try:
+            hbox.append(self._label_widget)
+        except Exception:
+            self._logger.error("Failed to append label to box", exc_info=True)
+            hbox.add(self._label_widget)
         if self._label:
-            label = Gtk.Label(label=self._label)
-            self._label_widget = label
+            self._label_widget.set_text(self._label)
             try:
-                if hasattr(label, "set_xalign"):
-                    label.set_xalign(0.0)
+                if hasattr(self._label_widget, "set_xalign"):
+                    self._label_widget.set_xalign(0.0)
             except Exception:
-                pass
-            # store the label widget so setLabel() can update it later
-            self._label_widget = label
-            try:
-                hbox.append(label)
-            except Exception:
-                hbox.add(label)
-
+                self._logger.error("Failed to set xalign on label", exc_info=True)
+            self._label_widget.set_visible(True)
+        else:
+            self._label_widget.set_visible(False)
         # Determine expansion flags from logical widget before creating the control
         try:
             try:
@@ -240,43 +241,33 @@ class YComboBoxGtk(YSelectionWidget):
                     hbox.add(entry)
 
         self._backend_widget = hbox
+        if self._help_text:
+            try:
+                self._backend_widget.set_tooltip_text(self._help_text)
+            except Exception:
+                self._logger.error("Failed to set tooltip text on backend widget", exc_info=True)
+        try:
+            self._backend_widget.set_visible(self.visible())
+        except Exception:
+            self._logger.error("Failed to set backend widget visible", exc_info=True)
         try:
             self._backend_widget.set_sensitive(self._enabled)
         except Exception:
-            pass
-        try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-        except Exception:
-            pass
-    
+            self._logger.exception("Failed to set sensitivity on backend widget")
+        
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        
     def setLabel(self, new_label: str):
-        """Set logical label and update/create the visual Gtk.Label in the box."""
+        """Set logical label and update the visual Gtk.Label in the box."""
         try:
             super().setLabel(new_label)
-            if self._label_widget is not None:
+            if self._backend_widget is None:
+                return
+            if new_label:
                 self._label_widget.set_text(new_label)
+                self._label_widget.set_visible(True)
             else:
-                # create and prepend label to the hbox
-                if getattr(self, "_backend_widget", None) is not None:
-                    try:
-                        new_lbl = Gtk.Label(label=new_label)
-                        try:
-                            if hasattr(new_lbl, "set_xalign"):
-                                new_lbl.set_xalign(0.0)
-                        except Exception:
-                            pass
-                        # prepend so label appears before the combo control
-                        try:
-                            self._backend_widget.prepend(new_lbl)
-                        except Exception:
-                            # fallback: append and hope layout is acceptable
-                            try:
-                                self._backend_widget.append(new_lbl)
-                            except Exception:
-                                self._logger.exception("setLabel: failed to add new Gtk.Label to backend box")
-                        self._label_widget = new_lbl
-                    except Exception:
-                        self._logger.exception("setLabel: error creating/inserting Gtk.Label")
+                self._label_widget.set_visible(False)                
         except Exception:
             self._logger.exception("setLabel: error updating label=%r", new_label)
 
@@ -533,3 +524,19 @@ class YComboBoxGtk(YSelectionWidget):
                         self._logger.exception("deleteAllItems: failed to clear fallback widget label")
             except Exception:
                 self._logger.exception("deleteAllItems: unexpected error while updating backend widget")
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_visible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)

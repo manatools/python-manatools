@@ -61,21 +61,15 @@ class YComboBoxQt(YSelectionWidget):
     
     def setLabel(self, new_label: str):
         """Set logical label and update/create the visual QLabel in the container."""
+        super().setLabel(new_label)
         try:
-            super().setLabel(new_label)
-            if self._label_widget is not None:
+            if self._backend_widget is None:
+                return
+            if new_label:
                 self._label_widget.setText(new_label)
+                self._label_widget.setVisible(True)
             else:
-                # create and insert label before combo in layout
-                if getattr(self, "_backend_widget", None) is not None and getattr(self, "_combo_widget", None) is not None:
-                    try:
-                        layout = self._backend_widget.layout()
-                        if layout is not None:
-                            label = QtWidgets.QLabel(new_label)
-                            layout.insertWidget(0, label)
-                            self._label_widget = label
-                    except Exception:
-                        self._logger.exception("setLabel: failed to insert new QLabel")
+                self._label_widget.setVisible(False)
         except Exception:
             self._logger.exception("setLabel: error updating label=%r", new_label)
 
@@ -85,11 +79,14 @@ class YComboBoxQt(YSelectionWidget):
         layout = QtWidgets.QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         
+        self._label_widget = QtWidgets.QLabel()
+        layout.addWidget(self._label_widget)
         if self._label:
-            label = QtWidgets.QLabel(self._label)
-            self._label_widget = label
-            layout.addWidget(label)
-        
+            self._label_widget.setText(self._label)
+            self._label_widget.setVisible(True)
+        else:
+            self._label_widget.setVisible(False)
+
         if self._editable:
             combo = QtWidgets.QComboBox()
             combo.setEditable(True)
@@ -200,6 +197,15 @@ class YComboBoxQt(YSelectionWidget):
         self._backend_widget = container
         self._combo_widget = combo
         self._backend_widget.setEnabled(bool(self._enabled))
+        try:
+            if self._help_text:
+                self._backend_widget.setToolTip(self._help_text)
+        except Exception:
+            self._logger.exception("Failed to set tooltip text", exc_info=True)
+        try:
+            self._backend_widget.setVisible(self.visible())
+        except Exception:
+            self._logger.exception("Failed to set widget visibility", exc_info=True)
         # allow logger to raise if misconfigured
         self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
@@ -320,3 +326,19 @@ class YComboBoxQt(YSelectionWidget):
                     dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
             except Exception:
                 pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setVisible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
