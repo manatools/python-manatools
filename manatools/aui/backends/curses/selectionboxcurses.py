@@ -238,7 +238,7 @@ class YSelectionBoxCurses(YSelectionWidget):
                 checkbox = "*" if item in self._selected_items else " "
                 display = f"[{checkbox}] {text}"
                 if len(display) > width:
-                    display = display[:max(0, width - 3)] + "..."
+                    display = display[:max(0, width - 1)] + "…"
                 attr = curses.A_NORMAL
                 if not self.isEnabled():
                     attr |= curses.A_DIM

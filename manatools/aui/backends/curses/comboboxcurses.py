@@ -139,7 +139,7 @@ class YComboBoxCurses(YSelectionWidget):
                 label_text = self._label
                 # clip label if too long for width
                 if len(label_text) > width:
-                    label_text = label_text[:max(0, width - 3)] + "..."
+                    label_text = label_text[:max(0, width - 1)] + "…"
                 lbl_attr = curses.A_NORMAL
                 if not self.isEnabled():
                     lbl_attr |= curses.A_DIM
@@ -149,10 +149,10 @@ class YComboBoxCurses(YSelectionWidget):
                     pass
 
             # Prepare display value and draw combo on next row
-            display_value = self._value if self._value else "Select..."
-            max_display_width = combo_space - 6  # account for " ▼" and padding
-            if len(display_value) > max_display_width:
-                display_value = display_value[:max_display_width] + "..."
+            display_value = self._value if self._value else "Select…"
+            max_display_width = combo_space - 4  # account for " ▼" and padding
+            if len(display_value) -1 > max_display_width:
+                display_value = display_value[:max_display_width] + "…" 
 
             # Draw combo box background on the control row
             if not self.isEnabled():
@@ -226,7 +226,7 @@ class YComboBoxCurses(YSelectionWidget):
                 item = self._items[i]
                 item_text = item.label()
                 if len(item_text) > dropdown_width - 2:
-                    item_text = item_text[:dropdown_width - 2] + "..."
+                    item_text = item_text[:dropdown_width - 2] + "…"
 
                 # Highlight hovered item
                 attr = curses.A_REVERSE if i == self._hover_index else curses.A_NORMAL

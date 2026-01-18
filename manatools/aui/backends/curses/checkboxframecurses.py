@@ -307,7 +307,7 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
                 title_body = f"[{chk}] {self._label}" if self._label else f"[{chk}]"
                 max_title_len = max(0, width - 4)
                 if len(title_body) > max_title_len:
-                    title_body = title_body[:max(0, max_title_len - 3)] + "..."
+                    title_body = title_body[:max(0, max_title_len - 1)] + "…"
                 start_x = x + max(1, (width - len(title_body)) // 2)
                 # choose attributes depending on focus/enable state
                 attr = curses.A_BOLD

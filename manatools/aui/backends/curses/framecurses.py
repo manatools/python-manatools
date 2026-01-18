@@ -180,7 +180,7 @@ class YFrameCurses(YSingleChildContainerWidget):
                     title = f" {self._label} "
                     max_title_len = max(0, width - 4)
                     if len(title) > max_title_len:
-                        title = title[:max(0, max_title_len - 3)] + "..."
+                        title = title[:max(0, max_title_len - 1)] + "…"
                     start_x = x + max(1, (width - len(title)) // 2)
                     # overwrite part of top border with title text
                     window.addstr(y, start_x, title, curses.A_BOLD)

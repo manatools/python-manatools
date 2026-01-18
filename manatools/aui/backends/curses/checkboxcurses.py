@@ -102,7 +102,7 @@ class YCheckBoxCurses(YWidget):
             checkbox_symbol = "[X]" if self._is_checked else "[ ]"
             text = f"{checkbox_symbol} {self._label}"
             if len(text) > width:
-                text = text[:max(0, width - 3)] + "..."
+                text = text[:max(0, width - 1)] + "…"
 
             if self._focused and self.isEnabled():
                 window.attron(curses.A_REVERSE)

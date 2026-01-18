@@ -592,7 +592,7 @@ class YTreeCurses(YSelectionWidget):
                 indent = " " * (depth * 2)
                 text = f"{indent}{exp} [{checkbox}] {itm.label()}"
                 if len(text) > width:
-                    text = text[:max(0, width - 3)] + "..."
+                    text = text[:max(0, width - 1)] + "…"
                 attr = curses.A_REVERSE if (self._focused and idx == self._hover_index and self.isEnabled()) else curses.A_NORMAL
                 if not self.isEnabled():
                     attr |= curses.A_DIM

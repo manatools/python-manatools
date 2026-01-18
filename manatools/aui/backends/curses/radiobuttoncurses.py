@@ -113,7 +113,7 @@ class YRadioButtonCurses(YWidget):
             radio_symbol = "(*)" if self._is_checked else "( )"
             text = f"{radio_symbol} {self._label}"
             if len(text) > width:
-                text = text[:max(0, width - 3)] + "..."
+                text = text[:max(0, width - 1)] + "…"
 
             attr_on = False
             if self._focused and self.isEnabled():
