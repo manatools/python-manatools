@@ -193,18 +193,30 @@ class YComboBoxCurses(YSelectionWidget):
             # Calculate dropdown position - right below the combo control row
             dropdown_y = self._combo_y + 1
             dropdown_x = self._combo_x
-            dropdown_width = self._combo_width
+            try:
+                # longest item label
+                max_label_len = max((len(i.label()) for i in self._items), default=0)
+            except Exception:
+                max_label_len = 0
+            # desired width includes small padding
+            desired_width = max_label_len + 2
+            # never exceed screen usable width (leave 1 column margin)
+            max_allowed = max(5, screen_width - 2)
+            dropdown_width = min(desired_width, max_allowed)
+            # if popup would overflow to the right, shift it left so full text is visible when possible
+            if dropdown_x + dropdown_width >= screen_width:
+                shift = (dropdown_x + dropdown_width) - (screen_width - 1)
+                dropdown_x = max(0, dropdown_x - shift)
+            # ensure reasonable minimum
+            if dropdown_width < 5:
+                dropdown_width = 5
 
-            # If not enough space below, draw above
             if dropdown_y + list_height >= screen_height:
                 dropdown_y = max(1, self._combo_y - list_height - 1)
 
             # Ensure dropdown doesn't go beyond right edge
             if dropdown_x + dropdown_width >= screen_width:
                 dropdown_width = screen_width - dropdown_x - 1
-
-            if dropdown_width <= 5:  # Need reasonable width
-                return
 
             # Draw dropdown background for each item
             for i in range(list_height):
