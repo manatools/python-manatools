@@ -49,6 +49,10 @@ class YDialogCurses(YSingleChildContainerWidget):
         # Debounce for resize handling (avoid flicker)
         self._resize_pending_until = 0.0
         self._last_term_size = (0, 0)  # (h, w)
+        # Transient help overlay (triggered by F1)
+        self._help_overlay_text = None
+        self._help_overlay_until = 0.0
+        self._help_overlay_pos = None  # (y, x) where to draw the overlay; None = auto fallback
         YDialogCurses._open_dialogs.append(self)
     
     def widgetClass(self):
@@ -225,9 +229,86 @@ class YDialogCurses(YSingleChildContainerWidget):
                 focus_text = f" Focus: {lbl} "
                 if len(focus_text) < width:
                     self._backend_widget.addstr(height - 1, 2, focus_text, curses.A_REVERSE)
-                #if the focused widget has an expnded list (menus, combos,...), draw it on top
+                #ifthe focused widget has an expnded list (menus, combos,...), draw it on top
                 if hasattr(self._focused_widget, "_draw_expanded_list"):
                     self._focused_widget._draw_expanded_list(self._backend_widget)
+            
+            # Draw help overlay if active and not expired
+            try:
+                now = time.time()
+                if getattr(self, "_help_overlay_text", None) and getattr(self, "_help_overlay_until", 0) > now:
+                    help_txt = str(self._help_overlay_text)
+                    # Prefer to draw the help text inside the focused widget's area when possible.
+                    overlay_y = None
+                    overlay_x = None
+                    overlay_width = None
+                    try:
+                        h, w = self._backend_widget.getmaxyx()
+                    except Exception:
+                        h, w = 24, 80
+                    # 1) explicit suggested position (from when F1 was pressed)
+                    if getattr(self, "_help_overlay_pos", None):
+                        overlay_y, overlay_x = self._help_overlay_pos
+                    else:
+                        fw = self._focused_widget
+                        if fw is not None:
+                            # Try a number of heuristic attributes that widgets commonly expose
+                            try:
+                                if getattr(fw, "_combo_y", None) is not None and getattr(fw, "_combo_x", None) is not None:
+                                    overlay_y, overlay_x = fw._combo_y, fw._combo_x
+                                elif getattr(fw, "_y", None) is not None and getattr(fw, "_x", None) is not None:
+                                    overlay_y, overlay_x = fw._y, fw._x
+                                elif getattr(fw, "_widget_y", None) is not None and getattr(fw, "_widget_x", None) is not None:
+                                    overlay_y, overlay_x = fw._widget_y, fw._widget_x
+                                elif getattr(fw, "_draw_y", None) is not None and getattr(fw, "_draw_x", None) is not None:
+                                    overlay_y, overlay_x = fw._draw_y, fw._draw_x
+                            except Exception:
+                                overlay_y = overlay_x = None
+                            # Attempt to obtain widget width if provided to limit overlay width to widget area
+                            try:
+                                overlay_width = getattr(fw, "_combo_width", None) or getattr(fw, "_width", None) or getattr(fw, "_w", None)
+                            except Exception:
+                                overlay_width = None
+                    # Fallback to safe location near footer/content if we couldn't determine widget area
+                    if overlay_y is None:
+                        overlay_y = max(1, h - 3)
+                    if overlay_x is None:
+                        overlay_x = 2
+                    # Compute remaining / available width
+                    try:
+                        max_allowed = max(5, w - overlay_x - 1)
+                    except Exception:
+                        max_allowed = 10
+                    # If widget-specific width was provided, prefer it (but clamp to available)
+                    if overlay_width:
+                        try:
+                            overlay_width = int(overlay_width)
+                        except Exception:
+                            overlay_width = None
+                    remain = overlay_width if overlay_width and overlay_width > 0 else max_allowed
+                    remain = min(remain, max_allowed)
+                    if remain < 5:
+                        remain = 5
+                    # Clip/truncate help text to fit
+                    display = help_txt
+                    if len(display) > remain:
+                        display = display[: max(0, remain - 1)] + "…"
+                    # Draw overlay inside widget area (standout)
+                    try:
+                        self._backend_widget.addnstr(overlay_y, overlay_x, display, remain, curses.A_STANDOUT)
+                    except Exception:
+                        try:
+                            self._backend_widget.addnstr(overlay_y, overlay_x, display, remain)
+                        except Exception:
+                            pass
+                else:
+                    # overlay expired -> cleanup fields
+                    if getattr(self, "_help_overlay_text", None):
+                        self._help_overlay_text = None
+                        self._help_overlay_until = 0.0
+                        self._help_overlay_pos = None
+            except Exception:
+                pass
             
             # Refresh main window first
             self._backend_widget.refresh()
@@ -363,7 +444,11 @@ class YDialogCurses(YSingleChildContainerWidget):
                         break
                     time.sleep(0.01)
                     continue
-
+                
+                #any key received, clear help overlay if active
+                self._help_overlay_text = None
+                self._help_overlay_until = 0.0
+                self._help_overlay_pos = None
                 # Global keys
                 if key == curses.KEY_F10:
                     self._post_event(YCancelEvent())
@@ -390,7 +475,52 @@ class YDialogCurses(YSingleChildContainerWidget):
                     continue
 
                 # Dispatch key to focused widget
+                # Handle transient help overlay dismissal: any key (other than F1) should remove it and continue
+                if getattr(self, "_help_overlay_text", None) and key != curses.KEY_F1:
+                    # clear overlay immediately and force redraw, then proceed to normal handling
+                    try:
+                        self._help_overlay_text = None
+                        self._help_overlay_until = 0.0
+                        self._help_overlay_pos = None
+                        self._last_draw_time = 0
+                    except Exception:
+                        pass
                 handled = False
+                # F1: show help overlay if possible
+                if key == curses.KEY_F1:
+                    try:
+                        fw = self._focused_widget
+                        if fw is not None:
+                            ht = None
+                            try:
+                                ht = fw.helpText() if callable(getattr(fw, "helpText", None)) else None
+                            except Exception:
+                                ht = None
+                            if ht:
+                                # compute suggested overlay position (try widget coords)
+                                pos = None
+                                try:
+                                    y = getattr(fw, "_combo_y", None)
+                                    x = getattr(fw, "_combo_x", None)
+                                    if y is not None and x is not None:
+                                        pos = (y, x)
+                                except Exception:
+                                    pos = None
+                                self._help_overlay_text = str(ht)
+                                self._help_overlay_pos = pos
+                                self._help_overlay_until = time.time() + 5.0
+                                self._last_draw_time = 0
+                                # F1 handled
+                                handled = True
+                                # force immediate redraw next loop iteration
+                    except Exception:
+                        pass
+
+                # If F1 handled we skip further dispatch to widgets
+                if handled:
+                    continue
+
+                # Dispatch key to focused widget
                 if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
                     handled = self._focused_widget._handle_key(key)
                     if handled:
