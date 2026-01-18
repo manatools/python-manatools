@@ -47,7 +47,7 @@ class YInputFieldGtk(YWidget):
         return self._label
     
     def _create_backend_widget(self):
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
 
         self._lbl = Gtk.Label(label=self._label)
         try:
@@ -58,7 +58,11 @@ class YInputFieldGtk(YWidget):
         try:
             vbox.append(self._lbl)
         except Exception:
+            self._logger.error("Failed to append label to vbox, trying add()", exc_info=True)
             vbox.add(self._lbl)
+        
+        if not self._label:
+            self._lbl.set_visible(False)
 
         entry = Gtk.Entry()
         if self._password_mode:
@@ -76,10 +80,20 @@ class YInputFieldGtk(YWidget):
         try:
             vbox.append(entry)
         except Exception:
+            self._logger.error("Failed to append entry to vbox, trying add()", exc_info=True)
             vbox.add(entry)
 
         self._backend_widget = vbox
         self._entry_widget = entry
+        try:
+            if self._help_text:
+                self._backend_widget.set_tooltip_text(self._help_text)
+        except Exception:
+            self._logger.error("Failed to set tooltip text on backend widget", exc_info=True)
+        try:
+            self._backend_widget.set_visible(self.visible())
+        except Exception:
+            self._logger.error("Failed to set backend widget visible", exc_info=True)
         self._backend_widget.set_sensitive(self._enabled)
         try:
             # initial stretch policy
@@ -125,11 +139,17 @@ class YInputFieldGtk(YWidget):
 
     def setLabel(self, label):
         self._label = label
+        if self._backend_widget is None:
+            return
         try:
             if hasattr(self, '_lbl') and self._lbl is not None:
                 self._lbl.set_text(str(label))
+                if not label:
+                    self._lbl.set_visible(False)
+                else:
+                    self._lbl.set_visible(True)
         except Exception:
-            pass
+            self._logger.error("setLabel failed", exc_info=True)
 
     def setStretchable(self, dim, new_stretch):
         try:
@@ -203,3 +223,19 @@ class YInputFieldGtk(YWidget):
                 pass
         except Exception:
             pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_visible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
