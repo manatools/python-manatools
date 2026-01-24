@@ -5,7 +5,7 @@ Qt backend: YMenuBar implementation using QMenuBar.
 '''
 from PySide6 import QtWidgets, QtCore, QtGui
 import logging
-from ...yui_common import YWidget, YMenuEvent, YMenuItem
+from ...yui_common import *
 from .commonqt import _resolve_icon
 
 
