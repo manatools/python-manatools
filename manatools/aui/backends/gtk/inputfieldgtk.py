@@ -187,13 +187,16 @@ class YInputFieldGtk(YWidget):
                     line_h = 18
             except Exception:
                 char_w, line_h = 8, 18
+                self._logger.exception("Failed to get entry char size", exc_info=True)
+            lbl_h = 0
             try:
-                lbl_layout = self._lbl.create_pango_layout("M")
-                _, lbl_h = lbl_layout.get_pixel_size()
-                if not lbl_h:
-                    lbl_h = 20
+                if self._lbl.get_visible():
+                    lbl_layout = self._lbl.create_pango_layout("M")
+                    _, lbl_h = lbl_layout.get_pixel_size()
+                    if not lbl_h:
+                        lbl_h = 20
             except Exception:
-                lbl_h = 20
+                self._logger.exception("Failed to get label height", exc_info=True)
             desired_chars = 20
             w_px = int(char_w * desired_chars) + 12
             h_px = int(line_h) + lbl_h + 8
