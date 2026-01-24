@@ -157,7 +157,7 @@ class YInputFieldQt(YWidget):
             if not horiz:
                 self._backend_widget.setFixedWidth(w_px)
             else:
-                self._backend_widget.setMinimumWidth(0)
+                self._backend_widget.setMinimumWidth(w_px)
                 self._backend_widget.setMaximumWidth(16777215)
         except Exception:
             pass
