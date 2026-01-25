@@ -97,8 +97,6 @@ class YPushButtonCurses(YWidget):
         if self._visible is False:
             return
         try:
-            self._x = x
-            self._y = y
             # Center the button label within available width, show underline for mnemonic
             clean = getattr(self, "_clean_label", None) or self._label
             button_text = f"[ {clean} ]"
@@ -119,6 +117,9 @@ class YPushButtonCurses(YWidget):
                 attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
                 if self._focused:
                     attr |= curses.A_BOLD
+
+            self._x = text_x
+            self._y = y
 
             try:
                 window.addstr(y, text_x, draw_text, attr)
