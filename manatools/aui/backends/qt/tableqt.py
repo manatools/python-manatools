@@ -82,6 +82,19 @@ class YTableQt(YSelectionWidget):
             self._table.setEnabled(bool(getattr(self, "_enabled", True)))
         except Exception:
             pass
+        # Apply help text (tooltip) and initial visibility if provided
+        try:
+            if getattr(self, "_help_text", None):
+                try:
+                    self._backend_widget.setToolTip(self._help_text)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            self._backend_widget.setVisible(self.visible())
+        except Exception:
+            pass
         # populate if items already present
         try:
             self.rebuildTable()
@@ -583,3 +596,22 @@ class YTableQt(YSelectionWidget):
                 self._table.setEnabled(bool(enabled))
         except Exception:
             pass
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setVisible(bool(visible))
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setToolTip(help_text)
+                except Exception:
+                    pass
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)

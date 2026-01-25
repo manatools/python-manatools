@@ -130,7 +130,20 @@ class YTableGtk(YSelectionWidget):
                 self._listbox.set_sensitive(bool(getattr(self, "_enabled", True)))
         except Exception:
             pass
-
+        # apply help text (tooltip) and initial visibility
+        try:
+            if getattr(self, "_help_text", None):
+                try:
+                    self._backend_widget.set_tooltip_text(self._help_text)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if hasattr(self._backend_widget, "set_visible"):
+                self._backend_widget.set_visible(self.visible())
+        except Exception:
+            pass
         # connect selection handlers
         if self._multi:
             try:
@@ -480,3 +493,22 @@ class YTableGtk(YSelectionWidget):
                 self._listbox.set_sensitive(bool(enabled))
         except Exception:
             pass
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None and hasattr(self._backend_widget, "set_visible"):
+                self._backend_widget.set_visible(bool(visible))
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.set_tooltip_text(help_text)
+                except Exception:
+                    pass
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)

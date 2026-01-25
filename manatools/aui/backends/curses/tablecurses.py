@@ -60,6 +60,9 @@ class YTableCurses(YSelectionWidget):
         self._selected_items = []
         self._changed_item = None
         self._current_visible_rows = None
+        # widget position
+        self._x = 0
+        self._y = 0
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
@@ -79,6 +82,11 @@ class YTableCurses(YSelectionWidget):
         # Associate backend with self, compute minimal height, and reflect model selection.
         self._backend_widget = self
         self._height = max(3, 1 + min(len(self._items), 6))
+        # ensure visibility affects focusability on creation
+        try:
+            self._can_focus = bool(self._visible)
+        except Exception:
+            pass
         # Build internal selection list from item flags
         sel = []
         try:
@@ -168,6 +176,8 @@ class YTableCurses(YSelectionWidget):
             return s.ljust(width)
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             line = y
             # Header
@@ -190,6 +200,8 @@ class YTableCurses(YSelectionWidget):
                 use_selection_marker = False
             if use_selection_marker:
                 header_line = "    " + header_line
+            self._x = x
+            self._y = line
             try:
                 window.addstr(line, x, header_line[:width], curses.A_BOLD)
             except curses.error:
@@ -461,3 +473,15 @@ class YTableCurses(YSelectionWidget):
 
     def changedItem(self):
         return getattr(self, "_changed_item", None)
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        try:
+            # in curses backend visibility controls whether widget can receive focus
+            self._can_focus = bool(visible)
+        except Exception:
+            pass
+
+    def setHelpText(self, help_text: str):
+        # store help text; curses has no native tooltip but other logic (dialog overlay) may use it
+        super().setHelpText(help_text)
