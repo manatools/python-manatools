@@ -74,7 +74,7 @@ class YTableGtk(YSelectionWidget):
                 else:
                     lbl.set_xalign(0.0)
             except Exception:
-                pass
+               self._logger.exception("Failed to set alignment for header column %d", col, exc_info=True)
             header_grid.attach(lbl, col, 0, 1, 1)
 
         # ListBox inside ScrolledWindow
@@ -83,7 +83,7 @@ class YTableGtk(YSelectionWidget):
             mode = Gtk.SelectionMode.MULTIPLE if self._multi else Gtk.SelectionMode.SINGLE
             listbox.set_selection_mode(mode)
         except Exception:
-            pass
+            self._logger.exception("Failed to set selection mode on ListBox", exc_info=True)
 
         sw = Gtk.ScrolledWindow()
         try:
@@ -150,12 +150,12 @@ class YTableGtk(YSelectionWidget):
                 self._listbox.connect("selected-rows-changed", lambda lb: self._on_selected_rows_changed(lb))                    
                 self._listbox.connect("row-activated", lambda lb, row: self._on_row_selected_for_multi(lb, row))
             except Exception:                   
-                pass
+                self._logger.exception("Failed to connect multi-selection handlers", exc_info=True)
         else:
             try:
                 self._listbox.connect("row-selected", lambda lb, row: self._on_row_selected(lb, row))
             except Exception:
-                pass
+                self._logger.exception("Failed to connect single-selection handler", exc_info=True)
 
         self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 
