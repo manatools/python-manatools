@@ -38,13 +38,13 @@ class YHBoxQt(YWidget):
     def _create_backend_widget(self):
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QHBoxLayout(self._backend_widget)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(1, 1, 1, 1)
         # Keep the layout constrained to its minimum sizeHint so children are not
         # compressed to invisible sizes by parent layouts. This is required in our
         # UI because many child widgets use Preferred/Fixed policies and rely on
         # the layout's minimumSizeHint to be respected.
         layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
-        layout.setSpacing(5)
+        #layout.setSpacing(1)
         
         # Map YWidget weights and stretchable flags to Qt layout stretch factors.
         # Weight semantics: if any child has a positive weight (>0) use those
