@@ -42,6 +42,7 @@ class YRichTextCurses(YWidget):
         self._parsed_lines = None
         self._named_color_pairs = {}
         self._next_color_pid = 20
+        self._preferred_rows = 6 #not used by now
         #tooltip support
         self._x = 0
         self._y = 0
