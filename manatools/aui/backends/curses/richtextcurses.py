@@ -660,6 +660,7 @@ class YRichTextCurses(YWidget):
             if not name:
                 return None
             if not curses.has_colors():
+                self._logger.debug("_get_named_color_pair: terminal has no color support")
                 return None
             # normalize name
             nm = str(name).strip().lower()
