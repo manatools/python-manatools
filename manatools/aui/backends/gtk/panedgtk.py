@@ -146,6 +146,27 @@ class YPanedGtk(YWidget):
         except Exception:
             self._logger.debug("child.set_valign failed", exc_info=True)
 
+    def _configure_paned_behavior(self):
+        """
+        Configure Gtk.Paned to behave like Qt's QSplitter:
+        - allow full collapse of either child (shrink = True on both sides)
+        - let both children participate in resize (resize = True on both sides)
+        """
+        if self._backend_widget is None or Gtk is None:
+            return
+        try:
+            if hasattr(self._backend_widget, "set_shrink_start_child"):
+                self._backend_widget.set_shrink_start_child(True)
+            if hasattr(self._backend_widget, "set_shrink_end_child"):
+                self._backend_widget.set_shrink_end_child(True)
+            if hasattr(self._backend_widget, "set_resize_start_child"):
+                self._backend_widget.set_resize_start_child(True)
+            if hasattr(self._backend_widget, "set_resize_end_child"):
+                self._backend_widget.set_resize_end_child(True)
+            self._logger.debug("Paned behavior configured: shrink(start/end)=True, resize(start/end)=True")
+        except Exception:
+            self._logger.error("Failed to configure paned behavior", exc_info=True)
+
     def _create_backend_widget(self):
         """
         Create the underlying Gtk.Paned with the chosen orientation and attach existing children.
@@ -162,13 +183,11 @@ class YPanedGtk(YWidget):
             self._backend_widget.set_vexpand(True)
             self._backend_widget.set_halign(Gtk.Align.FILL)
             self._backend_widget.set_valign(Gtk.Align.FILL)
-            # Avoid shrinking children below their minimum size
-            if hasattr(self._backend_widget, "set_shrink_start_child"):
-                self._backend_widget.set_shrink_start_child(False)
-            if hasattr(self._backend_widget, "set_shrink_end_child"):
-                self._backend_widget.set_shrink_end_child(False)
         except Exception:
             self._logger.debug("Initial paned size setup failed", exc_info=True)
+
+        # Ensure splitter can fully collapse either child (Qt-like behavior)
+        self._configure_paned_behavior()
 
         # Attach already collected children (like HBox/VBox does)
         for idx, child in enumerate(getattr(self, "_children", [])):
@@ -220,5 +239,7 @@ class YPanedGtk(YWidget):
                 self._logger.warning("YPanedGtk can only manage two children; ignoring extra child")
         except Exception as e:
             self._logger.error("addChild error: %s", e, exc_info=True)
+        # Keep paned behavior consistent after dynamic changes
+        self._configure_paned_behavior()
         # Re-apply overall size policy
         self._apply_size_policy()
