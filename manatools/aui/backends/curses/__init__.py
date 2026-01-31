@@ -26,6 +26,7 @@ from .dumbtabcurses import YDumbTabCurses
 from .slidercurses import YSliderCurses
 from .logviewcurses import YLogViewCurses
 from .timefieldcurses import YTimeFieldCurses
+from .panedcurses import YPanedCurses
 
 __all__ = [
     "YDialogCurses",
@@ -56,5 +57,6 @@ __all__ = [
     "YSliderCurses",
     "YLogViewCurses",
     "YTimeFieldCurses",
-    # ...
+    "YPanedCurses",
+    # ... add new widgets here ...
 ]

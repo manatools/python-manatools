@@ -8,6 +8,7 @@ import sys
 import os
 import time
 import fnmatch
+import logging
 from .yui_common import *
 from .backends.curses import *
 
@@ -679,3 +680,11 @@ class YWidgetFactoryCurses:
             logging.getLogger(__name__).exception("Failed to create YTimeFieldCurses: %s", e)
             raise
 
+    def createPaned(self, parent, dimension: YUIDimension = YUIDimension.YD_HORIZ):
+        """Create a Paned widget (ncurses backend)."""
+        from .backends.curses import YPanedCurses
+        try:
+            return YPanedCurses(parent, dimension)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YPanedCurses: %s", e)
+            raise
