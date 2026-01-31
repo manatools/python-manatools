@@ -483,3 +483,12 @@ class YWidgetFactoryQt:
         except Exception as e:
             logging.getLogger(__name__).exception("Failed to create YTimeFieldQt: %s", e)
             raise
+
+    def createPaned(self, parent, dimension: YUIDimension = YUIDimension.YD_HORIZ):
+        """Create a Paned widget (Qt backend)."""
+        from .backends.qt import YPanedQt
+        try:
+            return YPanedQt(parent, dimension)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YPanedQt: %s", e)
+            raise

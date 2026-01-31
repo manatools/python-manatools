@@ -26,6 +26,7 @@ from .dumbtabqt import YDumbTabQt
 from .sliderqt import YSliderQt
 from .logviewqt import YLogViewQt
 from .timefieldqt import YTimeFieldQt
+from .panedqt import YPanedQt
 
 
 __all__ = [
@@ -57,5 +58,6 @@ __all__ = [
     "YSliderQt",
     "YLogViewQt",
     "YTimeFieldQt",
-    # ...
+    "YPanedQt",
+    # ... add new widgets here ...
 ]
