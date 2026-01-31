@@ -92,7 +92,7 @@ class YVBoxGtk(YWidget):
 
                     def _apply_vweights(*args):
                         try:
-                            alloc = self._backend_widget.get_allocated_height()
+                            alloc = self._backend_widget.get_height()
                             if not alloc or alloc <= 0:
                                 return True
                             spacing = getattr(self._backend_widget, 'get_spacing', lambda: 5)()
@@ -108,7 +108,7 @@ class YVBoxGtk(YWidget):
                             except Exception:
                                 pass
                         except Exception:
-                            pass
+                            self._logger.exception("_apply_vweights: failed", exc_info=True)
                         return False
 
                     try:
@@ -138,9 +138,9 @@ class YVBoxGtk(YWidget):
                 try:
                     self._backend_widget.set_sensitive(enabled)
                 except Exception:
-                    pass
+                    self._logger.exception("_set_backend_enabled: failed to set_sensitive", exc_info=True)
         except Exception:
-            pass
+            self._logger.exception("_set_backend_enabled: failed", exc_info=True)
         # propagate logical enabled state to child widgets so they update their backends
         try:
             for c in list(getattr(self, "_children", []) or []):

@@ -90,7 +90,7 @@ class YHBoxGtk(YWidget):
 
                     def _apply_weights(*args):
                         try:
-                            alloc = self._backend_widget.get_allocated_width()
+                            alloc = self._backend_widget.get_width()
                             if not alloc or alloc <= 0:
                                 return True
                             # subtract spacing and margins conservatively
@@ -107,7 +107,7 @@ class YHBoxGtk(YWidget):
                             except Exception:
                                 pass
                         except Exception:
-                            pass
+                            self._logger.exception("_apply_weights: failed", exc_info=True)
                         # remove idle after first successful sizing; keep size-allocate
                         return False
 
@@ -125,10 +125,10 @@ class YHBoxGtk(YWidget):
                             try:
                                 _apply_weights()
                             except Exception:
-                                pass
+                                self._logger.exception("_on_size_allocate: failed", exc_info=True)
                         self._backend_widget.connect('size-allocate', _on_size_allocate)
                     except Exception:
-                        pass
+                        self._logger.exception("_create_backend_widget: failed to connect size-allocate", exc_info=True)
         except Exception:
             pass
         try:
@@ -143,9 +143,9 @@ class YHBoxGtk(YWidget):
                 try:
                     self._backend_widget.set_sensitive(enabled)
                 except Exception:
-                    pass
+                    self._logger.exception("_set_backend_enabled: failed to set_sensitive", exc_info=True)
         except Exception:
-            pass
+            self._logger.exception("_set_backend_enabled: failed", exc_info=True)   
         try:
             for c in list(getattr(self, "_children", []) or []):
                 try:
