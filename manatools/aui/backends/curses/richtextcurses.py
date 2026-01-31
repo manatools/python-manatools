@@ -703,3 +703,6 @@ class YRichTextCurses(YWidget):
         except Exception:
             return None
 
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        self._can_focus = visible
