@@ -107,11 +107,20 @@ class YLabelGtk(YWidget):
                 self._backend_widget.set_markup(markup)
             except Exception:
                 pass
-        self._backend_widget.set_sensitive(self._enabled)
+        if self._help_text:
+            try:
+                self._backend_widget.set_tooltip_text(self._help_text)
+            except Exception:
+                self._logger.error("Failed to set tooltip text on backend widget", exc_info=True)
         try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            self._backend_widget.set_visible(self.visible())
         except Exception:
-            pass
+            self._logger.error("Failed to set backend widget visible", exc_info=True)
+        try:
+            self._backend_widget.set_sensitive(self._enabled)
+        except Exception:
+            self._logger.exception("Failed to set sensitivity on backend widget")
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())    
         try:
             # apply initial size policy according to any stretch hints
             self._apply_size_policy()
@@ -163,3 +172,19 @@ class YLabelGtk(YWidget):
             self._apply_size_policy()
         except Exception:
             pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_visible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)

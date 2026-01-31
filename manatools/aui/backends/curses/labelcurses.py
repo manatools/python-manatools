@@ -130,6 +130,8 @@ class YLabelCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             attr = 0
             if self._is_heading:

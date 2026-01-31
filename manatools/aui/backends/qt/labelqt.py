@@ -89,9 +89,16 @@ class YLabelQt(YWidget):
             self._backend_widget.setFont(font)
         self._backend_widget.setEnabled(bool(self._enabled))
         try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            if self._help_text:
+                self._backend_widget.setToolTip(self._help_text)
         except Exception:
-            pass
+            self._logger.exception("Failed to set tooltip text", exc_info=True)
+        try:
+            self._backend_widget.setVisible(self.visible())
+        except Exception:
+            self._logger.exception("Failed to set widget visibility", exc_info=True)
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        
         try:
             # apply initial size policy according to any stretch hints
             self._apply_size_policy()
@@ -153,3 +160,19 @@ class YLabelQt(YWidget):
             self._apply_size_policy()
         except Exception:
             pass
+    
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setVisible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
