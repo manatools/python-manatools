@@ -535,6 +535,8 @@ class YTreeCurses(YSelectionWidget):
 
     def _draw(self, window, y, x, width, height):
         """Draw tree in provided rectangle. Expects height rows available."""
+        if self._visible is False:
+            return
         try:
             # compute drawing area for items (first row may be label)
             line = y
@@ -614,7 +616,7 @@ class YTreeCurses(YSelectionWidget):
 
     def _handle_key(self, key):
         """Keyboard handling: navigation, expand (SPACE), select (ENTER)."""
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         handled = True
         total = len(self._visible_items)
@@ -766,3 +768,8 @@ class YTreeCurses(YSelectionWidget):
                 pass
         except Exception:
             pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

@@ -92,6 +92,8 @@ class YIntFieldCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # Draw label on the first line, control on the second line (if available)
             line_label = y
@@ -158,7 +160,7 @@ class YIntFieldCurses(YWidget):
 
     def _handle_key(self, key):
         """Handle keys for focusable spin-like behaviour: up/down to change value."""
-        if not getattr(self, '_focused', False) or not self.isEnabled():
+        if not getattr(self, '_focused', False) or not self.isEnabled() or not self.visible():
             return False
         try:
             # If currently editing, handle editing keys
@@ -271,3 +273,8 @@ class YIntFieldCurses(YWidget):
             return False
 
         return False
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

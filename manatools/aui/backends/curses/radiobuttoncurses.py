@@ -108,6 +108,8 @@ class YRadioButtonCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # Use parentheses style for radio: '(*)' if checked else '( )'
             radio_symbol = "(*)" if self._is_checked else "( )"
@@ -140,7 +142,7 @@ class YRadioButtonCurses(YWidget):
                 _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
-        if not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         # Space or Enter to select radio
         if key in (ord(' '), ord('\n'), curses.KEY_ENTER):
@@ -191,3 +193,8 @@ class YRadioButtonCurses(YWidget):
                 self._logger.error("_select error", exc_info=True)
             except Exception:
                 _mod_logger.error("_select error", exc_info=True)
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

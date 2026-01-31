@@ -102,6 +102,8 @@ class YLogViewCurses(YWidget):
 
     # curses drawing
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             line = y
             # label
@@ -195,7 +197,7 @@ class YLogViewCurses(YWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
 
         handled = True
@@ -227,3 +229,8 @@ class YLogViewCurses(YWidget):
 
     def _set_backend_enabled(self, enabled):
         pass
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

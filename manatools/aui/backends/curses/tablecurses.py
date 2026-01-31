@@ -283,7 +283,7 @@ class YTableCurses(YSelectionWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         handled = True
         if key == curses.KEY_UP:
@@ -476,12 +476,5 @@ class YTableCurses(YSelectionWidget):
 
     def setVisible(self, visible: bool = True):
         super().setVisible(visible)
-        try:
-            # in curses backend visibility controls whether widget can receive focus
-            self._can_focus = bool(visible)
-        except Exception:
-            pass
-
-    def setHelpText(self, help_text: str):
-        # store help text; curses has no native tooltip but other logic (dialog overlay) may use it
-        super().setHelpText(help_text)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

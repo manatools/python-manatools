@@ -63,6 +63,8 @@ class YTimeFieldCurses(YWidget):
         pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             line = y
             label_to_show = self._label if self._label else (self.debugLabel() if hasattr(self, 'debugLabel') else "unknown")
@@ -99,7 +101,7 @@ class YTimeFieldCurses(YWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
 
         if self._editing:
@@ -173,3 +175,8 @@ class YTimeFieldCurses(YWidget):
         v = max(lo, min(hi, v))
         setattr(self, name, v)
         self._cancel_edit()
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

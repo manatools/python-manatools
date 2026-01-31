@@ -172,7 +172,3 @@ class YProgressBarCurses(YWidget):
                 self._logger.error("_draw error: %s", e, exc_info=True)
             except Exception:
                 _mod_logger.error("_draw error: %s", e, exc_info=True)
-
-    def setVisible(self, visible=True):
-            super().setVisible(visible)
-            self._can_focus = visible

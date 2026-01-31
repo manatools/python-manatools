@@ -72,6 +72,8 @@ class YImageCurses(YWidget):
             self._logger.exception("_create_backend_widget failed")
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             if width <= 0 or height <= 0:
                 return

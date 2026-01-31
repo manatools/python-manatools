@@ -118,6 +118,7 @@ class YPanedCurses(YWidget):
             if self._children[idx] is None:
                 return
             self._hidden[idx] = not bool(visible)
+            self._children[idx].setVisible(visible)
             self._logger.debug("Child %d visibility -> %s", idx, "visible" if visible else "hidden")
         except Exception as e:
             self._logger.error("_set_child_visible error: %s", e, exc_info=True)

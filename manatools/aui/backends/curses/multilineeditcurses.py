@@ -155,6 +155,8 @@ class YMultiLineEditCurses(YWidget):
             return max(1, getattr(self, '_height', 1))
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # Draw label (if present) and up to available lines
             line = y
@@ -241,7 +243,7 @@ class YMultiLineEditCurses(YWidget):
         - PageUp/PageDown scroll the view.
         - Ctrl-S posts ValueChanged (explicit commit), but we also post on each edit.
         """
-        if not getattr(self, '_focused', False) or not self.isEnabled():
+        if not getattr(self, '_focused', False) or not self.isEnabled() or not self.visible():
             return False
 
         try:
@@ -374,3 +376,8 @@ class YMultiLineEditCurses(YWidget):
             return True
         except Exception:
             return False
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

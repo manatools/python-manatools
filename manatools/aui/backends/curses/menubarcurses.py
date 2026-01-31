@@ -161,6 +161,8 @@ class YMenuBarCurses(YWidget):
         return None
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # remember bar area
             self._bar_y = y
@@ -422,7 +424,7 @@ class YMenuBarCurses(YWidget):
                 pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         handled = True
         if key in (curses.KEY_LEFT, ord('h')):
@@ -650,3 +652,8 @@ class YMenuBarCurses(YWidget):
                         return True
             handled = False
         return handled
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

@@ -159,7 +159,7 @@ class YInputFieldCurses(YWidget):
                 _mod_logger.error("_draw curses.error: %s", e, exc_info=True)
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
             
         handled = True

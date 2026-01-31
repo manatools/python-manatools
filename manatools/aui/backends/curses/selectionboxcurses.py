@@ -207,6 +207,8 @@ class YSelectionBoxCurses(YSelectionWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             line = y
             # draw label if present
@@ -261,7 +263,7 @@ class YSelectionBoxCurses(YSelectionWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         self._logger.debug("_handle_key called key=%r focused=%s hover_index=%d", key, self._focused, self._hover_index)
         handled = True
@@ -366,3 +368,8 @@ class YSelectionBoxCurses(YSelectionWidget):
             self._logger.debug("addItem: label=<%s> selected=<%s> value=<%r>", new_item.label(), selected_flag, self._value)
         except Exception:
             pass
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

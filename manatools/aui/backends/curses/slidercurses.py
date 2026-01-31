@@ -86,6 +86,8 @@ class YSliderCurses(YWidget):
         pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             line = y
             # label on top if present
@@ -167,7 +169,7 @@ class YSliderCurses(YWidget):
             pass
 
     def _handle_key(self, key):
-        if not self._focused or not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
 
         handled = True
@@ -258,3 +260,8 @@ class YSliderCurses(YWidget):
             return
         self.setValue(v)
         self._cancel_edit()
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)

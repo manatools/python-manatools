@@ -98,6 +98,8 @@ class YCheckBoxCurses(YWidget):
             pass
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             checkbox_symbol = "[X]" if self._is_checked else "[ ]"
             text = f"{checkbox_symbol} {self._label}"
@@ -123,7 +125,7 @@ class YCheckBoxCurses(YWidget):
             pass
 
     def _handle_key(self, key):
-        if not self.isEnabled():
+        if not self._focused or not self.isEnabled() or not self.visible():
             return False
         # Space or Enter to toggle
         if key in (ord(' '), ord('\n'), curses.KEY_ENTER):
@@ -142,3 +144,8 @@ class YCheckBoxCurses(YWidget):
                 dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
             else:
                 print(f"CheckBox toggled (no dialog found): {self._label} = {self._is_checked}")
+
+    def setVisible(self, visible: bool = True):
+        super().setVisible(visible)
+        # in curses backend visibility controls whether widget can receive focus
+        self._can_focus = bool(visible)
