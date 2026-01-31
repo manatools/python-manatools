@@ -14,6 +14,10 @@ import logging
 from ...yui_common import *
 
 class YProgressBarQt(YWidget):
+	"""Qt6 (PySide6) progress bar with optional label above it.
+	Provides value/max management and respects visibility and tooltip (help text).
+	"""
+
 	def __init__(self, parent=None, label="", maxValue=100):
 		super().__init__(parent)
 		self._label = label
@@ -32,14 +36,20 @@ class YProgressBarQt(YWidget):
 
 	def setLabel(self, newLabel):
 		try:
-			self._label = str(newLabel)
+			self._label = str(newLabel) if isinstance(newLabel, str) else newLabel
 			if getattr(self, "_label_widget", None) is not None:
 				try:
-					self._label_widget.setText(self._label)
+					is_valid = isinstance(self._label, str) and bool(self._label.strip())
+					if is_valid:
+						self._label_widget.setText(self._label)
+						self._label_widget.setVisible(True)
+					else:
+						# hide the label if not a valid string
+						self._label_widget.setVisible(False)
 				except Exception:
-					pass
+					self._logger.exception("setLabel: failed to update QLabel")
 		except Exception:
-			pass
+			self._logger.exception("setLabel: unexpected error")
 
 	def maxValue(self):
 		return int(self._max_value)
@@ -75,11 +85,20 @@ class YProgressBarQt(YWidget):
 			v_policy = QtWidgets.QSizePolicy.Expanding if self.stretchable(YUIDimension.YD_VERT) else QtWidgets.QSizePolicy.Fixed
 			container.setSizePolicy(h_policy, v_policy)
 
-			# Place label above the progress bar with no spacing so they remain attached
-			lbl = QtWidgets.QLabel(self._label) if self._label else None
-			if lbl is not None:
-				lbl.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-				layout.addWidget(lbl)
+			# Place label above the progress bar; always create then show/hide based on validity
+			lbl = QtWidgets.QLabel()
+			lbl.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+			layout.addWidget(lbl)
+			try:
+				is_valid = isinstance(self._label, str) and bool(self._label.strip())
+				if is_valid:
+					lbl.setText(self._label)
+					lbl.setVisible(True)
+				else:
+					lbl.setVisible(False)
+			except Exception:
+				# be safe: hide if anything goes wrong
+				lbl.setVisible(False)
 
 			prog = QtWidgets.QProgressBar()
 			prog.setRange(0, max(1, int(self._max_value)))
@@ -94,6 +113,19 @@ class YProgressBarQt(YWidget):
 			self._label_widget = lbl
 			self._progress_widget = prog
 			self._backend_widget.setEnabled(bool(self._enabled))
+			# Apply initial tooltip and visibility like other Qt widgets (e.g., combobox)
+			try:
+				if getattr(self, "_help_text", None):
+					try:
+						self._backend_widget.setToolTip(self._help_text)
+					except Exception:
+						self._logger.exception("Failed to set tooltip on progressbar")
+			except Exception:
+				self._logger.exception("Tooltip setup error on progressbar")
+			try:
+				self._backend_widget.setVisible(self.visible())
+			except Exception:
+				self._logger.exception("Failed to set initial visibility on progressbar")
 			try:
 				self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
 			except Exception:
@@ -102,6 +134,7 @@ class YProgressBarQt(YWidget):
 			self._backend_widget = None
 			self._label_widget = None
 			self._progress_widget = None
+			self._logger.exception("_create_backend_widget failed")
 
 	def _set_backend_enabled(self, enabled):
 		try:
@@ -165,3 +198,24 @@ class YProgressBarQt(YWidget):
 			return False
 		except Exception:
 			return False
+
+	def setVisible(self, visible=True):
+		"""Set widget visibility and propagate it to the Qt backend widget."""
+		super().setVisible(visible)
+		try:
+			if getattr(self, "_backend_widget", None) is not None:
+				self._backend_widget.setVisible(bool(visible))
+		except Exception:
+			self._logger.exception("setVisible failed")
+
+	def setHelpText(self, help_text: str):
+		"""Set help text (tooltip) and propagate it to the Qt backend widget."""
+		super().setHelpText(help_text)
+		try:
+			if getattr(self, "_backend_widget", None) is not None:
+				try:
+					self._backend_widget.setToolTip(help_text)
+				except Exception:
+					self._logger.exception("Failed to apply tooltip to backend widget")
+		except Exception:
+			self._logger.exception("setHelpText failed")
