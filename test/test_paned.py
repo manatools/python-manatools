@@ -67,6 +67,8 @@ def test_paned(backend_name=None):
         mainVbox = factory.createVBox( dialog )
         paned_h = factory.createPaned(mainVbox, yui.YUIDimension.YD_HORIZ)
         tree = factory.createTree(paned_h, "Test Tree")
+        tree.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tree.setStretchable(yui.YUIDimension.YD_VERT, True)
         items = []
         for i in range(1, 6):
             itm = yui.YTreeItem(f"Item {i}", is_open=(i == 1))
@@ -77,19 +79,32 @@ def test_paned(backend_name=None):
             items.append(itm)
             tree.addItem(itm)
         header = yui.YTableHeader()
-        header.addColumn('date', alignment=yui.YAlignmentType.YAlignEnd)
+        header.addColumn('num.', alignment=yui.YAlignmentType.YAlignEnd)
         header.addColumn('document', alignment=yui.YAlignmentType.YAlignBegin)        
         table_h = factory.createTable(paned_h, header)
+        table_h.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        table_h.setStretchable(yui.YUIDimension.YD_VERT, True)
+        items = []
+        for i in range(1, 7):
+            itm = yui.YTableItem(f"Row {i}")
+            itm.addCell(str(i))
+            itm.addCell(f"test_{i}")
+            items.append(itm)
+            table_h.addItem(itm)
         paned_v = factory.createPaned(mainVbox, yui.YUIDimension.YD_VERT)
         rich = factory.createRichText(
             paned_v,
             "<h2>RichText sample</h2><ul><li>Line 1</li><li>Line 2</li></ul>Visit: https://example.org",    
         )
+        rich.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        rich.setStretchable(yui.YUIDimension.YD_VERT, True)
         header = yui.YTableHeader()
         header.addColumn('num.', alignment=yui.YAlignmentType.YAlignEnd)
         header.addColumn('info', alignment=yui.YAlignmentType.YAlignBegin)
         header.addColumn('', checkBox=True, alignment=yui.YAlignmentType.YAlignCenter)
         table_v = factory.createTable(paned_v, header)
+        table_v.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        table_v.setStretchable(yui.YUIDimension.YD_VERT, True)
         items = []
         for i in range(1, 7):
             itm = yui.YTableItem(f"Row {i}")
@@ -104,7 +119,6 @@ def test_paned(backend_name=None):
         #
         # Event loop
         #
-        #valueField.setText( "???" )
         while True:
           event = dialog.waitForEvent()
           if not event:
@@ -115,14 +129,23 @@ def test_paned(backend_name=None):
                 dialog.destroy()
                 break
           elif typ == yui.YEventType.WidgetEvent:
-              wdg = event.widget()          
-              if wdg == btn_quit:
-                dialog.destroy()
-                break
-              if wdg == tree:
-                  sel = tree.selectedItem()
-                  if sel:
-                      root_logger.debug(f"Tree selection changed: {sel.label()}")
+                wdg = event.widget()          
+                if wdg == btn_quit:
+                    dialog.destroy()
+                    break
+                if wdg == tree:
+                    sel = tree.selectedItem()
+                    if sel:
+                        root_logger.debug(f"Tree selection changed: {sel.label()}")
+                elif wdg == table_h:
+                    sel = table_h.selectedItem()
+                    if sel:
+                        root_logger.debug(f"Horizontal Table selection changed: {sel.label(0)} {sel.label(1)}")
+                elif wdg == table_v:
+                    sel = table_v.selectedItem()
+                    if sel:
+                        root_logger.debug(f"Vertical Table selection changed: {sel.label(0)} {sel.label(1)}")   
+            
           else:
               print(f"Unhandled event type: {typ}")
     
