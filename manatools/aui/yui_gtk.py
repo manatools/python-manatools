@@ -907,3 +907,12 @@ class YWidgetFactoryGtk:
     def createFrame(self, parent, label: str=""):
         """Create a Frame widget."""
         return YFrameGtk(parent, label)
+
+    def createPaned(self, parent, dimension: YUIDimension = YUIDimension.YD_HORIZ):
+        """Create a Paned widget (GTK backend)."""
+        from .backends.gtk import YPanedGtk
+        try:
+            return YPanedGtk(parent, dimension)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Failed to create YPanedGtk: %s", e)
+            raise

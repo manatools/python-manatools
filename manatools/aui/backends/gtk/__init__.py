@@ -26,6 +26,7 @@ from .dumbtabgtk import YDumbTabGtk
 from .slidergtk import YSliderGtk
 from .logviewgtk import YLogViewGtk
 from .timefieldgtk import YTimeFieldGtk
+from .panedgtk import YPanedGtk
 
 __all__ = [
     "YDialogGtk",
@@ -56,5 +57,6 @@ __all__ = [
     "YSliderGtk",
     "YLogViewGtk",
     "YTimeFieldGtk",
+    "YPanedGtk",
     # ...
 ]
