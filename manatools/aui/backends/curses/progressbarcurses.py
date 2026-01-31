@@ -31,6 +31,8 @@ class YProgressBarCurses(YWidget):
         self._label = label
         self._max_value = int(maxValue) if maxValue is not None else 100
         self._value = 0
+        self._x = 0
+        self._y = 0
         # progress bar occupies 2 rows when label present, otherwise 1
         self._height = 2 if self._label else 1
         self._backend_widget = None
@@ -100,6 +102,8 @@ class YProgressBarCurses(YWidget):
                 _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             if width <= 0 or height <= 0:
                 return
@@ -143,6 +147,9 @@ class YProgressBarCurses(YWidget):
                 bar_attr = curses.A_REVERSE if self.isEnabled() else curses.A_DIM
                 perc_attr = curses.A_BOLD if self.isEnabled() else curses.A_DIM
 
+                # Tooltip positioning
+                self._x = x
+                self._y = bar_y
                 # Draw base bar
                 try:
                     window.addstr(bar_y, x, bar_str[:width], bar_attr)
