@@ -1,5 +1,14 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
+'''
+Python manatools.aui.backends.gtk contains all GTK backend classes
+
+License: LGPLv2+
+
+Author:  Angelo Naselli <anaselli@linux.it>
+
+@package manatools.aui.backends.gtk
+'''
 """
 YPanedGtk: GTK4 Paned widget wrapper.
 
