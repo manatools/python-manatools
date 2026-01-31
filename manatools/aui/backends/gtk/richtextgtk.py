@@ -196,18 +196,28 @@ class YRichTextGtk(YWidget):
         try:
             self._backend_widget.set_sensitive(bool(self._enabled))
         except Exception:
-            pass
+            self._logger.error("Failed to set backend widget sensitive state", exc_info=True)
+        if self._help_text:
+            try:
+                self._backend_widget.set_tooltip_text(self._help_text)
+            except Exception:
+                self._logger.error("Failed to set tooltip text on backend widget", exc_info=True)
         try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            self._backend_widget.set_visible(self.visible())
         except Exception:
-            pass
-
+            self._logger.error("Failed to set backend widget visible", exc_info=True)
+        try:
+            self._backend_widget.set_sensitive(self._enabled)
+        except Exception:
+            self._logger.exception("Failed to set sensitivity on backend widget")
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        
     def _set_backend_enabled(self, enabled):
         try:
             if getattr(self, "_backend_widget", None) is not None:
                 self._backend_widget.set_sensitive(bool(enabled))
         except Exception:
-            pass
+            self._logger.exception("Failed to set enabled state", exc_info=True)
 
     def _html_to_pango_markup(self, s: str) -> str:
         """Convert a limited subset of HTML into GTK/Pango markup.
@@ -228,7 +238,7 @@ class YRichTextGtk(YWidget):
         t = re.sub(r"</ol\s*>", "\n", t, flags=re.IGNORECASE)
         t = re.sub(r"<li\s*>", "• ", t, flags=re.IGNORECASE)
         t = re.sub(r"</li\s*>", "\n", t, flags=re.IGNORECASE)
-        # Headings -> bold span with size
+        # Headings -> bold span with size   
         sizes = {1: "xx-large", 2: "x-large", 3: "large", 4: "medium", 5: "small", 6: "x-small"}
         for n, sz in sizes.items():
             t = re.sub(fr"<h{n}\s*>", f"<span weight=\"bold\" size=\"{sz}\">", t, flags=re.IGNORECASE)
@@ -236,3 +246,19 @@ class YRichTextGtk(YWidget):
         # Allow basic formatting tags and <a href>; strip all other tags
         t = re.sub(r"</?(?!span\b|a\b|b\b|i\b|u\b)[a-zA-Z0-9]+\b[^>]*>", "", t)
         return t
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_visible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)

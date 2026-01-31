@@ -42,6 +42,9 @@ class YRichTextCurses(YWidget):
         self._parsed_lines = None
         self._named_color_pairs = {}
         self._next_color_pid = 20
+        #tooltip support
+        self._x = 0
+        self._y = 0
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
@@ -310,6 +313,8 @@ class YRichTextCurses(YWidget):
             self._scroll_offset = self._hover_line - visible + 1
 
     def _draw(self, window, y, x, width, height):
+        if self._visible is False:
+            return
         try:
             # draw border
             try:
@@ -320,6 +325,8 @@ class YRichTextCurses(YWidget):
 
             inner_x = x + 1
             inner_y = y + 1
+            self._x = inner_x
+            self._y = inner_y
             inner_w = max(1, width - 2)
             inner_h = max(1, height - 2)
 
@@ -694,3 +701,4 @@ class YRichTextCurses(YWidget):
                 return None
         except Exception:
             return None
+

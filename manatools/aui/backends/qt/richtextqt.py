@@ -150,9 +150,14 @@ class YRichTextQt(YWidget):
         try:
             sp = tb.sizePolicy()
             try:
-                sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
-                sp.setVerticalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
+                weight_v = int(self.weight(YUIDimension.YD_VERT))
+                weight_h = int(self.weight(YUIDimension.YD_HORIZ))
+                horiz = QtWidgets.QSizePolicy.Expanding if bool(self.stretchable(YUIDimension.YD_HORIZ) or weight_h) else QtWidgets.QSizePolicy.Fixed                
+                vert = QtWidgets.QSizePolicy.Expanding if bool(self.stretchable(YUIDimension.YD_VERT) or weight_v) else QtWidgets.QSizePolicy.Fixed
+                sp.setHorizontalPolicy(horiz)
+                sp.setVerticalPolicy(vert)
             except Exception:
+                self._logger.exception("Error setting size policy weights", exc_info=True)
                 try:
                     sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)
                     sp.setVerticalPolicy(QtWidgets.QSizePolicy.Expanding)
@@ -166,15 +171,37 @@ class YRichTextQt(YWidget):
         try:
             self._backend_widget.setEnabled(bool(self._enabled))
         except Exception:
-            pass
+            self._logger.exception("Failed to set enabled state", exc_info=True)
         try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+            if self._help_text:
+                self._backend_widget.setToolTip(self._help_text)
         except Exception:
-            pass
-
+            self._logger.exception("Failed to set tooltip text", exc_info=True)
+        try:
+            self._backend_widget.setVisible(self.visible())
+        except Exception:
+            self._logger.exception("Failed to set widget visibility", exc_info=True)
+        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+        
     def _set_backend_enabled(self, enabled):
         try:
             if getattr(self, "_backend_widget", None) is not None:
                 self._backend_widget.setEnabled(bool(enabled))
         except Exception:
-            pass
+            self._logger.exception("Failed to set enabled state", exc_info=True)
+
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setVisible(visible)
+        except Exception:
+            self._logger.exception("setVisible failed", exc_info=True)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
