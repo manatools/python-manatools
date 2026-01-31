@@ -464,6 +464,16 @@ class YDialogCurses(YSingleChildContainerWidget):
                     self._resize_pending_until = time.time() + 0.15
                     continue
 
+                # Handle hide/show for paned via focused child
+                if key in (ord('+'), ord('-')):
+                    try:
+                        if self._bubble_key_to_paned(key):
+                            # handled by a YPanedCurses ancestor; force redraw
+                            self._last_draw_time = 0
+                            continue
+                    except Exception:
+                        pass
+
                 # Focus navigation
                 if key == ord('\t'):
                     self._cycle_focus(forward=True)
@@ -585,3 +595,24 @@ class YDialogCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         return False
+
+    def _bubble_key_to_paned(self, key) -> bool:
+        """Send '+' or '-' to the nearest YPanedCurses ancestor of the focused widget."""
+        try:
+            fw = self._focused_widget
+            w = fw
+            while w is not None:
+                try:
+                    if hasattr(w, "widgetClass") and w.widgetClass() == "YPaned":
+                        if hasattr(w, "_handle_key"):
+                            return bool(w._handle_key(key))
+                        return False
+                except Exception:
+                    pass
+                try:
+                    w = w.parent() if hasattr(w, "parent") else getattr(w, "_parent", None)
+                except Exception:
+                    w = getattr(w, "_parent", None)
+            return False
+        except Exception:
+            return False
