@@ -39,14 +39,19 @@ class YProgressBarGtk(YWidget):
 
 	def setLabel(self, newLabel):
 		try:
-			self._label = str(newLabel)
+			self._label = str(newLabel) if isinstance(newLabel, str) else newLabel
 			if getattr(self, "_label_widget", None) is not None:
 				try:
-					self._label_widget.set_text(self._label)
+					is_valid = isinstance(self._label, str) and bool(self._label.strip())
+					if is_valid:
+						self._label_widget.set_text(self._label)
+						self._label_widget.set_visible(True)
+					else:
+						self._label_widget.set_visible(False)
 				except Exception:
-					pass
+					self._logger.exception("setLabel: failed to update Gtk.Label")
 		except Exception:
-			pass
+			self._logger.exception("setLabel: unexpected error")
 
 	def maxValue(self):
 		return int(self._max_value)
@@ -76,9 +81,19 @@ class YProgressBarGtk(YWidget):
 		container.set_halign(Gtk.Align.FILL)
 
 		# Label
-		self._label_widget = Gtk.Label(label=self._label)
+		self._label_widget = Gtk.Label()
 		self._label_widget.set_halign(Gtk.Align.START)
 		container.append(self._label_widget)
+		try:
+			is_valid = isinstance(self._label, str) and bool(self._label.strip())
+			if is_valid:
+				self._label_widget.set_text(self._label)
+				self._label_widget.set_visible(True)
+			else:
+				self._label_widget.set_visible(False)
+		except Exception:
+			# be safe: hide if anything goes wrong
+			self._label_widget.set_visible(False)
 
 		# Progress Bar
 		self._progress_widget = Gtk.ProgressBar()
@@ -93,7 +108,39 @@ class YProgressBarGtk(YWidget):
 			self._backend_widget.set_sensitive(self._enabled)
 		except Exception:
 			pass
+		if self._help_text:
+			try:
+				self._backend_widget.set_tooltip_text(self._help_text)
+			except Exception:
+				self._logger.error("Failed to set tooltip text on backend widget", exc_info=True)
 		try:
-			self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+			self._backend_widget.set_visible(self.visible())
 		except Exception:
-			pass
+			self._logger.error("Failed to set backend widget visible", exc_info=True)
+		try:
+			self._backend_widget.set_sensitive(self._enabled)
+		except Exception:
+			self._logger.exception("Failed to set sensitivity on backend widget")
+
+		self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+
+	def setVisible(self, visible: bool = True):
+		"""Set widget visibility and propagate it to the GTK backend widget."""
+		super().setVisible(visible)
+		try:
+			if getattr(self, "_backend_widget", None) is not None:
+				self._backend_widget.set_visible(bool(visible))
+		except Exception:
+			self._logger.exception("setVisible failed")
+	
+	def setHelpText(self, help_text: str):
+		"""Set help text (tooltip) and propagate it to the GTK backend widget."""
+		super().setHelpText(help_text)
+		try:
+			if getattr(self, "_backend_widget", None) is not None:
+				try:
+					self._backend_widget.set_tooltip_text(help_text)
+				except Exception:
+					self._logger.exception("Failed to apply tooltip to backend widget")
+		except Exception:
+			self._logger.exception("setHelpText failed")
