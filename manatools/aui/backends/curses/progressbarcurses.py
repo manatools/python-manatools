@@ -36,6 +36,8 @@ class YProgressBarCurses(YWidget):
         # progress bar occupies 2 rows when label present, otherwise 1
         self._height = 2 if self._label else 1
         self._backend_widget = None
+        #default stretchable in horizontal direction
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         if not self._logger.handlers and not logging.getLogger().handlers:
             for h in _mod_logger.handlers:
