@@ -323,22 +323,24 @@ class YRichTextCurses(YWidget):
             except curses.error:
                 pass
 
-            inner_x = x + 1
-            inner_y = y + 1
+            inner_x = x
+            inner_y = y
             self._x = inner_x
             self._y = inner_y
-            inner_w = max(1, width - 2)
-            inner_h = max(1, height - 2)
-
-            # reserve rightmost column for vertical scrollbar, bottom row for horizontal scrollbar
-            bar_w = 1 if inner_w > 2 else 0
-            content_w = inner_w - bar_w
-            bar_h_row = 1 if inner_h > 2 else 0
-            content_h = inner_h - bar_h_row
+            inner_w = max(1, width)
+            inner_h = max(1, height)
 
             # obtain lines (prefer parsed rich lines if available)
             lines = self._parsed_lines if (not self._plain and getattr(self, '_parsed_lines', None)) else self._lines()
             total_rows = len(lines)
+            max_row_len = max(len(row) for row in lines) if lines else 0
+
+            # reserve rightmost column for vertical scrollbar, bottom row for horizontal scrollbar
+            bar_w = 1 if inner_w > 2 and max_row_len > inner_w else 0            
+            content_w = inner_w - bar_w
+            bar_h_row = 1 if inner_h > 2 and total_rows > inner_h else 0
+            content_h = inner_h - bar_h_row
+
             visible = min(total_rows, max(1, content_h))
             # remember for visibility calculations
             self._last_content_w = content_w
