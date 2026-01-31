@@ -37,6 +37,82 @@ class YRichTextGtk(YWidget):
     def widgetClass(self):
         return "YRichText"
 
+    # --- size policy helpers ---
+    def setStretchable(self, dimension, stretchable):
+        """Override stretchable to immediately re-apply the GTK size policy."""
+        try:
+            # Call parent implementation first
+            super().setStretchable(dimension, stretchable)
+        except Exception:
+            self._logger.exception("setStretchable: base implementation failed")
+        # Apply to current backend/content
+        self._apply_size_policy()
+
+    def _apply_size_policy(self):
+        """Apply GTK4 expand and alignment based on stretch flags and weights.
+
+        - Stretch or positive weight => expand True and FILL.
+        - Otherwise => expand False and START.
+        - Applies to the Gtk.ScrolledWindow and content widget (Label/TextView).
+        """
+        try:
+            h_stretch = bool(self.stretchable(YUIDimension.YD_HORIZ))
+            v_stretch = bool(self.stretchable(YUIDimension.YD_VERT))
+            try:
+                w_h = float(self.weight(YUIDimension.YD_HORIZ))
+            except Exception:
+                w_h = 0.0
+            try:
+                w_v = float(self.weight(YUIDimension.YD_VERT))
+            except Exception:
+                w_v = 0.0
+
+            eff_h = bool(h_stretch or (w_h > 0.0))
+            eff_v = bool(v_stretch or (w_v > 0.0))
+
+            targets = []
+            if getattr(self, "_backend_widget", None) is not None:
+                targets.append(self._backend_widget)
+            if getattr(self, "_content_widget", None) is not None:
+                targets.append(self._content_widget)
+
+            for ww in targets:
+                try:
+                    ww.set_hexpand(eff_h)
+                except Exception:
+                    self._logger.debug("set_hexpand failed on %s", type(ww), exc_info=True)
+                try:
+                    ww.set_halign(Gtk.Align.FILL if eff_h else Gtk.Align.START)
+                except Exception:
+                    self._logger.debug("set_halign failed on %s", type(ww), exc_info=True)
+                try:
+                    ww.set_vexpand(eff_v)
+                except Exception:
+                    self._logger.debug("set_vexpand failed on %s", type(ww), exc_info=True)
+                try:
+                    ww.set_valign(Gtk.Align.FILL if eff_v else Gtk.Align.START)
+                except Exception:
+                    self._logger.debug("set_valign failed on %s", type(ww), exc_info=True)
+
+            # Enforce left/top content alignment for Label/TextView
+            try:
+                cw = getattr(self, "_content_widget", None)
+                if isinstance(cw, Gtk.Label):
+                    cw.set_justify(Gtk.Justification.LEFT)
+                    cw.set_xalign(0.0)
+                elif isinstance(cw, Gtk.TextView):
+                    cw.set_monospace(False)
+                    cw.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            except Exception:
+                self._logger.debug("additional content alignment failed", exc_info=True)
+
+            self._logger.debug(
+                "_apply_size_policy: h_stretch=%s v_stretch=%s w_h=%s w_v=%s eff_h=%s eff_v=%s",
+                h_stretch, v_stretch, w_h, w_v, eff_h, eff_v
+            )
+        except Exception:
+            self._logger.exception("_apply_size_policy: unexpected failure")
+
     def setValue(self, newValue: str):
         self._text = newValue or ""
         w = getattr(self, "_content_widget", None)
@@ -84,6 +160,7 @@ class YRichTextGtk(YWidget):
         # rebuild content widget to reflect mode
         if getattr(self, "_backend_widget", None) is not None:
             self._create_content()
+            self._apply_size_policy()
             self.setValue(self._text)
 
     def autoScrollDown(self) -> bool:
@@ -140,13 +217,14 @@ class YRichTextGtk(YWidget):
                 except Exception:
                     lbl.set_text(converted)
                 try:
-                    lbl.set_selectable(False)
+                    lbl.set_selectable(False)  # keep it non-selectable; avoids odd sizing in some themes
                 except Exception:
                     pass
                 try:
                     lbl.set_wrap(True)
                     lbl.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
                     lbl.set_xalign(0.0)
+                    lbl.set_justify(Gtk.Justification.LEFT)
                 except Exception:
                     pass
                 # connect link activation
@@ -173,15 +251,13 @@ class YRichTextGtk(YWidget):
     def _create_backend_widget(self):
         sw = Gtk.ScrolledWindow()
         try:
+            # let size policy decide final expand/align; start with sane defaults
             sw.set_hexpand(True)
             sw.set_vexpand(True)
-            try:
-                sw.set_halign(Gtk.Align.FILL)
-                sw.set_valign(Gtk.Align.FILL)
-            except Exception:
-                pass
+            sw.set_halign(Gtk.Align.FILL)
+            sw.set_valign(Gtk.Align.FILL)
         except Exception:
-            pass
+            self._logger.debug("Failed to set initial expand/align on scrolled window", exc_info=True)
 
         self._create_content()
         try:
@@ -190,8 +266,12 @@ class YRichTextGtk(YWidget):
             try:
                 sw.add(self._content_widget)
             except Exception:
-                pass
+                self._logger.debug("Failed to attach content to scrolled window", exc_info=True)
         self._backend_widget = sw
+
+        # Apply consistent size policy after backend and content exist
+        self._apply_size_policy()
+
         # respect initial enabled state
         try:
             self._backend_widget.set_sensitive(bool(self._enabled))
