@@ -136,18 +136,20 @@ class YRichTextGtk(YWidget):
                 try:
                     w.set_use_markup(True)
                 except Exception:
-                    pass
+                    self._logger.debug("set_use_markup failed on Gtk.Label", exc_info=True)
                 # Convert common HTML tags to Pango markup supported by Gtk.Label
                 converted = self._html_to_pango_markup(self._text)
                 try:
                     w.set_markup(converted)
-                except Exception:
+                except Exception as e:
+                    # If markup fails, log and fallback to plain text
+                    self._logger.error("set_markup failed; falling back to set_text: %s", e, exc_info=True)
                     try:
-                        w.set_text(converted)
+                        w.set_text(re.sub(r"<[^>]+>", "", converted))
                     except Exception:
-                        pass
+                        self._logger.debug("set_text failed on Gtk.Label", exc_info=True)
         except Exception:
-            pass
+            self._logger.exception("setValue failed", exc_info=True)
 
     def value(self) -> str:
         return self._text
@@ -188,45 +190,46 @@ class YRichTextGtk(YWidget):
                 try:
                     tv.set_editable(False)
                 except Exception:
-                    pass
+                    self._logger.debug("set_editable failed on Gtk.TextView", exc_info=True)
                 try:
                     tv.set_cursor_visible(False)
                 except Exception:
-                    pass
+                    self._logger.debug("set_cursor_visible failed on Gtk.TextView", exc_info=True)
                 try:
                     tv.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
                 except Exception:
-                    pass
+                    self._logger.debug("set_wrap_mode failed on Gtk.TextView", exc_info=True)
                 self._content_widget = tv
                 # set initial text
                 try:
                     buf = tv.get_buffer()
                     buf.set_text(self._text)
                 except Exception:
-                    pass
+                    self._logger.debug("set_text failed on Gtk.TextBuffer", exc_info=True)
             else:
                 lbl = Gtk.Label()
                 try:
                     lbl.set_use_markup(True)
                 except Exception:
-                    pass
+                    self._logger.debug("set_use_markup failed on Gtk.Label", exc_info=True)
                 # Convert HTML to Pango markup for GTK Label
                 converted = self._html_to_pango_markup(self._text)
                 try:
                     lbl.set_markup(converted)
                 except Exception:
+                    self._logger.exception("set_markup failed on Gtk.Label", exc_info=True)
                     lbl.set_text(converted)
                 try:
                     lbl.set_selectable(False)  # keep it non-selectable; avoids odd sizing in some themes
                 except Exception:
-                    pass
+                    self._logger.exception("set_selectable failed on Gtk.Label", exc_info=True) 
                 try:
                     lbl.set_wrap(True)
-                    lbl.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+                    lbl.set_wrap_mode(Gtk.WrapMode.WORD_CHAR) # need Pango.WrapMode
                     lbl.set_xalign(0.0)
                     lbl.set_justify(Gtk.Justification.LEFT)
                 except Exception:
-                    pass
+                    self._logger.debug("set_justify failed on Gtk.Label", exc_info=True)
                 # connect link activation
                 def _on_activate_link(label, uri):
                     try:
@@ -236,15 +239,16 @@ class YRichTextGtk(YWidget):
                             # emit a MenuEvent for link activation (back-compat)
                             dlg._post_event(YMenuEvent(item=None, id=uri))
                     except Exception:
-                        pass
+                        self._logger.debug("activate-link handler failed", exc_info=True)
                     # return True to stop default handling
                     return True
                 try:
                     lbl.connect("activate-link", _on_activate_link)
                 except Exception:
-                    pass
+                    self._logger.debug("connect activate-link failed on Gtk.Label", exc_info=True)
                 self._content_widget = lbl
         except Exception:
+            self._logger.exception("Failed to create content widget", exc_info=True)
             # fallback to a simple label
             self._content_widget = Gtk.Label(label=self._text)
 
@@ -301,9 +305,10 @@ class YRichTextGtk(YWidget):
 
     def _html_to_pango_markup(self, s: str) -> str:
         """Convert a limited subset of HTML into GTK/Pango markup.
-        Supports: h1-h6 (as bold spans with size), b/i/u, a href, p/br, ul/li.
+        Supports: h1-h6 (as bold spans with size), b/i/em/u, a href, p/br, ul/li.
         Unknown tags are stripped.
         """
+        self._logger.debug("Converted markup: %s", s)
         if not s:
             return ""
         t = s
@@ -318,13 +323,24 @@ class YRichTextGtk(YWidget):
         t = re.sub(r"</ol\s*>", "\n", t, flags=re.IGNORECASE)
         t = re.sub(r"<li\s*>", "• ", t, flags=re.IGNORECASE)
         t = re.sub(r"</li\s*>", "\n", t, flags=re.IGNORECASE)
-        # Headings -> bold span with size   
+        # Headings -> bold span with size
         sizes = {1: "xx-large", 2: "x-large", 3: "large", 4: "medium", 5: "small", 6: "x-small"}
         for n, sz in sizes.items():
             t = re.sub(fr"<h{n}\s*>", f"<span weight=\"bold\" size=\"{sz}\">", t, flags=re.IGNORECASE)
             t = re.sub(fr"</h{n}\s*>", "</span>\n", t, flags=re.IGNORECASE)
+        # Explicitly convert formatting tags to Pango span attributes
+        t = re.sub(r"<b\s*>", "<span weight=\"bold\">", t, flags=re.IGNORECASE)
+        t = re.sub(r"</b\s*>", "</span>", t, flags=re.IGNORECASE)
+        t = re.sub(r"<i\s*>", "<span style=\"italic\">", t, flags=re.IGNORECASE)
+        t = re.sub(r"</i\s*>", "</span>", t, flags=re.IGNORECASE)
+        t = re.sub(r"<em\s*>", "<span style=\"italic\">", t, flags=re.IGNORECASE)
+        t = re.sub(r"</em\s*>", "</span>", t, flags=re.IGNORECASE)
+        t = re.sub(r"<u\s*>", "<span underline=\"single\">", t, flags=re.IGNORECASE)
+        t = re.sub(r"</u\s*>", "</span>", t, flags=re.IGNORECASE)
         # Allow basic formatting tags and <a href>; strip all other tags
-        t = re.sub(r"</?(?!span\b|a\b|b\b|i\b|u\b)[a-zA-Z0-9]+\b[^>]*>", "", t)
+        t = re.sub(r"</?(?!span\b|a\b)[a-zA-Z0-9]+\b[^>]*>", "", t)
+
+        self._logger.debug("Converted markup: %s", t)
         return t
 
     def setVisible(self, visible=True):
