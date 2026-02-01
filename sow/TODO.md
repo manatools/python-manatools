@@ -28,7 +28,7 @@ Missing Widgets comparing libyui original factory:
     [X] YReplacePoint
     [X] YRadioButton
     [X] YImage
-    [ ] YBusyIndicator
+    [X] YBusyIndicator
     [X] YLogView
 
 Optional/special widgets (from `YOptionalWidgetFactory`):
