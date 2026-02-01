@@ -34,119 +34,186 @@ def destroyUI () :
 
 def warningMsgBox (info) :
     '''
-    This function creates an Warning dialog and show the message
-    passed as input.
+    This function creates a Warning dialog and shows the message passed as input.
 
     @param info: dictionary, information to be passed to the dialog.
             title     =>     dialog title
-            text      =>     string to be swhon into the dialog
+            text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
     '''
-    if (not info) :
+    if not info:
         return 0
 
     factory = yui.YUI.widgetFactory()
     dlg = factory.createPopupDialog()
     vbox = factory.createVBox(dlg)
-    if info.get('title'):
-        factory.createHeading(vbox, info.get('title'))
+
+    # Heading
+    title = info.get('title')
+    if title:
+        factory.createHeading(vbox, title)
+
+    # Content row: icon + text
     text = info.get('text', "")
     rt = bool(info.get('richtext', False))
-    hbox = factory.createHBox(vbox)
-    align = factory.createTop(hbox)
-    icon = factory.createImage(align, "dialog-warning")
-    icon.setStretchable(yui.YUIDimension.YD_VERT, False)
-    icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-    icon.setAutoScale(False)
+    row = factory.createHBox(vbox)
+
+    # Icon (warning)
+    try:
+        icon_align = factory.createTop(row)
+        icon = factory.createImage(icon_align, "dialog-warning")
+        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+        icon.setAutoScale(False)
+    except Exception:
+        # If icon creation fails, continue without it
+        pass
+
+    # Text widget
     if rt:
-        t = factory.createRichText(hbox, "", False)
-        t.setValue(text)
-        t.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        t.setStretchable(yui.YUIDimension.YD_VERT, True)
+        tw = factory.createRichText(row, "", False)
+        tw.setValue(text)
     else:
-        t = factory.createLabel(hbox, text)
-        t.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        t.setStretchable(yui.YUIDimension.YD_VERT, True)
-    align = factory.createRight(vbox)
-    ok_btn = factory.createPushButton(align, _("&Ok"))
+        tw = factory.createLabel(row, text)
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+    except Exception:
+        pass
+
+    # Ok button centered
+    center = factory.createHVCenter(vbox)
+    ok_btn = factory.createPushButton(center, _("&Ok"))
+
+    # Event loop
     while True:
         ev = dlg.waitForEvent()
-        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+        et = ev.eventType()
+        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
             break
-        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
             break
+
     dlg.destroy()
     return 1
 
 
 def infoMsgBox (info) :
     '''
-    This function creates an Info dialog and show the message
-    passed as input.
+    This function creates an Info dialog and shows the message passed as input.
 
     @param info: dictionary, information to be passed to the dialog.
             title     =>     dialog title
-            text      =>     string to be swhon into the dialog
+            text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
     '''
-    if (not info) :
+    if not info:
         return 0
 
     factory = yui.YUI.widgetFactory()
     dlg = factory.createPopupDialog()
     vbox = factory.createVBox(dlg)
-    if info.get('title'):
-        factory.createHeading(vbox, info.get('title'))
+
+    # Heading
+    title = info.get('title')
+    if title:
+        factory.createHeading(vbox, title)
+
+    # Content row: icon + text
     text = info.get('text', "")
     rt = bool(info.get('richtext', False))
+    row = factory.createHBox(vbox)
+
+    # Icon (information)
+    try:
+        icon_align = factory.createTop(row)
+        icon = factory.createImage(icon_align, "dialog-information")
+        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+        icon.setAutoScale(False)
+    except Exception:
+        pass
+
+    # Text widget
     if rt:
-        t = factory.createRichText(vbox, "", False)
-        t.setValue(text)
+        tw = factory.createRichText(row, "", False)
+        tw.setValue(text)
     else:
-        factory.createLabel(vbox, text)
-    align = factory.createRight(vbox)
-    ok_btn = factory.createPushButton(align, _("&Ok"))
+        tw = factory.createLabel(row, text)
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+    except Exception:
+        pass
+
+    # Ok button centered
+    center = factory.createHVCenter(vbox)
+    ok_btn = factory.createPushButton(center, _("&Ok"))
+
+    # Event loop
     while True:
         ev = dlg.waitForEvent()
-        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+        et = ev.eventType()
+        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
             break
-        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
             break
+
     dlg.destroy()
     return 1
 
+
 def msgBox (info) :
     '''
-    This function creates a dialog and show the message passed as input.
+    This function creates a dialog and shows the message passed as input.
 
     @param info: dictionary, information to be passed to the dialog.
             title     =>     dialog title
-            text      =>     string to be swhon into the dialog
+            text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
     '''
-    if (not info) :
+    if not info:
         return 0
 
     factory = yui.YUI.widgetFactory()
     dlg = factory.createPopupDialog()
     vbox = factory.createVBox(dlg)
-    if info.get('title'):
-        factory.createHeading(vbox, info.get('title'))
+
+    # Heading
+    title = info.get('title')
+    if title:
+        factory.createHeading(vbox, title)
+
+    # Content row: text only (no icon)
     text = info.get('text', "")
     rt = bool(info.get('richtext', False))
+    row = factory.createHBox(vbox)
+
+    # Text widget
     if rt:
-        t = factory.createRichText(vbox, "", False)
-        t.setValue(text)
+        tw = factory.createRichText(row, "", False)
+        tw.setValue(text)
     else:
-        factory.createLabel(vbox, text)
-    align = factory.createRight(vbox)
-    ok_btn = factory.createPushButton(align, _("&Ok"))
+        tw = factory.createLabel(row, text)
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+    except Exception:
+        pass
+
+    # Ok button centered
+    center = factory.createHVCenter(vbox)
+    ok_btn = factory.createPushButton(center, _("&Ok"))
+
+    # Event loop
     while True:
         ev = dlg.waitForEvent()
-        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+        et = ev.eventType()
+        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
             break
-        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
             break
+
     dlg.destroy()
     return 1
 
