@@ -26,7 +26,7 @@ class YImageQt(YWidget):
         self._qicon = None
         # minimal visible size guard
         self._min_w = 64
-        self._min_h = 32
+        self._min_h = 64
         # aspect ratio tracking (w/h). default 1.0
         self._aspect_ratio = 1.0
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
