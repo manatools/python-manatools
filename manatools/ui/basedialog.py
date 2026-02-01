@@ -154,19 +154,19 @@ class BaseDialog :
   def _setupUI(self):
     
     self.dialog = self.factory.createPopupDialog() if self._dialogType == DialogType.POPUP else self.factory.createMainDialog()
-    
-    parent = self.dialog
-    if self._minSize is not None:
-       parent = self.factory.createMinSize(self.dialog, self._minSize['minWidth'], self._minSize['minHeight'])
-    
-    vbox = self.factory.createVBox(parent)
-    self.UIlayout(vbox)
 
-  #def pollEvent(self):
-  #  '''
-  #  perform yui pollEvent
-  #  '''
-  #  return self.dialog.pollEvent()
+    # If a minimum size is requested, wrap the layout inside a MinSize container.
+    # IMPORTANT: MinSize is a single-child container -> add a VBox inside it and
+    # pass that VBox to UIlayout so multiple children can be attached there.
+    content_vbox = None
+    if self._minSize is not None:
+        min_container = self.factory.createMinSize(self.dialog, self._minSize['minWidth'], self._minSize['minHeight'])
+        content_vbox = self.factory.createVBox(min_container)        
+    else:
+        content_vbox = self.factory.createVBox(self.dialog)
+    layout_parent = content_vbox
+    # Build the dialog layout using the chosen parent (MinSize->VBox or root VBox)
+    self.UIlayout(layout_parent)
 
   def _handleEvents(self):
     '''
