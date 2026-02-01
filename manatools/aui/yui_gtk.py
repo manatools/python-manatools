@@ -254,40 +254,42 @@ class YApplicationGtk:
     
     def busyCursor(self):
         """Set busy cursor (GTK implementation)."""
-        return
-        display = Gdk.Display.get_default()
-        if display is None:
-            return
-        seat = display.get_default_seat()
-        if seat is None:
-            return
-        pointer = seat.get_pointer()
-        if pointer is None:
-            return
-        window = pointer.get_window()
-        if window is None:
-            return
-        cursor = Gdk.Cursor.new_from_name(display, "wait")
-        if cursor is None:
-            return
-        window.set_cursor(cursor)
+        current_dialog = YDialogGtk.currentDialog()
+        if current_dialog is not None:
+            window = getattr(current_dialog, "_window", None)
+            if window is None:
+                return
+            surface = window.get_surface()
+            if surface is None:
+                return
+            display = surface.get_display()
+            cursor = Gdk.Cursor.new_from_name("wait", None)
+            # Try alternatives if "wait" not available
+            if not cursor:
+                cursor = Gdk.Cursor.new_from_name("progress", None)
+            if not cursor:
+                cursor = Gdk.Cursor.new_from_name("grabbing", None)
+            if cursor is None:
+                return
+            surface.set_cursor(cursor)
+            display.flush()  # Force update
 
     def normalCursor(self):
         """Set normal cursor (GTK implementation)."""
-        return
-        display = Gdk.Display.get_default()
-        if display is None:
-            return
-        seat = display.get_default_seat()
-        if seat is None:
-            return
-        pointer = seat.get_pointer()
-        if pointer is None:
-            return
-        window = pointer.get_window()
-        if window is None:
-            return
-        window.set_cursor(None)
+        current_dialog = YDialogGtk.currentDialog()
+        if current_dialog is not None:
+            window = getattr(current_dialog, "_window", None)
+            if window is None:
+                return
+            surface = window.get_surface()
+            if surface is None:
+                return
+            display = surface.get_display()
+            cursor = Gdk.Cursor.new_from_name("default", None)
+            if cursor is None:
+                return
+            surface.set_cursor(cursor)
+            display.flush()  # Force update
 
     def _create_gtk4_filters(self, filter_str: str) -> List[Gtk.FileFilter]:
         """
