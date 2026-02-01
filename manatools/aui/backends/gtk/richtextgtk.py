@@ -11,7 +11,7 @@ GTK4 backend RichText widget.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, GLib, Gdk
+from gi.repository import Gtk, Pango, GLib, Gdk
 import logging
 import re
 from ...yui_common import *
@@ -225,7 +225,7 @@ class YRichTextGtk(YWidget):
                     self._logger.exception("set_selectable failed on Gtk.Label", exc_info=True) 
                 try:
                     lbl.set_wrap(True)
-                    lbl.set_wrap_mode(Gtk.WrapMode.WORD_CHAR) # need Pango.WrapMode
+                    lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR) # need Pango.WrapMode
                     lbl.set_xalign(0.0)
                     lbl.set_justify(Gtk.Justification.LEFT)
                 except Exception:
