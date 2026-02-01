@@ -41,7 +41,7 @@ def test_progressbar(backend_name=None):
         # then wait 3s before restarting counting. Any non-timeout event (e.g. OK)
         # will break the loop and close the dialog.
         value = 0
-        timeout_ms = 500
+        timeout_ms = 100
         phase = 0 # Normal counting
         while True:
             ev = dialog.waitForEvent(timeout_ms)
@@ -50,12 +50,14 @@ def test_progressbar(backend_name=None):
                 if phase == 0:
                     value = min(100, value + 1)
                 elif phase == 1:
+                    YUI.app().busyCursor()
                     value = 0
                     timeout_ms = 3000
                     phase = 3 # Waiting before restart
                 elif phase == 3:
+                    YUI.app().normalCursor()
                     value = 1
-                    timeout_ms = 500
+                    timeout_ms = 100
                     phase = 0 # Normal counting
                 try:
                     pb.setValue(value)
