@@ -52,11 +52,21 @@ def warningMsgBox (info) :
         factory.createHeading(vbox, info.get('title'))
     text = info.get('text', "")
     rt = bool(info.get('richtext', False))
+    hbox = factory.createHBox(vbox)
+    align = factory.createTop(hbox)
+    icon = factory.createImage(align, "dialog-warning")
+    icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+    icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+    icon.setAutoScale(False)
     if rt:
-        t = factory.createRichText(vbox, "", False)
+        t = factory.createRichText(hbox, "", False)
         t.setValue(text)
+        t.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        t.setStretchable(yui.YUIDimension.YD_VERT, True)
     else:
-        factory.createLabel(vbox, text)
+        t = factory.createLabel(hbox, text)
+        t.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        t.setStretchable(yui.YUIDimension.YD_VERT, True)
     align = factory.createRight(vbox)
     ok_btn = factory.createPushButton(align, _("&Ok"))
     while True:
