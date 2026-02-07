@@ -12,9 +12,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 
 from ..aui import yui
-from ..aui.yui_common import YUIDimension
+from ..aui.yui_common import YUIDimension, YItem
 from enum import Enum
 import gettext
+import logging
 # https://pymotw.com/3/gettext/#module-localization
 t = gettext.translation(
     'python-manatools',
@@ -23,6 +24,8 @@ t = gettext.translation(
 )
 _ = t.gettext
 ngettext = t.ngettext
+
+logger = logging.getLogger("manatools.ui.common")
 
 def destroyUI () :
     '''
@@ -360,7 +363,7 @@ def askYesOrNo (info) :
         text      =>     string to be swhon into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Yes - any other values => No]
-        size => [row, coulmn]
+        size => [width, height]
 
     @output:
         False: No button has been pressed
@@ -468,7 +471,7 @@ def AboutDialog (info) :
         icon        => the string providing the file path for the application icon (low-res image)
         credits     => the application credits, they can be html-formatted
         information => other extra informations, they can be html-formatted
-        size        => libyui dialog minimum size, dictionary containing {column, lines}
+        size        => libyui dialog minimum size, dictionary containing {width, height}
         dialog_mode => AboutDialogMode.CLASSIC: classic style dialog, any other as tabbed style dialog
     '''
     if (not info) :
@@ -482,12 +485,12 @@ def AboutDialog (info) :
         old_title = _push_app_title(title)
         root_vbox = factory.createVBox(dlg)
 
-        # Optional MinSize wrapper (accepts {'column','lines'} like the C++ code)
+        # Optional MinSize wrapper (accepts {'width','height'} in pixels)
         content_parent = root_vbox
         size_hint = info.get('size') or {}
         try:
-            cols = int(size_hint.get('column', size_hint.get('columns')))
-            rows = int(size_hint.get('lines', size_hint.get('rows')))
+            cols = int(size_hint.get('width', 320))
+            rows = int(size_hint.get('height', 240))
             content_parent = factory.createMinSize(root_vbox, cols, rows)
         except Exception:
             content_parent = root_vbox
@@ -504,14 +507,20 @@ def AboutDialog (info) :
         information = info.get('information', "")
         dialog_mode = info.get('dialog_mode', AboutDialogMode.CLASSIC)
 
+        logger.debug(
+            "Opening AboutDialog name='%s' mode=%s",
+            name or "",
+            getattr(dialog_mode, "name", dialog_mode),
+        )
+
         # Header block (logo + labels)
         header = factory.createHBox(vbox)
         if logo:
             try:
                 factory.createImage(header, logo)
                 factory.createSpacing(header, 8)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Unable to load logo '%s': %s", logo, exc)
         labels = factory.createVBox(header)
         if name:
             factory.createLabel(labels, name)
@@ -519,14 +528,6 @@ def AboutDialog (info) :
             factory.createLabel(labels, version)
         if license_txt:
             factory.createLabel(labels, license_txt)
-
-        # Credits line (matches C++ layout)
-        if credits:
-            credits_box = factory.createHBox(vbox)
-            factory.createSpacing(credits_box, 1)
-            factory.createLabel(credits_box, credits)
-            factory.createSpacing(credits_box, 1)
-            # ...existing code...
 
         # Helper to add a RichText block
         def _add_richtext(parent, value):
@@ -541,50 +542,88 @@ def AboutDialog (info) :
 
         info_btn = None
         credits_btn = None
-
-        # Tabbed layout (Authors / Description / Information) if requested and available
-        use_tabbed = (dialog_mode == AboutDialogMode.TABBED)
         tab_widget = None
+        tab_content_updater = None
+
+        tab_sections = []
+        if description:
+            tab_sections.append((_('Description'), description))
+        if authors:
+            tab_sections.append((_('Authors'), authors))
+        if information:
+            tab_sections.append((_('Information'), information))
+        if credits:
+            tab_sections.append((_('Credits'), credits))
+
+        use_tabbed = (dialog_mode == AboutDialogMode.TABBED)
+        tab_text_widget = None
+
         if use_tabbed:
-            try:
-                tab_widget = factory.createDumbTab(vbox)
-            except Exception:
-                tab_widget = None
-            if tab_widget:
-                sections_added = False
-                if authors:
-                    tab_authors = tab_widget.addItem(_("Authors"))
-                    _add_richtext(tab_authors, authors)
-                    sections_added = True
-                if description:
-                    tab_desc = tab_widget.addItem(_("Description"))
-                    _add_richtext(tab_desc, description)
-                    sections_added = True
-                if information:
-                    tab_info = tab_widget.addItem(_("Information"))
-                    _add_richtext(tab_info, information)
-                    sections_added = True
-                if not sections_added:
+            if not tab_sections:
+                logger.debug("Tabbed mode requested but there are no sections; falling back to classic mode.")
+                use_tabbed = False
+            else:
+                try:
+                    tabs_box = factory.createVBox(vbox)
+                    tab_widget = factory.createDumbTab(tabs_box)
+                    tab_widget.setNotify(True)
+                    content_holder = factory.createReplacePoint(tabs_box)
+                    tab_text_widget = _add_richtext(content_holder, "")
+                    try:
+                        content_holder.showChild()
+                    except Exception as exc:
+                        logger.debug("Unable to show tab content immediately: %s", exc)
+                    added_items = []
+                    for section_title, section_value in tab_sections:
+                        item = YItem(section_title)
+                        item.setData(section_value)
+                        tab_widget.addItem(item)
+                        added_items.append(item)
+                    if not added_items:
+                        logger.debug("No tab items added; reverting to classic mode.")
+                        use_tabbed = False
+                        tab_widget = None
+                    else:
+                        try:
+                            tab_widget.selectItem(added_items[0], True)
+                        except Exception as exc:
+                            logger.debug("Unable to preselect first tab: %s", exc)
+
+                        def _update_tab_content():
+                            current_item = tab_widget.selectedItem()
+                            payload = ""
+                            if current_item is not None:
+                                payload = current_item.data() or ""
+                            if tab_text_widget is not None:
+                                tab_text_widget.setValue(payload)
+
+                        _update_tab_content()
+                        tab_content_updater = _update_tab_content
+                except Exception as exc:
+                    logger.exception("Failed to initialize tabbed AboutDialog: %s", exc)
+                    use_tabbed = False
                     tab_widget = None
-            if tab_widget is None:
-                use_tabbed = False  # fallback to classic if tabs unavailable
+                    tab_content_updater = None
 
         if not use_tabbed:
-            # Classic stacked content + buttons (mirrors C++ behavior)
-            if description:
-                factory.createHeading(vbox, _("Description"))
-                _add_richtext(vbox, description)
-            if authors:
-                factory.createHeading(vbox, _("Authors"))
-                _add_richtext(vbox, authors)
-            if information:
-                factory.createHeading(vbox, _("Information"))
-                _add_richtext(vbox, information)
-            button_row = factory.createHBox(vbox)
-            if information:
-                info_btn = factory.createPushButton(button_row, _("&Info"))
-            if credits:
-                credits_btn = factory.createPushButton(button_row, _("&Credits"))
+            inline_sections = [
+                (_("Description"), description),
+                (_("Authors"), authors),
+            ]
+            for heading, value in inline_sections:
+                if not value:
+                    continue
+                factory.createHeading(vbox, heading)
+                _add_richtext(vbox, value)
+
+            if information or credits:
+                button_row = factory.createHBox(vbox)
+                if information:
+                    info_btn = factory.createPushButton(button_row, _("&Info"))
+                if credits:
+                    credits_btn = factory.createPushButton(button_row, _("&Credits"))
+            else:
+                button_row = None
 
         # Close button aligned to the right, as in the C++ dialog
         close_row = factory.createHBox(vbox)
@@ -597,16 +636,28 @@ def AboutDialog (info) :
                 continue
             et = ev.eventType()
             if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+                logger.debug("AboutDialog closing due to event type %s", et)
                 break
             if et != yui.YEventType.WidgetEvent:
                 continue
             widget = ev.widget()
             if widget == close_btn:
+                logger.debug("AboutDialog close button activated")
                 break
+            if tab_widget and widget == tab_widget:
+                if tab_content_updater:
+                    tab_content_updater()
+                continue
             if info_btn and widget == info_btn:
+                logger.debug("AboutDialog information button activated")
                 infoMsgBox({"title": _("Information"), "text": information or "", "richtext": True})
-            elif credits_btn and widget == credits_btn:
+                continue
+            if credits_btn and widget == credits_btn:
+                logger.debug("AboutDialog credits button activated")
                 infoMsgBox({"title": _("Credits"), "text": credits or "", "richtext": True})
+                continue
+
+            logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())
 
         dlg.destroy()
     finally:
