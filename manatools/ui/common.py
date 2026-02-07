@@ -40,18 +40,17 @@ def _push_app_title(new_title):
         old_title = app.applicationTitle()
         if new_title:
             app.setApplicationTitle(str(new_title))
-        return app, old_title
+        return old_title
     except Exception:
-        return None, None
+        return None
 
 
-def _restore_app_title(app, old_title):
-    """Restore the previously saved application title."""
-    if app is None:
-        return
+def _restore_app_title(old_title):
+    """Restore the previously saved application title."""    
+    app = yui.YUI.app()
     try:
         if old_title is not None:
-            app.setApplicationTitle(old_title)
+            app.setApplicationTitle(str(old_title))
     except Exception:
         pass
 
@@ -67,19 +66,14 @@ def warningMsgBox (info) :
     if not info:
         return 0
 
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        vbox = factory.createVBox(dlg)
-
-        # Heading
         title = info.get('title')
-        if title:
-            factory.createHeading(vbox, title)
+        old_title = _push_app_title(title)
+
+        vbox = factory.createVBox(dlg)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -132,7 +126,7 @@ def warningMsgBox (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
 
 def infoMsgBox (info) :
     '''
@@ -146,19 +140,14 @@ def infoMsgBox (info) :
     if not info:
         return 0
 
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        vbox = factory.createVBox(dlg)
-
-        # Heading
         title = info.get('title')
-        if title:
-            factory.createHeading(vbox, title)
+        old_title = _push_app_title(title)
+
+        vbox = factory.createVBox(dlg)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -210,7 +199,7 @@ def infoMsgBox (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
 
 def msgBox (info) :
     '''
@@ -224,19 +213,13 @@ def msgBox (info) :
     if not info:
         return 0
 
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        vbox = factory.createVBox(dlg)
-
-        # Heading
         title = info.get('title')
-        if title:
-            factory.createHeading(vbox, title)
+        old_title = _push_app_title(title)
+        vbox = factory.createVBox(dlg)
 
         # Content row: text only (no icon)
         text = info.get('text', "") or ""
@@ -278,7 +261,7 @@ def msgBox (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
 
 def askOkCancel (info) :
     '''
@@ -298,19 +281,14 @@ def askOkCancel (info) :
     if (not info) :
         return False
 
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        vbox = factory.createVBox(dlg)
-
-        # Heading
         title = info.get('title')
-        if title:
-            factory.createHeading(vbox, title)
+        old_title = _push_app_title(title)
+
+        vbox = factory.createVBox(dlg)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -370,7 +348,7 @@ def askOkCancel (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
 
 def askYesOrNo (info) :
     '''
@@ -391,19 +369,13 @@ def askYesOrNo (info) :
     if (not info) :
         return False
 
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        vbox = factory.createVBox(dlg)
-
-        # Heading
         title = info.get('title')
-        if title:
-            factory.createHeading(vbox, title)
+        old_title = _push_app_title(title)
+        vbox = factory.createVBox(dlg)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -470,7 +442,7 @@ def askYesOrNo (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
 
 class AboutDialogMode(Enum):
     '''
@@ -501,14 +473,13 @@ def AboutDialog (info) :
     '''
     if (not info) :
         raise ValueError("Missing AboutDialog parameters")
-
-    title = info.get('title')
-    app_ctx = _push_app_title(title)
-    app, previous_title = app_ctx if app_ctx else (None, None)
+    
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
+        title = _("About") + " " + info.get('name', "")
+        old_title = _push_app_title(title)
         root_vbox = factory.createVBox(dlg)
 
         # Optional MinSize wrapper (accepts {'column','lines'} like the C++ code)
@@ -532,9 +503,6 @@ def AboutDialog (info) :
         credits     = info.get('credits', "")
         information = info.get('information', "")
         dialog_mode = info.get('dialog_mode', AboutDialogMode.CLASSIC)
-
-        title = _("About") + (f" {name}" if name else "")    
-        factory.createHeading(vbox, title)
 
         # Header block (logo + labels)
         header = factory.createHBox(vbox)
@@ -647,4 +615,4 @@ def AboutDialog (info) :
                 dlg.destroy()
             except Exception:
                 pass
-        _restore_app_title(app, previous_title)
+        _restore_app_title(old_title)
