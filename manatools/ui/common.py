@@ -54,7 +54,7 @@ def warningMsgBox (info) :
         factory.createHeading(vbox, title)
 
     # Content row: icon + text
-    text = info.get('text', "")
+    text = info.get('text', "") or ""
     rt = bool(info.get('richtext', False))
     row = factory.createHBox(vbox)
 
@@ -81,9 +81,10 @@ def warningMsgBox (info) :
     except Exception:
         pass
 
-    # Ok button centered
-    center = factory.createHVCenter(vbox)
-    ok_btn = factory.createPushButton(center, _("&Ok"))
+    # Ok button on the right
+    btns = factory.createHBox(vbox)
+    factory.createHStretch(btns)
+    ok_btn = factory.createPushButton(btns, _("&Ok"))
 
     # Event loop
     while True:
@@ -120,8 +121,8 @@ def infoMsgBox (info) :
         factory.createHeading(vbox, title)
 
     # Content row: icon + text
-    text = info.get('text', "")
-    rt = bool(info.get('richtext', False))
+    text = info.get('text', "") or ""
+    rt = bool(info.get('richtext', False))    
     row = factory.createHBox(vbox)
 
     # Icon (information)
@@ -146,9 +147,10 @@ def infoMsgBox (info) :
     except Exception:
         pass
 
-    # Ok button centered
-    center = factory.createHVCenter(vbox)
-    ok_btn = factory.createPushButton(center, _("&Ok"))
+    # Ok button on the right
+    btns = factory.createHBox(vbox)
+    factory.createHStretch(btns)
+    ok_btn = factory.createPushButton(btns, _("&Ok"))
 
     # Event loop
     while True:
@@ -185,8 +187,8 @@ def msgBox (info) :
         factory.createHeading(vbox, title)
 
     # Content row: text only (no icon)
-    text = info.get('text', "")
-    rt = bool(info.get('richtext', False))
+    text = info.get('text', "") or ""
+    rt = bool(info.get('richtext', False))    
     row = factory.createHBox(vbox)
 
     # Text widget
@@ -201,9 +203,10 @@ def msgBox (info) :
     except Exception:
         pass
 
-    # Ok button centered
-    center = factory.createHVCenter(vbox)
-    ok_btn = factory.createPushButton(center, _("&Ok"))
+    # Ok button on the right
+    btns = factory.createHBox(vbox)
+    factory.createHStretch(btns)
+    ok_btn = factory.createPushButton(btns, _("&Ok"))
 
     # Event loop
     while True:
