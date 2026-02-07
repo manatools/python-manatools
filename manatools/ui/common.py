@@ -239,18 +239,45 @@ def askOkCancel (info) :
     factory = yui.YUI.widgetFactory()
     dlg = factory.createPopupDialog()
     vbox = factory.createVBox(dlg)
-    if info.get('title'):
-        factory.createHeading(vbox, info.get('title'))
-    text = info.get('text', "")
+
+    # Heading
+    title = info.get('title')
+    if title:
+        factory.createHeading(vbox, title)
+
+    # Content row: icon + text
+    text = info.get('text', "") or ""
     rt = bool(info.get('richtext', False))
+    row = factory.createHBox(vbox)
+
+    # Icon (information)
+    try:
+        icon_align = factory.createTop(row)
+        icon = factory.createImage(icon_align, "dialog-information")
+        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+        icon.setAutoScale(False)
+    except Exception:
+        pass
+
+    # Text widget
     if rt:
-        t = factory.createRichText(vbox, "", False)
-        t.setValue(text)
+        tw = factory.createRichText(row, "", False)
+        tw.setValue(text)
     else:
-        factory.createLabel(vbox, text)
+        tw = factory.createLabel(row, text)
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+    except Exception:
+        pass
+
+    # Buttons on the right
     btns = factory.createHBox(vbox)
+    factory.createHStretch(btns)
     ok_btn = factory.createPushButton(btns, _("&Ok"))
     cancel_btn = factory.createPushButton(btns, _("&Cancel"))
+
     default_ok = bool(info.get('default_button', 0) == 1)
     # simple default: ignore focusing specifics for now
     result = False
@@ -293,15 +320,40 @@ def askYesOrNo (info) :
     factory = yui.YUI.widgetFactory()
     dlg = factory.createPopupDialog()
     vbox = factory.createVBox(dlg)
-    if info.get('title'):
-        factory.createHeading(vbox, info.get('title'))
-    text = info.get('text', "")
-    rt = bool(info.get('richtext', False))
+
+    # Heading
+    title = info.get('title')
+    if title:
+        factory.createHeading(vbox, title)
+
+    # Content row: icon + text
+    text = info.get('text', "") or ""
+    rt = bool(info.get('richtext', False))    
+    row = factory.createHBox(vbox)
+
+    # Icon (question)
+    try:
+        icon_align = factory.createTop(row)
+        icon = factory.createImage(icon_align, "dialog-question")
+        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+        icon.setAutoScale(False)
+    except Exception:
+        pass
+
+    # Text widget
     if rt:
-        t = factory.createRichText(vbox, "", False)
-        t.setValue(text)
+        tw = factory.createRichText(row, "", False)
+        tw.setValue(text)
     else:
-        factory.createLabel(vbox, text)
+        tw = factory.createLabel(row, text)
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+    except Exception:
+        pass
+
+    # Handle size if provided
     if 'size' in info.keys():
         try:
             dims = info['size']
@@ -309,9 +361,13 @@ def askYesOrNo (info) :
             vbox = parent
         except Exception:
             pass
+
+    # Buttons on the right
     btns = factory.createHBox(vbox)
+    factory.createHStretch(btns)
     yes_btn = factory.createPushButton(btns, _("&Yes"))
     no_btn = factory.createPushButton(btns, _("&No"))
+
     result = False
     while True:
         ev = dlg.waitForEvent()
