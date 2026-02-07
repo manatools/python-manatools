@@ -12,6 +12,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 
 from ..aui import yui
+from ..aui.yui_common import YUIDimension
 from enum import Enum
 import gettext
 # https://pymotw.com/3/gettext/#module-localization
@@ -32,6 +33,28 @@ def destroyUI () :
     return
 
 
+def _push_app_title(new_title):
+    """Save current application title and optionally set a new one."""
+    try:
+        app = yui.YUI.app()
+        old_title = app.applicationTitle()
+        if new_title:
+            app.setApplicationTitle(str(new_title))
+        return app, old_title
+    except Exception:
+        return None, None
+
+
+def _restore_app_title(app, old_title):
+    """Restore the previously saved application title."""
+    if app is None:
+        return
+    try:
+        if old_title is not None:
+            app.setApplicationTitle(old_title)
+    except Exception:
+        pass
+
 def warningMsgBox (info) :
     '''
     This function creates a Warning dialog and shows the message passed as input.
@@ -44,61 +67,72 @@ def warningMsgBox (info) :
     if not info:
         return 0
 
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
-
-    # Heading
     title = info.get('title')
-    if title:
-        factory.createHeading(vbox, title)
-
-    # Content row: icon + text
-    text = info.get('text', "") or ""
-    rt = bool(info.get('richtext', False))
-    row = factory.createHBox(vbox)
-
-    # Icon (warning)
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
     try:
-        icon_align = factory.createTop(row)
-        icon = factory.createImage(icon_align, "dialog-warning")
-        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
-        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-        icon.setAutoScale(False)
-    except Exception:
-        # If icon creation fails, continue without it
-        pass
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        vbox = factory.createVBox(dlg)
 
-    # Text widget
-    if rt:
-        tw = factory.createRichText(row, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(row, text)
-    try:
-        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-    except Exception:
-        pass
+        # Heading
+        title = info.get('title')
+        if title:
+            factory.createHeading(vbox, title)
 
-    # Ok button on the right
-    btns = factory.createHBox(vbox)
-    factory.createHStretch(btns)
-    ok_btn = factory.createPushButton(btns, _("&Ok"))
-    factory.createHStretch(btns)
+        # Content row: icon + text
+        text = info.get('text', "") or ""
+        rt = bool(info.get('richtext', False))
+        row = factory.createHBox(vbox)
 
-    # Event loop
-    while True:
-        ev = dlg.waitForEvent()
-        et = ev.eventType()
-        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
-            break
-        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
-            break
+        # Icon (warning)
+        try:
+            icon_align = factory.createTop(row)
+            icon = factory.createImage(icon_align, "dialog-warning")
+            icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+            icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            icon.setAutoScale(False)
+        except Exception:
+            # If icon creation fails, continue without it
+            pass
 
-    dlg.destroy()
-    return 1
+        # Text widget
+        if rt:
+            tw = factory.createRichText(row, "", False)
+            tw.setValue(text)
+        else:
+            tw = factory.createLabel(row, text)
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
+        # Ok button on the right
+        btns = factory.createHBox(vbox)
+        factory.createHStretch(btns)
+        ok_btn = factory.createPushButton(btns, _("&Ok"))
+        factory.createHStretch(btns)
+
+        # Event loop
+        while True:
+            ev = dlg.waitForEvent()
+            et = ev.eventType()
+            if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+                break
+            if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+                break
+
+        dlg.destroy()
+        return 1
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
 
 def infoMsgBox (info) :
     '''
@@ -112,60 +146,71 @@ def infoMsgBox (info) :
     if not info:
         return 0
 
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
-
-    # Heading
     title = info.get('title')
-    if title:
-        factory.createHeading(vbox, title)
-
-    # Content row: icon + text
-    text = info.get('text', "") or ""
-    rt = bool(info.get('richtext', False))    
-    row = factory.createHBox(vbox)
-
-    # Icon (information)
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
     try:
-        icon_align = factory.createTop(row)
-        icon = factory.createImage(icon_align, "dialog-information")
-        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
-        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-        icon.setAutoScale(False)
-    except Exception:
-        pass
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        vbox = factory.createVBox(dlg)
 
-    # Text widget
-    if rt:
-        tw = factory.createRichText(row, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(row, text)
-    try:
-        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-    except Exception:
-        pass
+        # Heading
+        title = info.get('title')
+        if title:
+            factory.createHeading(vbox, title)
 
-    # Ok button on the right
-    btns = factory.createHBox(vbox)
-    factory.createHStretch(btns)
-    ok_btn = factory.createPushButton(btns, _("&Ok"))
-    factory.createHStretch(btns)
+        # Content row: icon + text
+        text = info.get('text', "") or ""
+        rt = bool(info.get('richtext', False))    
+        row = factory.createHBox(vbox)
 
-    # Event loop
-    while True:
-        ev = dlg.waitForEvent()
-        et = ev.eventType()
-        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
-            break
-        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
-            break
+        # Icon (information)
+        try:
+            icon_align = factory.createTop(row)
+            icon = factory.createImage(icon_align, "dialog-information")
+            icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+            icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            icon.setAutoScale(False)
+        except Exception:
+            pass
 
-    dlg.destroy()
-    return 1
+        # Text widget
+        if rt:
+            tw = factory.createRichText(row, "", False)
+            tw.setValue(text)
+        else:
+            tw = factory.createLabel(row, text)
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
+        # Ok button on the right
+        btns = factory.createHBox(vbox)
+        factory.createHStretch(btns)
+        ok_btn = factory.createPushButton(btns, _("&Ok"))
+        factory.createHStretch(btns)
+
+        # Event loop
+        while True:
+            ev = dlg.waitForEvent()
+            et = ev.eventType()
+            if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+                break
+            if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+                break
+
+        dlg.destroy()
+        return 1
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
 
 def msgBox (info) :
     '''
@@ -179,50 +224,61 @@ def msgBox (info) :
     if not info:
         return 0
 
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
-
-    # Heading
     title = info.get('title')
-    if title:
-        factory.createHeading(vbox, title)
-
-    # Content row: text only (no icon)
-    text = info.get('text', "") or ""
-    rt = bool(info.get('richtext', False))    
-    row = factory.createHBox(vbox)
-
-    # Text widget
-    if rt:
-        tw = factory.createRichText(row, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(row, text)
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
     try:
-        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-    except Exception:
-        pass
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        vbox = factory.createVBox(dlg)
 
-    # Ok button on the right
-    btns = factory.createHBox(vbox)
-    factory.createHStretch(btns)
-    ok_btn = factory.createPushButton(btns, _("&Ok"))
-    factory.createHStretch(btns)
+        # Heading
+        title = info.get('title')
+        if title:
+            factory.createHeading(vbox, title)
 
-    # Event loop
-    while True:
-        ev = dlg.waitForEvent()
-        et = ev.eventType()
-        if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
-            break
-        if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
-            break
+        # Content row: text only (no icon)
+        text = info.get('text', "") or ""
+        rt = bool(info.get('richtext', False))    
+        row = factory.createHBox(vbox)
 
-    dlg.destroy()
-    return 1
+        # Text widget
+        if rt:
+            tw = factory.createRichText(row, "", False)
+            tw.setValue(text)
+        else:
+            tw = factory.createLabel(row, text)
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
+        # Ok button on the right
+        btns = factory.createHBox(vbox)
+        factory.createHStretch(btns)
+        ok_btn = factory.createPushButton(btns, _("&Ok"))
+        factory.createHStretch(btns)
+
+        # Event loop
+        while True:
+            ev = dlg.waitForEvent()
+            et = ev.eventType()
+            if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+                break
+            if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
+                break
+
+        dlg.destroy()
+        return 1
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
 
 def askOkCancel (info) :
     '''
@@ -242,67 +298,79 @@ def askOkCancel (info) :
     if (not info) :
         return False
 
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
-
-    # Heading
     title = info.get('title')
-    if title:
-        factory.createHeading(vbox, title)
-
-    # Content row: icon + text
-    text = info.get('text', "") or ""
-    rt = bool(info.get('richtext', False))
-    row = factory.createHBox(vbox)
-
-    # Icon (information)
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
     try:
-        icon_align = factory.createTop(row)
-        icon = factory.createImage(icon_align, "dialog-information")
-        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
-        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-        icon.setAutoScale(False)
-    except Exception:
-        pass
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        vbox = factory.createVBox(dlg)
 
-    # Text widget
-    if rt:
-        tw = factory.createRichText(row, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(row, text)
-    try:
-        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-    except Exception:
-        pass
+        # Heading
+        title = info.get('title')
+        if title:
+            factory.createHeading(vbox, title)
 
-    # Buttons on the right
-    btns = factory.createHBox(vbox)
-    factory.createHStretch(btns)
-    ok_btn = factory.createPushButton(btns, _("&Ok"))
-    cancel_btn = factory.createPushButton(btns, _("&Cancel"))
+        # Content row: icon + text
+        text = info.get('text', "") or ""
+        rt = bool(info.get('richtext', False))
+        row = factory.createHBox(vbox)
 
-    default_ok = bool(info.get('default_button', 0) == 1)
-    # simple default: ignore focusing specifics for now
-    result = False
-    while True:
-        ev = dlg.waitForEvent()
-        et = ev.eventType()
-        if et == yui.YEventType.CancelEvent:
-            result = False
-            break
-        if et == yui.YEventType.WidgetEvent:
-            w = ev.widget()
-            if w == ok_btn and ev.reason() == yui.YEventReason.Activated:
-                result = True
-                break
-            if w == cancel_btn and ev.reason() == yui.YEventReason.Activated:
+        # Icon (information)
+        try:
+            icon_align = factory.createTop(row)
+            icon = factory.createImage(icon_align, "dialog-information")
+            icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+            icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            icon.setAutoScale(False)
+        except Exception:
+            pass
+
+        # Text widget
+        if rt:
+            tw = factory.createRichText(row, "", False)
+            tw.setValue(text)
+        else:
+            tw = factory.createLabel(row, text)
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
+
+        # Buttons on the right
+        btns = factory.createHBox(vbox)
+        factory.createHStretch(btns)
+        ok_btn = factory.createPushButton(btns, _("&Ok"))
+        cancel_btn = factory.createPushButton(btns, _("&Cancel"))
+
+        default_ok = bool(info.get('default_button', 0) == 1)
+        # simple default: ignore focusing specifics for now
+        result = False
+        while True:
+            ev = dlg.waitForEvent()
+            et = ev.eventType()
+            if et == yui.YEventType.CancelEvent:
                 result = False
                 break
-    dlg.destroy()
-    return result
+            if et == yui.YEventType.WidgetEvent:
+                w = ev.widget()
+                if w == ok_btn and ev.reason() == yui.YEventReason.Activated:
+                    result = True
+                    break
+                if w == cancel_btn and ev.reason() == yui.YEventReason.Activated:
+                    result = False
+                    break
+        dlg.destroy()
+        return result
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
 
 def askYesOrNo (info) :
     '''
@@ -323,74 +391,86 @@ def askYesOrNo (info) :
     if (not info) :
         return False
 
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
-
-    # Heading
     title = info.get('title')
-    if title:
-        factory.createHeading(vbox, title)
-
-    # Content row: icon + text
-    text = info.get('text', "") or ""
-    rt = bool(info.get('richtext', False))    
-    row = factory.createHBox(vbox)
-
-    # Icon (question)
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
     try:
-        icon_align = factory.createTop(row)
-        icon = factory.createImage(icon_align, "dialog-question")
-        icon.setStretchable(yui.YUIDimension.YD_VERT, False)
-        icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-        icon.setAutoScale(False)
-    except Exception:
-        pass
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        vbox = factory.createVBox(dlg)
 
-    # Text widget
-    if rt:
-        tw = factory.createRichText(row, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(row, text)
-    try:
-        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-    except Exception:
-        pass
+        # Heading
+        title = info.get('title')
+        if title:
+            factory.createHeading(vbox, title)
 
-    # Handle size if provided
-    if 'size' in info.keys():
+        # Content row: icon + text
+        text = info.get('text', "") or ""
+        rt = bool(info.get('richtext', False))    
+        row = factory.createHBox(vbox)
+
+        # Icon (question)
         try:
-            dims = info['size']
-            parent = factory.createMinSize(vbox, int(dims[0]), int(dims[1]))
-            vbox = parent
+            icon_align = factory.createTop(row)
+            icon = factory.createImage(icon_align, "dialog-question")
+            icon.setStretchable(yui.YUIDimension.YD_VERT, False)
+            icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
+            icon.setAutoScale(False)
         except Exception:
             pass
 
-    # Buttons on the right
-    btns = factory.createHBox(vbox)
-    factory.createHStretch(btns)
-    yes_btn = factory.createPushButton(btns, _("&Yes"))
-    no_btn = factory.createPushButton(btns, _("&No"))
+        # Text widget
+        if rt:
+            tw = factory.createRichText(row, "", False)
+            tw.setValue(text)
+        else:
+            tw = factory.createLabel(row, text)
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
-    result = False
-    while True:
-        ev = dlg.waitForEvent()
-        et = ev.eventType()
-        if et == yui.YEventType.CancelEvent:
-            result = False
-            break
-        if et == yui.YEventType.WidgetEvent:
-            w = ev.widget()
-            if w == yes_btn and ev.reason() == yui.YEventReason.Activated:
-                result = True
-                break
-            if w == no_btn and ev.reason() == yui.YEventReason.Activated:
+        # Handle size if provided
+        if 'size' in info.keys():
+            try:
+                dims = info['size']
+                parent = factory.createMinSize(vbox, int(dims[0]), int(dims[1]))
+                vbox = parent
+            except Exception:
+                pass
+
+        # Buttons on the right
+        btns = factory.createHBox(vbox)
+        factory.createHStretch(btns)
+        yes_btn = factory.createPushButton(btns, _("&Yes"))
+        no_btn = factory.createPushButton(btns, _("&No"))
+
+        result = False
+        while True:
+            ev = dlg.waitForEvent()
+            et = ev.eventType()
+            if et == yui.YEventType.CancelEvent:
                 result = False
                 break
-    dlg.destroy()
-    return result
+            if et == yui.YEventType.WidgetEvent:
+                w = ev.widget()
+                if w == yes_btn and ev.reason() == yui.YEventReason.Activated:
+                    result = True
+                    break
+                if w == no_btn and ev.reason() == yui.YEventReason.Activated:
+                    result = False
+                    break
+        dlg.destroy()
+        return result
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
 
 class AboutDialogMode(Enum):
     '''
@@ -422,62 +502,149 @@ def AboutDialog (info) :
     if (not info) :
         raise ValueError("Missing AboutDialog parameters")
 
-    # Build a simple About dialog using AUI widgets
-    factory = yui.YUI.widgetFactory()
-    dlg = factory.createPopupDialog()
-    vbox = factory.createVBox(dlg)
+    title = info.get('title')
+    app_ctx = _push_app_title(title)
+    app, previous_title = app_ctx if app_ctx else (None, None)
+    dlg = None
+    try:
+        factory = yui.YUI.widgetFactory()
+        dlg = factory.createPopupDialog()
+        root_vbox = factory.createVBox(dlg)
 
-    name        = info.get('name', "")
-    version     = info.get('version', "")
-    license_txt = info.get('license', "")
-    authors     = info.get('authors', "")
-    description = info.get('description', "")
-    logo        = info.get('logo', "")
-    credits     = info.get('credits', "")
-    information = info.get('information', "")
-
-    title = _("About") + (f" {name}" if name else "")
-    factory.createHeading(vbox, title)
-
-    # Header block
-    header = factory.createHBox(vbox)
-    if logo:
+        # Optional MinSize wrapper (accepts {'column','lines'} like the C++ code)
+        content_parent = root_vbox
+        size_hint = info.get('size') or {}
         try:
-            factory.createImage(header, logo)
-            factory.createHSpacing(header, 8)
+            cols = int(size_hint.get('column', size_hint.get('columns')))
+            rows = int(size_hint.get('lines', size_hint.get('rows')))
+            content_parent = factory.createMinSize(root_vbox, cols, rows)
         except Exception:
-            pass
-    labels = factory.createVBox(header)
-    if name:
-        factory.createLabel(labels, name)
-    if version:
-        factory.createLabel(labels, version)
-    if license_txt:
-        factory.createLabel(labels, license_txt)
+            content_parent = root_vbox
 
-    # Content block
-    if description:
-        rt = factory.createRichText(vbox, "", False)
-        rt.setValue(description)
-    if authors:
-        factory.createHeading(vbox, _("Authors"))
-        ra = factory.createRichText(vbox, "", False)
-        ra.setValue(authors)
-    if credits:
-        factory.createHeading(vbox, _("Credits"))
-        rc = factory.createRichText(vbox, "", False)
-        rc.setValue(credits)
-    if information:
-        factory.createHeading(vbox, _("Information"))
-        ri = factory.createRichText(vbox, "", False)
-        ri.setValue(information)
+        vbox = factory.createVBox(content_parent)
 
-    align = factory.createRight(vbox)
-    close_btn = factory.createPushButton(align, _("&Close"))
-    while True:
-        ev = dlg.waitForEvent()
-        if ev.eventType() in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
-            break
-        if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == close_btn and ev.reason() == yui.YEventReason.Activated:
-            break
-    dlg.destroy()
+        name        = info.get('name', "")
+        version     = info.get('version', "")
+        license_txt = info.get('license', "")
+        authors     = info.get('authors', "")
+        description = info.get('description', "")
+        logo        = info.get('logo', "")
+        credits     = info.get('credits', "")
+        information = info.get('information', "")
+        dialog_mode = info.get('dialog_mode', AboutDialogMode.CLASSIC)
+
+        title = _("About") + (f" {name}" if name else "")    
+        factory.createHeading(vbox, title)
+
+        # Header block (logo + labels)
+        header = factory.createHBox(vbox)
+        if logo:
+            try:
+                factory.createImage(header, logo)
+                factory.createSpacing(header, 8)
+            except Exception:
+                pass
+        labels = factory.createVBox(header)
+        if name:
+            factory.createLabel(labels, name)
+        if version:
+            factory.createLabel(labels, version)
+        if license_txt:
+            factory.createLabel(labels, license_txt)
+
+        # Credits line (matches C++ layout)
+        if credits:
+            credits_box = factory.createHBox(vbox)
+            factory.createSpacing(credits_box, 1)
+            factory.createLabel(credits_box, credits)
+            factory.createSpacing(credits_box, 1)
+            # ...existing code...
+
+        # Helper to add a RichText block
+        def _add_richtext(parent, value):
+            rt = factory.createRichText(parent, "", False)
+            rt.setValue(value)
+            try:
+                rt.setStretchable(YUIDimension.YD_HORIZ, True)
+                rt.setStretchable(YUIDimension.YD_VERT, True)
+            except Exception:
+                pass
+            return rt
+
+        info_btn = None
+        credits_btn = None
+
+        # Tabbed layout (Authors / Description / Information) if requested and available
+        use_tabbed = (dialog_mode == AboutDialogMode.TABBED)
+        tab_widget = None
+        if use_tabbed:
+            try:
+                tab_widget = factory.createDumbTab(vbox)
+            except Exception:
+                tab_widget = None
+            if tab_widget:
+                sections_added = False
+                if authors:
+                    tab_authors = tab_widget.addItem(_("Authors"))
+                    _add_richtext(tab_authors, authors)
+                    sections_added = True
+                if description:
+                    tab_desc = tab_widget.addItem(_("Description"))
+                    _add_richtext(tab_desc, description)
+                    sections_added = True
+                if information:
+                    tab_info = tab_widget.addItem(_("Information"))
+                    _add_richtext(tab_info, information)
+                    sections_added = True
+                if not sections_added:
+                    tab_widget = None
+            if tab_widget is None:
+                use_tabbed = False  # fallback to classic if tabs unavailable
+
+        if not use_tabbed:
+            # Classic stacked content + buttons (mirrors C++ behavior)
+            if description:
+                factory.createHeading(vbox, _("Description"))
+                _add_richtext(vbox, description)
+            if authors:
+                factory.createHeading(vbox, _("Authors"))
+                _add_richtext(vbox, authors)
+            if information:
+                factory.createHeading(vbox, _("Information"))
+                _add_richtext(vbox, information)
+            button_row = factory.createHBox(vbox)
+            if information:
+                info_btn = factory.createPushButton(button_row, _("&Info"))
+            if credits:
+                credits_btn = factory.createPushButton(button_row, _("&Credits"))
+
+        # Close button aligned to the right, as in the C++ dialog
+        close_row = factory.createHBox(vbox)
+        factory.createHStretch(close_row)
+        close_btn = factory.createPushButton(close_row, _("&Close"))
+
+        while True:
+            ev = dlg.waitForEvent()
+            if not ev:
+                continue
+            et = ev.eventType()
+            if et in (yui.YEventType.CancelEvent, yui.YEventType.TimeoutEvent):
+                break
+            if et != yui.YEventType.WidgetEvent:
+                continue
+            widget = ev.widget()
+            if widget == close_btn:
+                break
+            if info_btn and widget == info_btn:
+                infoMsgBox({"title": _("Information"), "text": information or "", "richtext": True})
+            elif credits_btn and widget == credits_btn:
+                infoMsgBox({"title": _("Credits"), "text": credits or "", "richtext": True})
+
+        dlg.destroy()
+    finally:
+        if dlg is not None:
+            try:
+                dlg.destroy()
+            except Exception:
+                pass
+        _restore_app_title(app, previous_title)
