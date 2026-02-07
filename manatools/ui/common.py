@@ -85,6 +85,7 @@ def warningMsgBox (info) :
     btns = factory.createHBox(vbox)
     factory.createHStretch(btns)
     ok_btn = factory.createPushButton(btns, _("&Ok"))
+    factory.createHStretch(btns)
 
     # Event loop
     while True:
@@ -151,6 +152,7 @@ def infoMsgBox (info) :
     btns = factory.createHBox(vbox)
     factory.createHStretch(btns)
     ok_btn = factory.createPushButton(btns, _("&Ok"))
+    factory.createHStretch(btns)
 
     # Event loop
     while True:
@@ -207,6 +209,7 @@ def msgBox (info) :
     btns = factory.createHBox(vbox)
     factory.createHStretch(btns)
     ok_btn = factory.createPushButton(btns, _("&Ok"))
+    factory.createHStretch(btns)
 
     # Event loop
     while True:
