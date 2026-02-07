@@ -75,20 +75,21 @@ class YApplicationQt:
         return self._product_name
     
     def setApplicationTitle(self, title):
-        """Set the application title."""
+        """Set the application title and try to update dialogs/windows."""
         self._application_title = title
-        # also keep Qt's application name in sync so dialogs can read it without importing YUI
         try:
-            app = QtWidgets.QApplication.instance()
-            if app:
-                app.setApplicationName(title)
-                top_level_widgets = app.topLevelWidgets()
-
-                for widget in top_level_widgets:
-                    if isinstance(widget, QtWidgets.QMainWindow):
-                        main_window = widget
-                        main_window.setWindowTitle(title)
-                        break
+            # update the top most YDialogQt window if available
+            try:
+                dlg = YDialogQt.currentDialog(doThrow=False)
+                if dlg:
+                    win = getattr(dlg, "_qwidget", None)
+                    if win:
+                        try:
+                            win.setWindowTitle(title)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
         except Exception:
             pass
 
