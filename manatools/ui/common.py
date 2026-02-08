@@ -684,15 +684,11 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                     tab_content_updater = None
 
         if not use_tabbed:
-            inline_sections = [
-                (_("Description"), description),
-                (_("Authors"), authors),
-            ]
-            for heading, value in inline_sections:
-                if not value:
-                    continue
-                factory.createHeading(vbox, heading)
-                _add_richtext(vbox, value)
+            if description:
+                _add_richtext(vbox, description)
+            if authors:
+                factory.createHeading(vbox, _("Authors"))
+                _add_richtext(vbox, authors)
 
             if information or credits:
                 button_row = factory.createHBox(vbox)
@@ -728,11 +724,11 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 continue
             if info_btn and widget == info_btn:
                 logger.debug("AboutDialog information button activated")
-                infoMsgBox({"title": _("Information"), "text": information or "", "richtext": True})
+                msgBox({"title": _("Information"), "text": information or "", "richtext": True})
                 continue
             if credits_btn and widget == credits_btn:
                 logger.debug("AboutDialog credits button activated")
-                infoMsgBox({"title": _("Credits"), "text": credits or "", "richtext": True})
+                msgBox({"title": _("Credits"), "text": credits or "", "richtext": True})
                 continue
 
             logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())
