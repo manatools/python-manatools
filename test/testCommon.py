@@ -59,6 +59,45 @@ class TestDialog(basedialog.BaseDialog):
     except Exception as _e:
       print(f"Failed to configure file logger: {_e}")
 
+    self._tabbed_information = "Tabbed About dialog additional information"
+    self._about_dialog_size = (320, 240)
+    self._about_metadata = {
+      'setApplicationName': "Test Dialog",
+      'setVersion': manatools.__project_version__,
+      'setAuthors': 'Angelo Naselli &lt;anaselli@linux.it&gt; <br/> Author 2 <br/> Author 3 <br/> Author 4 <br/> Author 5',
+      'setDescription': "Manatools Test Dialog example",
+      'setLicense': 'GPLv2',
+      'setCredits': "Copyright (C) 2014-2026 Angelo Naselli",
+      'setLogo': 'manatools',
+      'setInformation': "Classic About dialog additional information",
+    }
+    self._apply_about_metadata()
+
+  def _apply_about_metadata(self, **overrides):
+    '''
+    Push application metadata to the active YUI backend so AboutDialog
+    retrieves consistent information regardless of the selected backend.
+    '''
+    payload = dict(self._about_metadata)
+    for setter_name, value in overrides.items():
+      if value is not None:
+        payload[setter_name] = value
+
+    try:
+      app = yui.YUI.app()
+    except Exception as exc:
+      logging.getLogger(__name__).debug("Unable to reach YUI app: %s", exc)
+      return
+
+    for setter_name, value in payload.items():
+      setter = getattr(app, setter_name, None)
+      if not callable(setter):
+        continue
+      try:
+        setter(value)
+      except Exception as exc:
+        logging.getLogger(__name__).debug("Failed to apply %s: %s", setter_name, exc)
+
     
   def UIlayout(self, layout):
     '''
@@ -100,30 +139,10 @@ class TestDialog(basedialog.BaseDialog):
       About menu call back
       '''
       yes = common.askYesOrNo({"title": "Choose About dialog mode", "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic", "richtext" : True, 'default_button': 1 })
-      if yes:
-        common.AboutDialog({ 'name' : "Test Dialog",
-                    'dialog_mode' : common.AboutDialogMode.TABBED,
-                    'version' : manatools.__project_version__,
-                    'credits' :"Copyright (C) 2014-2026 Angelo Naselli",
-                    'license' : 'GPLv2',
-                    'authors' : 'Angelo Naselli &lt;anaselli@linux.it&gt;',
-                    'logo'    : 'manatools',
-                    'information' : "Tabbed About dialog additional information",
-                    'description' : "Manatools Test Dialog example",
-                    'size': {'width': 320, 'height': 240},
-                    })
-      else :
-         common.AboutDialog({ 'name' : "Test Dialog",
-                    'dialog_mode' : common.AboutDialogMode.CLASSIC,
-                    'version' : manatools.__project_version__,
-                    'credits' :"Copyright (C) 2014-2026 Angelo Naselli",
-                    'license' : 'GPLv2',
-                    'authors' : 'Angelo Naselli &lt;anaselli@linux.it&gt;',
-                    'logo'    : 'manatools',
-                    'information' : "Classic About dialog additional information",
-                    'description' : "Manatools Test Dialog example",
-                    'size': {'width': 320, 'height': 240},
-                    })
+      selected_mode = common.AboutDialogMode.TABBED if yes else common.AboutDialogMode.CLASSIC
+      info_text = self._tabbed_information if yes else self._about_metadata.get('setInformation', "")
+      self._apply_about_metadata(setInformation=info_text)
+      common.AboutDialog(dialog_mode=selected_mode, size=self._about_dialog_size)
    
   def onPressWarning(self) :
     '''

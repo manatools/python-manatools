@@ -16,6 +16,7 @@ from ..aui.yui_common import YUIDimension, YItem
 from enum import Enum
 import gettext
 import logging
+import warnings
 # https://pymotw.com/3/gettext/#module-localization
 t = gettext.translation(
     'python-manatools',
@@ -363,7 +364,7 @@ def askYesOrNo (info) :
         text      =>     string to be swhon into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Yes - any other values => No]
-        size => [width, height]
+        size => [width, height] in pixels, optional dialog minimum size hint
 
     @output:
         False: No button has been pressed
@@ -411,7 +412,7 @@ def askYesOrNo (info) :
         if 'size' in info.keys():
             try:
                 dims = info['size']
-                parent = factory.createMinSize(vbox, int(dims[0]), int(dims[1]))
+                parent = factory.createMinSize(vbox, int(dims.get('width', 320)), int(dims.get('height', 240)))
                 vbox = parent
             except Exception:
                 pass
@@ -456,61 +457,138 @@ class AboutDialogMode(Enum):
     CLASSIC = 1
     TABBED  = 2
 
-def AboutDialog (info) :
+def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLASSIC, size=None):
     '''
     About dialog implementation. AboutDialog can be used by
-    modules, to show authors, license, credits, etc.
+    modules to show authors, license, credits, etc.
 
-    @param info: dictionary, optional information to be passed to the dialog.
-        name        => the application name
-        version     =>  the application version
-        license     =>  the application license, the short length one (e.g. GPLv2, GPLv3, LGPLv2+, etc)
-        authors     =>  the string providing the list of authors; it could be html-formatted
-        description =>  the string providing a brief description of the application
-        logo        => the string providing the file path for the application logo (high-res image)
-        icon        => the string providing the file path for the application icon (low-res image)
-        credits     => the application credits, they can be html-formatted
-        information => other extra informations, they can be html-formatted
-        size        => libyui dialog minimum size, dictionary containing {width, height}
-        dialog_mode => AboutDialogMode.CLASSIC: classic style dialog, any other as tabbed style dialog
+    Parameters
+    ----------
+    info: dict | None
+        Deprecated dictionary that historically provided dialog metadata.
+        Present values still override backend metadata, but callers should
+        prefer configuring fields via the application backend. When provided
+        a DeprecationWarning is emitted.
+    dialog_mode: AboutDialogMode
+        Target layout style (classic/tabbed). Defaults to CLASSIC.
+    size: Mapping | Sequence | None
+        Optional minimum-size hint. Accepted formats:
+            - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+            - tuple/list where the first element is width and the second height
     '''
-    if (not info) :
-        raise ValueError("Missing AboutDialog parameters")
-    
+
+    safe_info = {}
+    if info is not None:
+        if not isinstance(info, dict):
+            raise TypeError("info must be a dict when provided")
+        safe_info = dict(info)
+        warnings.warn(
+            "AboutDialog 'info' parameter is deprecated; configure metadata via the application backend.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        logger.warning("AboutDialog 'info' parameter is deprecated; prefer backend metadata.")
+
+    app = None
+    try:
+        app = yui.YUI.app()
+    except Exception as exc:
+        logger.debug("Unable to obtain YUI application instance: %s", exc)
+
+    def _fetch_value(info_key, app_attr, fallback=""):
+        if safe_info.get(info_key):
+            return safe_info.get(info_key)
+        if app is None:
+            return fallback
+        value = None
+        attr = getattr(app, app_attr, None)
+        try:
+            value = attr() if callable(attr) else attr
+        except Exception as exc:
+            logger.debug("Unable to fetch %s via %s: %s", info_key, app_attr, exc)
+            value = None
+        if (not value) and info_key == 'name':
+            try:
+                value = app.productName()
+            except Exception:
+                pass
+        return value or fallback
+
+    name        = _fetch_value('name', 'applicationName')
+    version     = _fetch_value('version', 'version')
+    license_txt = _fetch_value('license', 'license')
+    authors     = _fetch_value('authors', 'authors')
+    description = _fetch_value('description', 'description')
+    logo        = _fetch_value('logo', 'logo')
+    credits     = _fetch_value('credits', 'credits')
+    information = _fetch_value('information', 'information')
+
+    legacy_mode = safe_info.get('dialog_mode') if safe_info else None
+    effective_mode = dialog_mode or AboutDialogMode.CLASSIC
+    if legacy_mode is not None:
+        if isinstance(legacy_mode, AboutDialogMode):
+            effective_mode = legacy_mode
+        else:
+            try:
+                effective_mode = AboutDialogMode[str(legacy_mode)]
+            except Exception:
+                logger.debug("Unsupported legacy dialog_mode value: %s", legacy_mode)
+
+    def _normalize_size(size_spec):
+        width = 320
+        height = 240
+        if size_spec is None and safe_info.get('size'):
+            size_spec = safe_info.get('size')
+        if isinstance(size_spec, dict):
+            width = size_spec.get('width', width)
+            if 'width' not in size_spec:
+                if 'column' in size_spec:
+                    width = size_spec['column']
+                elif 'columns' in size_spec:
+                    width = size_spec['columns']
+            height = size_spec.get('height', height)
+            if 'height' not in size_spec:
+                if 'lines' in size_spec:
+                    height = size_spec['lines']
+                elif 'rows' in size_spec:
+                    height = size_spec['rows']
+        elif isinstance(size_spec, (list, tuple)):
+            if len(size_spec) > 0 and size_spec[0] is not None:
+                width = size_spec[0]
+            if len(size_spec) > 1 and size_spec[1] is not None:
+                height = size_spec[1]
+        elif size_spec is not None:
+            logger.debug("Unsupported size specification type: %s", type(size_spec))
+        try:
+            width = int(width)
+            height = int(height)
+        except Exception:
+            width, height = 320, 240
+        return width, height
+
     dlg = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
-        title = _("About") + " " + info.get('name', "")
+        title = _("About") + (" " + name if name else "")
         old_title = _push_app_title(title)
         root_vbox = factory.createVBox(dlg)
 
         # Optional MinSize wrapper (accepts {'width','height'} in pixels)
         content_parent = root_vbox
-        size_hint = info.get('size') or {}
-        try:
-            cols = int(size_hint.get('width', 320))
-            rows = int(size_hint.get('height', 240))
-            content_parent = factory.createMinSize(root_vbox, cols, rows)
-        except Exception:
-            content_parent = root_vbox
+        width_hint, height_hint = _normalize_size(size if size is not None else None)
+        if width_hint > 0 and height_hint > 0:
+            try:
+                content_parent = factory.createMinSize(root_vbox, int(width_hint), int(height_hint))
+            except Exception as exc:
+                logger.debug("Unable to apply size hint (%s, %s): %s", width_hint, height_hint, exc)
 
         vbox = factory.createVBox(content_parent)
-
-        name        = info.get('name', "")
-        version     = info.get('version', "")
-        license_txt = info.get('license', "")
-        authors     = info.get('authors', "")
-        description = info.get('description', "")
-        logo        = info.get('logo', "")
-        credits     = info.get('credits', "")
-        information = info.get('information', "")
-        dialog_mode = info.get('dialog_mode', AboutDialogMode.CLASSIC)
 
         logger.debug(
             "Opening AboutDialog name='%s' mode=%s",
             name or "",
-            getattr(dialog_mode, "name", dialog_mode),
+            getattr(effective_mode, "name", effective_mode),
         )
 
         # Header block (logo + labels)
@@ -555,7 +633,7 @@ def AboutDialog (info) :
         if credits:
             tab_sections.append((_('Credits'), credits))
 
-        use_tabbed = (dialog_mode == AboutDialogMode.TABBED)
+        use_tabbed = (effective_mode == AboutDialogMode.TABBED)
         tab_text_widget = None
 
         if use_tabbed:
