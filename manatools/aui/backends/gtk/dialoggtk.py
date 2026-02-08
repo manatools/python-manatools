@@ -22,6 +22,7 @@ from ...yui_common import *
 from ... import yui as yui_mod
 
 class YDialogGtk(YSingleChildContainerWidget):
+    """Gtk4 dialog window with nested-loop event handling and default button support."""
     _open_dialogs = []
     
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
@@ -32,6 +33,8 @@ class YDialogGtk(YSingleChildContainerWidget):
         self._window = None
         self._event_result = None
         self._glib_loop = None
+        self._default_button = None
+        self._default_key_controller = None
         YDialogGtk._open_dialogs.append(self)
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
@@ -73,6 +76,7 @@ class YDialogGtk(YSingleChildContainerWidget):
         return self._is_open
     
     def destroy(self, doThrow=True):
+        self._clear_default_button()
         if self._window:
             try:
                 self._window.destroy()
@@ -228,6 +232,31 @@ class YDialogGtk(YSingleChildContainerWidget):
                 raise YUINoDialogException("No dialog open")
             return None
         return cls._open_dialogs[-1]
+
+    def setDefaultButton(self, button):
+        """Set or clear the default push button for this dialog."""
+        if button is None:
+            self._clear_default_button()
+            return True
+        try:
+            if button.widgetClass() != "YPushButton":
+                raise ValueError("Default button must be a YPushButton")
+        except Exception:
+            self._logger.error("Invalid widget passed to setDefaultButton", exc_info=True)
+            return False
+        try:
+            dlg = button.findDialog() if hasattr(button, "findDialog") else None
+        except Exception:
+            dlg = None
+        if dlg not in (None, self):
+            self._logger.error("Refusing to set a default button owned by another dialog")
+            return False
+        try:
+            button.setDefault(True)
+        except Exception:
+            self._logger.exception("Failed to activate default button")
+            return False
+        return True
     
     def _create_backend_widget(self):
         # Determine window title from YApplicationGtk instance stored on the YUI backend
@@ -310,6 +339,14 @@ class YDialogGtk(YSingleChildContainerWidget):
 
         self._backend_widget = self._window
         self._backend_widget.set_sensitive(self._enabled)
+        # Install key controller to trigger the default button with Enter/Return.
+        try:
+            controller = Gtk.EventControllerKey()
+            controller.connect("key-pressed", self._on_default_key_pressed)
+            self._window.add_controller(controller)
+            self._default_key_controller = controller
+        except Exception:
+            self._logger.exception("Failed to install default button key controller")
         # Connect destroy/close handlers
         try:
             # Gtk4: use 'close-request' if available, otherwise 'destroy'
@@ -372,3 +409,55 @@ class YDialogGtk(YSingleChildContainerWidget):
                         pass
         except Exception:
             pass
+
+    def _on_default_key_pressed(self, controller, keyval, keycode, state):
+        """Activate the default button when Return/Enter is pressed."""
+        try:
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_ISO_Enter, Gdk.KEY_KP_Enter):
+                if self._activate_default_button():
+                    return True
+        except Exception:
+            self._logger.exception("Default key handler failed")
+        return False
+
+    def _register_default_button(self, button):
+        """Ensure this dialog tracks a single default push button."""
+        if getattr(self, "_default_button", None) == button:
+            return
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to clear previous default button")
+        self._default_button = button
+
+    def _unregister_default_button(self, button):
+        """Drop dialog reference when button is no longer default."""
+        if getattr(self, "_default_button", None) == button:
+            self._default_button = None
+
+    def _clear_default_button(self):
+        """Clear any current default button."""
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to reset default button state")
+            self._default_button = None
+
+    def _activate_default_button(self):
+        """Invoke the current default button if enabled and visible."""
+        button = getattr(self, "_default_button", None)
+        if button is None:
+            return False
+        try:
+            if not button.isEnabled() or not button.visible():
+                return False
+        except Exception:
+            return False
+        try:
+            self._post_event(YWidgetEvent(button, YEventReason.Activated))
+            return True
+        except Exception:
+            self._logger.exception("Failed to activate default button")
+            return False

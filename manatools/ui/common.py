@@ -411,6 +411,7 @@ def askOkCancel (info) :
         cancel_btn = factory.createPushButton(btns, _("&Cancel"))
 
         default_ok = bool(info.get('default_button', 0) == 1)
+        dlg.setDefaultButton(ok_btn if default_ok else cancel_btn)
         # simple default: ignore focusing specifics for now
         result = False
         while True:
@@ -507,6 +508,9 @@ def askYesOrNo (info) :
         factory.createHStretch(btns)
         yes_btn = factory.createPushButton(btns, _("&Yes"))
         no_btn = factory.createPushButton(btns, _("&No"))
+
+        default_yes = bool(info.get('default_button', 0) == 1)
+        dlg.setDefaultButton(yes_btn if default_yes else no_btn)
 
         result = False
         while True:

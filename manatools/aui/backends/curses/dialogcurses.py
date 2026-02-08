@@ -27,6 +27,7 @@ if not logging.getLogger().handlers:
     _mod_logger.setLevel(logging.INFO)
 
 class YDialogCurses(YSingleChildContainerWidget):
+    """Ncurses dialog container with focus, help, and default button support."""
     _open_dialogs = []
     _current_dialog = None
     
@@ -53,6 +54,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._help_overlay_text = None
         self._help_overlay_until = 0.0
         self._help_overlay_pos = None  # (y, x) where to draw the overlay; None = auto fallback
+        self._default_button = None
         YDialogCurses._open_dialogs.append(self)
     
     def widgetClass(self):
@@ -115,6 +117,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         return self._is_open
     
     def destroy(self, doThrow=True):
+        self._clear_default_button()
         self._is_open = False
         if self in YDialogCurses._open_dialogs:
             YDialogCurses._open_dialogs.remove(self)
@@ -140,6 +143,34 @@ class YDialogCurses(YSingleChildContainerWidget):
                 raise YUINoDialogException("No dialog open")
             return None
         return cls._open_dialogs[-1]
+
+    def setDefaultButton(self, button):
+        """Set or clear the dialog default push button."""
+        if button is None:
+            self._clear_default_button()
+            return True
+        try:
+            if button.widgetClass() != "YPushButton":
+                raise ValueError("Default button must be a YPushButton instance")
+        except Exception:
+            self._logger.error("Invalid widget passed to setDefaultButton", exc_info=True)
+            return False
+        try:
+            dlg = button.findDialog() if hasattr(button, "findDialog") else None
+        except Exception:
+            dlg = None
+        if dlg not in (None, self):
+            try:
+                self._logger.error("Button belongs to another dialog; cannot set as default")
+            except Exception:
+                pass
+            return False
+        try:
+            button.setDefault(True)
+        except Exception:
+            self._logger.exception("Failed to mark button as default")
+            return False
+        return True
     
     def _create_backend_widget(self):
         # Use the main screen
@@ -540,6 +571,13 @@ class YDialogCurses(YSingleChildContainerWidget):
                 if not handled and ((key >= ord('a') and key <= ord('z')) or (key >= ord('A') and key <= ord('Z'))):
                     if self._activate_pushbutton_mnemonic(chr(key)):
                         self._last_draw_time = 0
+                        handled = True
+
+                # Trigger default button when Enter/Return pressed and no widget handled it
+                if not handled and key in (curses.KEY_ENTER, ord('\n'), ord('\r')):
+                    if self._activate_default_button():
+                        self._last_draw_time = 0
+                        continue
 
             except KeyboardInterrupt:
                 self._post_event(YCancelEvent())
@@ -615,4 +653,46 @@ class YDialogCurses(YSingleChildContainerWidget):
                     w = getattr(w, "_parent", None)
             return False
         except Exception:
+            return False
+
+    def _register_default_button(self, button):
+        """Internal: ensure only one default button is tracked for this dialog."""
+        if getattr(self, "_default_button", None) == button:
+            return
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to clear previous default button")
+        self._default_button = button
+
+    def _unregister_default_button(self, button):
+        """Internal: drop reference when button is no longer default."""
+        if getattr(self, "_default_button", None) == button:
+            self._default_button = None
+
+    def _clear_default_button(self):
+        """Clear the current default button if any."""
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to reset default button state")
+            self._default_button = None
+
+    def _activate_default_button(self):
+        """Post an activation event for the default button if available."""
+        button = getattr(self, "_default_button", None)
+        if button is None:
+            return False
+        try:
+            if not button.isEnabled() or not button.visible():
+                return False
+        except Exception:
+            return False
+        try:
+            self._post_event(YWidgetEvent(button, YEventReason.Activated))
+            return True
+        except Exception:
+            self._logger.exception("Failed to activate default button")
             return False

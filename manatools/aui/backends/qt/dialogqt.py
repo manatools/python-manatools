@@ -20,6 +20,7 @@ import signal
 import fcntl
 
 class YDialogQt(YSingleChildContainerWidget):
+    """Qt6 main window wrapper that manages dialog state and default buttons."""
     _open_dialogs = []
     
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
@@ -36,6 +37,7 @@ class YDialogQt(YSingleChildContainerWidget):
         self._sigint_notifier = None
         self._prev_wakeup_fd = None
         self._prev_sigint_handler = None
+        self._default_button = None
         YDialogQt._open_dialogs.append(self)
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
@@ -78,6 +80,7 @@ class YDialogQt(YSingleChildContainerWidget):
          return self._is_open
     
     def destroy(self, doThrow=True):
+        self._clear_default_button()
         if self._qwidget:
             self._qwidget.close()
             self._qwidget = None
@@ -119,6 +122,31 @@ class YDialogQt(YSingleChildContainerWidget):
                 raise YUINoDialogException("No dialog open")
             return None
         return cls._open_dialogs[-1]
+
+    def setDefaultButton(self, button):
+        """Set or clear the default push button for this dialog."""
+        if button is None:
+            self._clear_default_button()
+            return True
+        try:
+            if button.widgetClass() != "YPushButton":
+                raise ValueError("Default button must be a YPushButton")
+        except Exception:
+            self._logger.error("Invalid widget passed to setDefaultButton", exc_info=True)
+            return False
+        try:
+            dlg = button.findDialog() if hasattr(button, "findDialog") else None
+        except Exception:
+            dlg = None
+        if dlg not in (None, self):
+            self._logger.error("Refusing to reuse a button owned by a different dialog")
+            return False
+        try:
+            button.setDefault(True)
+        except Exception:
+            self._logger.exception("Failed to flag button as default")
+            return False
+        return True
     
     def _create_backend_widget(self):
         self._qwidget = QtWidgets.QMainWindow()
@@ -401,3 +429,28 @@ class YDialogQt(YSingleChildContainerWidget):
                     pass
         except Exception:
             pass
+
+    def _register_default_button(self, button):
+        """Ensure only one Qt push button is marked as default."""
+        if getattr(self, "_default_button", None) == button:
+            return
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to clear previous default button")
+        self._default_button = button
+
+    def _unregister_default_button(self, button):
+        """Drop reference when the current default button changes."""
+        if getattr(self, "_default_button", None) == button:
+            self._default_button = None
+
+    def _clear_default_button(self):
+        """Clear existing default button, if any."""
+        if getattr(self, "_default_button", None) is not None:
+            try:
+                self._default_button._apply_default_state(False, notify_dialog=False)
+            except Exception:
+                self._logger.exception("Failed to reset default button state")
+            self._default_button = None

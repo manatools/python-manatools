@@ -15,6 +15,7 @@ import sys
 import os
 import time
 import logging
+from typing import Optional
 from ...yui_common import *
 from .commoncurses import extract_mnemonic, split_mnemonic
 
@@ -28,6 +29,7 @@ if not logging.getLogger().handlers:
 
 
 class YPushButtonCurses(YWidget):
+    """Curses push button widget with mnemonic handling and default state."""
     def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
         super().__init__(parent)
         self._label = label
@@ -38,6 +40,7 @@ class YPushButtonCurses(YWidget):
         self._x = 0
         self._y = 0
         self._height = 1  # Fixed height - buttons are always one line
+        self._is_default = False
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         # derive mnemonic and cleaned label if present
         try:
@@ -61,6 +64,14 @@ class YPushButtonCurses(YWidget):
             self._mnemonic, self._mnemonic_index, self._clean_label = split_mnemonic(self._label)
         except Exception:
             self._mnemonic, self._mnemonic_index, self._clean_label = None, None, self._label
+
+    def setDefault(self, default: bool):
+        """Mark this button as the dialog default (or clear it)."""
+        self._apply_default_state(bool(default), notify_dialog=True)
+
+    def default(self) -> bool:
+        """Return True when this button is the dialog default."""
+        return bool(getattr(self, "_is_default", False))
     
     def _create_backend_widget(self):
         try:
@@ -115,7 +126,7 @@ class YPushButtonCurses(YWidget):
                 attr = curses.A_DIM
             else:
                 attr = curses.A_REVERSE if self._focused else curses.A_NORMAL
-                if self._focused:
+                if self._focused or self._is_default:
                     attr |= curses.A_BOLD
 
             self._x = text_x
@@ -181,3 +192,25 @@ class YPushButtonCurses(YWidget):
     def setVisible(self, visible=True):
         super().setVisible(visible)
         self._can_focus = bool(visible)
+
+    def _apply_default_state(self, state: bool, notify_dialog: bool):
+        """Internal helper to store default state and notify dialog if needed."""
+        desired = bool(state)
+        if getattr(self, "_is_default", False) == desired and not notify_dialog:
+            return
+        dlg = self.findDialog() if notify_dialog else None
+        if notify_dialog and dlg is not None:
+            try:
+                if desired:
+                    dlg._register_default_button(self)
+                else:
+                    dlg._unregister_default_button(self)
+            except Exception:
+                self._logger.exception("Failed to synchronize default button with dialog")
+        self._is_default = desired
+        self._sync_default_visual()
+
+    def _sync_default_visual(self):
+        """Best-effort visual cue for default buttons in curses."""
+        # curses drawing checks _is_default to add bold attribute; nothing else to do here
+        return

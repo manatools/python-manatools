@@ -24,11 +24,13 @@ from .commongtk import _resolve_icon, _convert_mnemonic_to_gtk
 
 
 class YPushButtonGtk(YWidget):
+    """Gtk4 push button wrapper supporting icons, mnemonics, and default state."""
     def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
         super().__init__(parent)
         self._label = _convert_mnemonic_to_gtk(label)
         self._icon_name = icon_name
         self._icon_only = bool(icon_only)
+        self._is_default = False
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -44,6 +46,14 @@ class YPushButtonGtk(YWidget):
                 self._backend_widget.set_label(self._label)
             except Exception:
                 pass
+
+    def setDefault(self, default: bool):
+        """Mark this push button as the dialog default."""
+        self._apply_default_state(bool(default), notify_dialog=True)
+
+    def default(self) -> bool:
+        """Return True if this button is currently the default."""
+        return bool(getattr(self, "_is_default", False))
     
     def _create_backend_widget(self):
         if self._icon_only:
@@ -106,6 +116,7 @@ class YPushButtonGtk(YWidget):
                 self._logger.error("_create_backend_widget setup failed", exc_info=True)
             except Exception:
                 pass
+        self._sync_default_visual()
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -213,3 +224,44 @@ class YPushButtonGtk(YWidget):
                     self._logger.exception("setHelpText failed", exc_info=True)
         except Exception:
             pass
+
+    def _apply_default_state(self, state: bool, notify_dialog: bool):
+        """Store default flag and notify parent dialog if requested."""
+        desired = bool(state)
+        if getattr(self, "_is_default", False) == desired and not notify_dialog:
+            return
+        dlg = self.findDialog() if notify_dialog else None
+        if notify_dialog and dlg is not None:
+            try:
+                if desired:
+                    dlg._register_default_button(self)
+                else:
+                    dlg._unregister_default_button(self)
+            except Exception:
+                self._logger.exception("Failed to synchronize default state with dialog")
+        self._is_default = desired
+        self._sync_default_visual()
+
+    def _sync_default_visual(self):
+        """Apply/remove Gtk suggested-action styling for default buttons."""
+        widget = getattr(self, "_backend_widget", None)
+        if widget is None:
+            return
+        try:
+            if self._is_default:
+                widget.add_css_class("suggested-action")
+            else:
+                widget.remove_css_class("suggested-action")
+            return
+        except Exception:
+            pass
+        # Fallback for bindings exposing style_context instead of css helpers
+        try:
+            ctx = widget.get_style_context()
+            if ctx:
+                if self._is_default:
+                    ctx.add_class("suggested-action")
+                else:
+                    ctx.remove_class("suggested-action")
+        except Exception:
+            self._logger.exception("Failed to toggle suggested-action class")

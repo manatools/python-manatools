@@ -17,11 +17,13 @@ from .commonqt import _resolve_icon
 
 
 class YPushButtonQt(YWidget):
+    """Qt6 push button wrapper honoring icons, help text, and default state."""
     def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
         super().__init__(parent)
         self._label = label
         self._icon_name = icon_name
         self._icon_only = bool(icon_only)
+        self._is_default = False
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -34,6 +36,14 @@ class YPushButtonQt(YWidget):
         self._label = label
         if self._backend_widget and self._icon_only is False:
             self._backend_widget.setText(label)
+
+    def setDefault(self, default: bool):
+        """Mark/unmark this push button as the dialog default."""
+        self._apply_default_state(bool(default), notify_dialog=True)
+
+    def default(self) -> bool:
+        """Return True if this button is currently the default."""
+        return bool(getattr(self, "_is_default", False))
     
     def _create_backend_widget(self):
         if self._icon_only:
@@ -81,6 +91,7 @@ class YPushButtonQt(YWidget):
              pass
         self._backend_widget.setEnabled(bool(self._enabled))
         self._backend_widget.clicked.connect(self._on_clicked)
+        self._sync_default_visual()
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -145,3 +156,35 @@ class YPushButtonQt(YWidget):
                 self._backend_widget.setToolTip(help_text)
         except Exception:
             self._logger.exception("setHelpText failed")
+
+    def _apply_default_state(self, state: bool, notify_dialog: bool):
+        """Persist default flag and coordinate with owning dialog."""
+        desired = bool(state)
+        if getattr(self, "_is_default", False) == desired and not notify_dialog:
+            return
+        dlg = self.findDialog() if notify_dialog else None
+        if notify_dialog and dlg is not None:
+            try:
+                if desired:
+                    dlg._register_default_button(self)
+                else:
+                    dlg._unregister_default_button(self)
+            except Exception:
+                self._logger.exception("Failed to sync default state with dialog")
+        self._is_default = desired
+        self._sync_default_visual()
+
+    def _sync_default_visual(self):
+        """Apply Qt default/auto-default flags on the backend widget."""
+        widget = getattr(self, "_backend_widget", None)
+        if widget is None:
+            return
+        try:
+            widget.setDefault(bool(self._is_default))
+        except Exception:
+            self._logger.exception("Failed to set Qt default flag")
+        try:
+            widget.setAutoDefault(bool(self._is_default))
+        except Exception:
+            # Some styles/widgets may not expose auto-default; ignore.
+            pass
