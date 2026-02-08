@@ -58,6 +58,41 @@ def _restore_app_title(old_title):
     except Exception:
         pass
 
+def _extract_dialog_size(info):
+    """Normalize a size specification stored in an info dictionary."""
+    if not info:
+        return None
+    size_spec = info.get('size')
+    if not size_spec:
+        return None
+
+    width = height = None
+    if isinstance(size_spec, dict):
+        width = size_spec.get('width')
+        if width is None:
+            width = size_spec.get('column') or size_spec.get('columns')
+        height = size_spec.get('height')
+        if height is None:
+            height = size_spec.get('lines') or size_spec.get('rows')
+    elif isinstance(size_spec, (list, tuple)):
+        if len(size_spec) > 0:
+            width = size_spec[0]
+        if len(size_spec) > 1:
+            height = size_spec[1]
+    else:
+        logger.debug("Unsupported size spec type: %s", type(size_spec))
+        return None
+
+    try:
+        width = int(width) if width is not None else None
+        height = int(height) if height is not None else None
+    except Exception:
+        return None
+
+    if width and height and width > 0 and height > 0:
+        return (width, height)
+    return None
+
 def warningMsgBox (info) :
     '''
     This function creates a Warning dialog and shows the message passed as input.
@@ -66,6 +101,10 @@ def warningMsgBox (info) :
             title     =>     dialog title
             text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
+            size => Mapping | Sequence | None
+            Optional minimum-size hint. Accepted formats:
+                - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+                - tuple/list where the first element is width and the second height
     '''
     if not info:
         return 0
@@ -77,7 +116,15 @@ def warningMsgBox (info) :
         title = info.get('title')
         old_title = _push_app_title(title)
 
-        vbox = factory.createVBox(dlg)
+        root_vbox = factory.createVBox(dlg)
+        content_parent = root_vbox
+        size_hint = _extract_dialog_size(info)
+        if size_hint:
+            try:
+                content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
+            except Exception:
+                content_parent = root_vbox
+        vbox = factory.createVBox(content_parent)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -140,6 +187,10 @@ def infoMsgBox (info) :
             title     =>     dialog title
             text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
+            size => Mapping | Sequence | None
+            Optional minimum-size hint. Accepted formats:
+                - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+                - tuple/list where the first element is width and the second height
     '''
     if not info:
         return 0
@@ -151,7 +202,15 @@ def infoMsgBox (info) :
         title = info.get('title')
         old_title = _push_app_title(title)
 
-        vbox = factory.createVBox(dlg)
+        root_vbox = factory.createVBox(dlg)
+        content_parent = root_vbox
+        size_hint = _extract_dialog_size(info)
+        if size_hint:
+            try:
+                content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
+            except Exception:
+                content_parent = root_vbox
+        vbox = factory.createVBox(content_parent)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -213,6 +272,10 @@ def msgBox (info) :
             title     =>     dialog title
             text      =>     string to be shown into the dialog
             richtext  =>     True if using rich text
+            size => Mapping | Sequence | None
+            Optional minimum-size hint. Accepted formats:
+                - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+                - tuple/list where the first element is width and the second height
     '''
     if not info:
         return 0
@@ -223,7 +286,15 @@ def msgBox (info) :
         dlg = factory.createPopupDialog()
         title = info.get('title')
         old_title = _push_app_title(title)
-        vbox = factory.createVBox(dlg)
+        root_vbox = factory.createVBox(dlg)
+        content_parent = root_vbox
+        size_hint = _extract_dialog_size(info)
+        if size_hint:
+            try:
+                content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
+            except Exception:
+                content_parent = root_vbox
+        vbox = factory.createVBox(content_parent)
 
         # Content row: text only (no icon)
         text = info.get('text', "") or ""
@@ -277,6 +348,10 @@ def askOkCancel (info) :
         text      =>     string to be swhon into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Ok - any other values => Cancel]
+        size => Mapping | Sequence | None
+            Optional minimum-size hint. Accepted formats:
+                - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+                - tuple/list where the first element is width and the second height
 
     @output:
         False: Cancel button has been pressed
@@ -292,7 +367,15 @@ def askOkCancel (info) :
         title = info.get('title')
         old_title = _push_app_title(title)
 
-        vbox = factory.createVBox(dlg)
+        root_vbox = factory.createVBox(dlg)
+        content_parent = root_vbox
+        size_hint = _extract_dialog_size(info)
+        if size_hint:
+            try:
+                content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
+            except Exception:
+                content_parent = root_vbox
+        vbox = factory.createVBox(content_parent)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -364,7 +447,10 @@ def askYesOrNo (info) :
         text      =>     string to be swhon into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Yes - any other values => No]
-        size => [width, height] in pixels, optional dialog minimum size hint
+        size => Mapping | Sequence | None
+            Optional minimum-size hint. Accepted formats:
+                - mapping containing 'width'/'height' (or legacy 'column'/'lines')
+                - tuple/list where the first element is width and the second height
 
     @output:
         False: No button has been pressed
@@ -379,7 +465,15 @@ def askYesOrNo (info) :
         dlg = factory.createPopupDialog()
         title = info.get('title')
         old_title = _push_app_title(title)
-        vbox = factory.createVBox(dlg)
+        root_vbox = factory.createVBox(dlg)
+        content_parent = root_vbox
+        size_hint = _extract_dialog_size(info)
+        if size_hint:
+            try:
+                content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
+            except Exception:
+                content_parent = root_vbox
+        vbox = factory.createVBox(content_parent)
 
         # Content row: icon + text
         text = info.get('text', "") or ""
@@ -407,15 +501,6 @@ def askYesOrNo (info) :
             tw.setStretchable(yui.YUIDimension.YD_VERT, True)
         except Exception:
             pass
-
-        # Handle size if provided
-        if 'size' in info.keys():
-            try:
-                dims = info['size']
-                parent = factory.createMinSize(vbox, int(dims.get('width', 320)), int(dims.get('height', 240)))
-                vbox = parent
-            except Exception:
-                pass
 
         # Buttons on the right
         btns = factory.createHBox(vbox)
