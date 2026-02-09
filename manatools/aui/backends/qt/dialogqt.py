@@ -11,7 +11,19 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 
 from PySide6 import QtWidgets, QtCore, QtGui
-from ...yui_common import YSingleChildContainerWidget, YUIDimension, YPropertySet, YProperty, YPropertyType, YUINoDialogException, YDialogType, YDialogColorMode, YEvent, YCancelEvent, YTimeoutEvent
+from ...yui_common import (
+    YSingleChildContainerWidget,
+    YUIDimension,
+    YPropertySet,
+    YProperty,
+    YPropertyType,
+    YUINoDialogException,
+    YDialogType,
+    YDialogColorMode,
+    YEvent,
+    YCancelEvent,
+    YTimeoutEvent,
+)
 from .commonqt import _resolve_icon
 from ... import yui as yui_mod
 import os
@@ -431,7 +443,7 @@ class YDialogQt(YSingleChildContainerWidget):
             pass
 
     def _register_default_button(self, button):
-        """Ensure only one Qt push button is marked as default."""
+        """Ensure only one Qt push button is tracked as default."""
         if getattr(self, "_default_button", None) == button:
             return
         if getattr(self, "_default_button", None) is not None:
@@ -442,7 +454,7 @@ class YDialogQt(YSingleChildContainerWidget):
         self._default_button = button
 
     def _unregister_default_button(self, button):
-        """Drop reference when the current default button changes."""
+        """Drop reference when the dialog loses its default button."""
         if getattr(self, "_default_button", None) == button:
             self._default_button = None
 
@@ -454,3 +466,4 @@ class YDialogQt(YSingleChildContainerWidget):
             except Exception:
                 self._logger.exception("Failed to reset default button state")
             self._default_button = None
+

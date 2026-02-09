@@ -9,7 +9,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 @package manatools.aui.backends.qt
 '''
-from PySide6 import QtWidgets, QtGui
+from PySide6 import QtWidgets, QtGui, QtCore
 import logging
 from typing import Optional
 from ...yui_common import *
@@ -24,6 +24,7 @@ class YPushButtonQt(YWidget):
         self._icon_name = icon_name
         self._icon_only = bool(icon_only)
         self._is_default = False
+        self._default_shortcuts = []
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -92,6 +93,7 @@ class YPushButtonQt(YWidget):
         self._backend_widget.setEnabled(bool(self._enabled))
         self._backend_widget.clicked.connect(self._on_clicked)
         self._sync_default_visual()
+        self._refresh_default_shortcuts()
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -173,6 +175,7 @@ class YPushButtonQt(YWidget):
                 self._logger.exception("Failed to sync default state with dialog")
         self._is_default = desired
         self._sync_default_visual()
+        self._refresh_default_shortcuts()
 
     def _sync_default_visual(self):
         """Apply Qt default/auto-default flags on the backend widget."""
@@ -188,3 +191,58 @@ class YPushButtonQt(YWidget):
         except Exception:
             # Some styles/widgets may not expose auto-default; ignore.
             pass
+
+    def _refresh_default_shortcuts(self):
+        """Create or remove shortcuts that emulate Qt default button behavior."""
+        self._clear_default_shortcuts()
+        if not self._is_default:
+            return
+        dlg = self.findDialog()
+        backend_window = getattr(dlg, "_qwidget", None) if dlg else None
+        backend_button = getattr(self, "_backend_widget", None)
+        if backend_window is None or backend_button is None:
+            return
+        try:
+            keys = [QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter, QtCore.Qt.Key_Space]
+            for key in keys:
+                shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), backend_window)
+                shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+                shortcut.activated.connect(lambda key_code=key: self._shortcut_activate(key_code))
+                self._default_shortcuts.append(shortcut)
+        except Exception:
+            self._logger.exception("Failed to install default button shortcuts")
+
+    def _clear_default_shortcuts(self):
+        """Dispose shortcut objects previously created for default activation."""
+        for shortcut in self._default_shortcuts:
+            try:
+                shortcut.deleteLater()
+            except Exception:
+                pass
+        self._default_shortcuts = []
+
+    def _shortcut_activate(self, key_code):
+        """Slot executed when a default shortcut fires (Enter/Space)."""
+        if not self._is_default:
+            return
+        if not self.isEnabled() or not self.visible():
+            return
+        dlg = self.findDialog()
+        backend_window = getattr(dlg, "_qwidget", None) if dlg else None
+        backend = getattr(self, "_backend_widget", None)
+        if backend is None:
+            return
+        if key_code == QtCore.Qt.Key_Space and backend_window is not None:
+            try:
+                focus_widget = backend_window.focusWidget()
+                if isinstance(focus_widget, (QtWidgets.QLineEdit, QtWidgets.QTextEdit, QtWidgets.QPlainTextEdit)):
+                    return
+            except Exception:
+                pass
+        try:
+            backend.animateClick(0)
+        except Exception:
+            try:
+                backend.click()
+            except Exception:
+                self._logger.exception("Default shortcut could not activate button")
