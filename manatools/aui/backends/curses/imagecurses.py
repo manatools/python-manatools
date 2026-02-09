@@ -66,6 +66,7 @@ class YImageCurses(YWidget):
 
     def _create_backend_widget(self):
         try:
+            self._backend_widget = self
             # nothing to create for curses; drawing uses _draw
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
