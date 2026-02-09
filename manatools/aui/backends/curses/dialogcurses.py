@@ -106,7 +106,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         # Find first focusable widget
         focusable = self._find_focusable_widgets()
         if focusable:
-            self._focused_widget = focusable[0]
+            self._focused_widget = self._default_button if self._default_button else focusable[0]
             self._focused_widget._focused = True
         
         # open() must be non-blocking (finalize and show). Event loop is
@@ -170,6 +170,12 @@ class YDialogCurses(YSingleChildContainerWidget):
         except Exception:
             self._logger.exception("Failed to mark button as default")
             return False
+        # Mirror GTK/Qt behavior: highlight default button and give it focus so
+        # the user can immediately activate it with space/enter.
+        try:
+            self._focus_widget(button)
+        except Exception:
+            pass
         return True
     
     def _create_backend_widget(self):
@@ -394,6 +400,41 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._focused_widget._focused = True
         # Force redraw on focus change
         self._last_draw_time = 0
+
+    def _focus_widget(self, widget):
+        """Force focus on a specific widget when possible."""
+        if widget is None:
+            return False
+        try:
+            if not getattr(widget, "_can_focus", False):
+                return False
+        except Exception:
+            return False
+        try:
+            if not widget.isEnabled() or not widget.visible():
+                return False
+        except Exception:
+            return False
+        # Skip updates if the widget already owns focus
+        if getattr(widget, "_focused", False):
+            self._focused_widget = widget
+            return True
+        # Clear previous focus
+        if getattr(self, "_focused_widget", None) is not None:
+            try:
+                self._focused_widget._focused = False
+            except Exception:
+                pass
+        self._focused_widget = widget
+        try:
+            widget._focused = True
+        except Exception:
+            pass
+        try:
+            self._last_draw_time = 0
+        except Exception:
+            pass
+        return True
 
     def _find_focusable_widgets(self):
         """Find all widgets that can receive focus"""
