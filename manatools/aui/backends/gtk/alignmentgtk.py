@@ -44,6 +44,9 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         self._backend_widget = None
         # get a reference to the single row container
         self._row = []
+        # pass-through mode for unchanged/fill alignment
+        self._fill_direct_mode = False
+        self._direct_child_widget = None
         # schedule guard for deferred attach
         self._attach_scheduled = False
         # Track if we've already attached a child
@@ -216,7 +219,83 @@ class YAlignmentGtk(YSingleChildContainerWidget):
         hal = self._to_gtk_halign()
         val = self._to_gtk_valign()
 
+        # Pass-through mode: when both alignments are unchanged/fill, this
+        # container should not center the child but let it fill all available
+        # space. CenterBox-based placement would visually center content.
+        if hal == Gtk.Align.FILL and val == Gtk.Align.FILL:
+            try:
+                # switch to direct-child mode by removing row containers once
+                if not self._fill_direct_mode:
+                    for row in list(self._row):
+                        try:
+                            self._backend_widget.remove(row)
+                        except Exception:
+                            pass
+                    self._fill_direct_mode = True
+
+                # replace previous direct child if present
+                old_direct = getattr(self, "_direct_child_widget", None)
+                if old_direct is not None and old_direct is not cw:
+                    try:
+                        self._backend_widget.remove(old_direct)
+                    except Exception:
+                        pass
+
+                try:
+                    cw.set_halign(Gtk.Align.FILL)
+                    cw.set_valign(Gtk.Align.FILL)
+                    cw.set_hexpand(True)
+                    cw.set_vexpand(True)
+                except Exception:
+                    pass
+
+                # enforce minimum size on child if requested
+                try:
+                    mw = getattr(self, '_min_width_px', 0)
+                    mh = getattr(self, '_min_height_px', 0)
+                    if (mw and mw > 0) or (mh and mh > 0):
+                        w_req = int(mw) if mw and mw > 0 else -1
+                        h_req = int(mh) if mh and mh > 0 else -1
+                        try:
+                            cw.set_size_request(w_req, h_req)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+                if cw.get_parent() is not self._backend_widget:
+                    try:
+                        self._backend_widget.append(cw)
+                    except Exception:
+                        pass
+                self._direct_child_widget = cw
+                self._child_attached = True
+                self._logger.debug("Successfully attached child %s %s [fill-direct]", child.widgetClass(), child.debugLabel())
+                return
+            except Exception as e:
+                self._logger.error("Error in fill-direct alignment mode: %s", e, exc_info=True)
+
         try:
+            # if previously in direct mode, restore row containers
+            if self._fill_direct_mode:
+                try:
+                    old_direct = getattr(self, "_direct_child_widget", None)
+                    if old_direct is not None:
+                        try:
+                            self._backend_widget.remove(old_direct)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                for row in list(self._row):
+                    try:
+                        if row.get_parent() is None:
+                            self._backend_widget.append(row)
+                    except Exception:
+                        pass
+                self._fill_direct_mode = False
+                self._direct_child_widget = None
+
 
             # Determine row index based on vertical alignment
             row_index = 0 if val == Gtk.Align.START else 2 if val == Gtk.Align.END else 1  # center default
