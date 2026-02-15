@@ -48,6 +48,7 @@ To check/review:
     [X] YAboutDialog (aka YMGAAboutDialog) - Implemented in manatools.ui
     [X] adding factory create alternative methods (e.g. createMultiSelectionBox)
     [X] managing shortcuts (only menu and pushbutton)
+    [ ] YTable sorting on columns management
     [ ] localization
 
 Nice to have: improvements outside YUI API
