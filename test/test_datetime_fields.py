@@ -55,18 +55,24 @@ def test_datefield(backend_name=None):
         dialog = factory.createMainDialog()
 
         vbox = factory.createVBox(dialog)
-        factory.createHeading(vbox, "Date/TimeField Test")
+        factory.createHeading(vbox, "Date/Time Field Test")
         factory.createLabel(vbox, f"Backend: {backend.value}")
 
         # Create datefield
-        df = factory.createDateField(vbox, "Select Date:")
+        hbox = factory.createHBox(vbox)
+        df = factory.createDateField(hbox, "Select Date:")
+        #df.setStretchable(yui.YUIDimension.YD_HORIZ, True)
         now = datetime.datetime.now()
         df.setValue(now.strftime("%Y-%m-%d"))
+        factory.createLabel(hbox, "right widget")
 
         # Create timefield
         try:
-            tf = factory.createTimeField(vbox, "Select Time:")
+            hbox = factory.createHBox(vbox)
+            tf = factory.createTimeField(hbox, "Select Time:")
+            #tf.setStretchable(yui.YUIDimension.YD_HORIZ, True)
             tf.setValue(now.strftime("%H:%M:%S"))
+            factory.createLabel(hbox, "right widget")
         except Exception as e:
             tf = None
             logging.getLogger(__name__).exception("Failed to create TimeField: %s", e)
