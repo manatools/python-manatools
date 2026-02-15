@@ -93,6 +93,60 @@ def _extract_dialog_size(info):
         return (width, height)
     return None
 
+
+def _create_message_text_widget(factory, parent, text, richtext):
+    """Create a compact text widget for message dialogs.
+
+    On Qt backend, YRichText is implemented with QTextBrowser whose intrinsic
+    minimum size is relatively large, causing popup dialogs with small size
+    hints to grow significantly. For compact message dialogs we prefer a wrapped
+    label on Qt while preserving rich text markup rendering.
+
+    Args:
+        factory: Active YUI widget factory.
+        parent: Parent widget/container.
+        text: Message text or markup.
+        richtext: Whether rich text rendering is requested.
+
+    Returns:
+        YWidget: Created text widget.
+    """
+    backend_name = ""
+    try:
+        backend_name = str(getattr(yui.YUI.backend(), "value", "") or "").lower()
+    except Exception:
+        backend_name = ""
+
+    if richtext and backend_name == "qt":
+        tw = factory.createLabel(parent, text)
+        try:
+            tw.setAutoWrap(True)
+        except Exception:
+            pass
+        try:
+            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+            tw.setStretchable(yui.YUIDimension.YD_VERT, False)
+        except Exception:
+            pass
+        return tw
+
+    if richtext:
+        tw = factory.createRichText(parent, "", False)
+        tw.setValue(text)
+    else:
+        tw = factory.createLabel(parent, text)
+        try:
+            tw.setAutoWrap(True)
+        except Exception:
+            pass
+
+    try:
+        tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, False)
+    except Exception:
+        pass
+    return tw
+
 def warningMsgBox (info) :
     '''
     This function creates a Warning dialog and shows the message passed as input.
@@ -143,16 +197,7 @@ def warningMsgBox (info) :
             pass
 
         # Text widget
-        if rt:
-            tw = factory.createRichText(row, "", False)
-            tw.setValue(text)
-        else:
-            tw = factory.createLabel(row, text)
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-        except Exception:
-            pass
+        tw = _create_message_text_widget(factory, row, text, rt)
 
         # Ok button on the right
         btns = factory.createHBox(vbox)
@@ -228,16 +273,7 @@ def infoMsgBox (info) :
             pass
 
         # Text widget
-        if rt:
-            tw = factory.createRichText(row, "", False)
-            tw.setValue(text)
-        else:
-            tw = factory.createLabel(row, text)
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-        except Exception:
-            pass
+        tw = _create_message_text_widget(factory, row, text, rt)
 
         # Ok button on the right
         btns = factory.createHBox(vbox)
@@ -302,16 +338,7 @@ def msgBox (info) :
         row = factory.createHBox(vbox)
 
         # Text widget
-        if rt:
-            tw = factory.createRichText(row, "", False)
-            tw.setValue(text)
-        else:
-            tw = factory.createLabel(row, text)
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-        except Exception:
-            pass
+        tw = _create_message_text_widget(factory, row, text, rt)
 
         # Ok button on the right
         btns = factory.createHBox(vbox)
@@ -393,16 +420,7 @@ def askOkCancel (info) :
             pass
 
         # Text widget
-        if rt:
-            tw = factory.createRichText(row, "", False)
-            tw.setValue(text)
-        else:
-            tw = factory.createLabel(row, text)
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-        except Exception:
-            pass
+        tw = _create_message_text_widget(factory, row, text, rt)
 
         # Buttons on the right
         btns = factory.createHBox(vbox)
@@ -492,16 +510,7 @@ def askYesOrNo (info) :
             pass
 
         # Text widget
-        if rt:
-            tw = factory.createRichText(row, "", False)
-            tw.setValue(text)
-        else:
-            tw = factory.createLabel(row, text)
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, True)
-        except Exception:
-            pass
+        tw = _create_message_text_widget(factory, row, text, rt)
 
         # Buttons on the right
         btns = factory.createHBox(vbox)
