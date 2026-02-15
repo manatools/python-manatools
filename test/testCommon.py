@@ -149,21 +149,34 @@ class TestDialog(basedialog.BaseDialog):
     Warning button call back
     '''
     print ('Button "Warning" pressed')
-    wd = common.warningMsgBox({"title" : "Warning Dialog", "text": "<b>Warning</b> button has been pressed!", "richtext" : True})
+    wd = common.warningMsgBox({
+      "title" : "Warning Dialog",
+      "text": "<b>Warning</b> button has been pressed!",
+      "size": (300, 120),
+      "richtext" : True})
 
   def onPressInformation(self) :
     '''
     Information button call back
     '''
     print ('Button "Information" pressed')
-    id = common.infoMsgBox({"title" : "Information Dialog", "text": "<b>Information</b> button has been pressed!", "richtext" : True})
+    id = common.infoMsgBox({
+      "title" : "Information Dialog",
+      "text": "<b>Information</b> button has been pressed!",
+      "size": (300, 120),
+      "richtext" : True})
 
   def onPressOkCancel(self) :
     '''
     Ok/Cancel button call back
     '''
     print ('Button "Ok/Cancel Dialog" pressed')
-    ok = common.askOkCancel({"title": "Ok/Cancel Dialog", "text": "To proceed, click <b>OK</b> or <b>Cancel</b> to skip.", "richtext" : True })
+    ok = common.askOkCancel({
+      "title": "Ok/Cancel Dialog", 
+      "text": "To proceed, click <b>OK</b> or <b>Cancel</b> to skip.", 
+      "size": (300, 120),
+      "richtext" : True 
+      })
     print ("User selected: %s" % ("OK" if ok else "Cancel"))
 
   def onCancelEvent(self) :
@@ -173,7 +186,11 @@ class TestDialog(basedialog.BaseDialog):
     '''
     Quit button call back
     '''
-    ok = common.askYesOrNo({"title": "Quit confirmation", "text": "Do you really want to quit?", "richtext" : True })
+    ok = common.askYesOrNo({
+      "title": "Quit confirmation",
+      "text": "Do you really want to quit?",
+      "size": (300, 120),
+      "richtext" : True })
     print ("Quit button pressed")
     # BaseDialog needs to force to exit the handle event loop 
     if ok:
