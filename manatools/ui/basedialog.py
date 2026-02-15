@@ -117,13 +117,13 @@ class BaseDialog :
     '''
     run the Dialog
     '''
+    self._setupUI()
+    
     self.backupTitle = yui.YUI.app().applicationTitle()
     yui.YUI.app().setApplicationTitle(self._title)
     if self._icon:
       backupIcon = yui.YUI.app().applicationIcon()
       yui.YUI.app().setApplicationIcon(self._icon)
-
-    self._setupUI()
     
     self._running = True
     self._handleEvents()
