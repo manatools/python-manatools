@@ -547,21 +547,36 @@ class YTableGtk(YSelectionWidget):
                 chk.set_active(cell.checked() if cell is not None else False)
             except Exception:
                 chk.set_active(False)
-            
-            # Apply alignment to checkbox
+
+            # Build an explicit fill wrapper and place checkbox according to
+            # column alignment. This is more reliable than relying on halign
+            # on Gtk.CheckButton alone in fixed-width table cells.
+            wrapper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            wrapper.set_hexpand(True)
+            wrapper.set_halign(Gtk.Align.FILL)
+
+            def _hspacer():
+                spacer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+                spacer.set_hexpand(True)
+                return spacer
+
             if align_t == YAlignmentType.YAlignCenter:
-                chk.set_halign(Gtk.Align.CENTER)
+                wrapper.append(_hspacer())
                 chk.set_margin_start(0)
                 chk.set_margin_end(0)
+                wrapper.append(chk)
+                wrapper.append(_hspacer())
             elif align_t == YAlignmentType.YAlignEnd:
-                chk.set_halign(Gtk.Align.END)
+                wrapper.append(_hspacer())
                 chk.set_margin_start(0)
-                chk.set_margin_end(10)
+                chk.set_margin_end(6)
+                wrapper.append(chk)
             else:
-                chk.set_halign(Gtk.Align.START)
-                chk.set_margin_start(10)
+                chk.set_margin_start(6)
                 chk.set_margin_end(0)
-            
+                wrapper.append(chk)
+                wrapper.append(_hspacer())
+
             chk.set_valign(Gtk.Align.CENTER)
             
             # Connect toggle handler
@@ -580,8 +595,8 @@ class YTableGtk(YSelectionWidget):
                     self._logger.exception("Checkbox toggle failed")
             
             chk.connect("toggled", _on_toggled)
-            
-            return chk
+
+            return wrapper
         except Exception:
             self._logger.exception("Failed to create checkbox content")
             return Gtk.Label(label="")
