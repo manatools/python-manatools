@@ -147,7 +147,7 @@ def test_tree_example(backend_name=None):
     # control buttons
     ctrl_h = factory.createHBox(vbox)
     swap_btn = factory.createPushButton(ctrl_h, "Swap")
-    quit_btn = factory.createPushButton(ctrl_h, "Quit")
+    quit_btn = factory.createPushButton(factory.createRight(ctrl_h), "Quit")
 
     # track previous selected labels so we can choose different items after swap
     prev_left_label = None

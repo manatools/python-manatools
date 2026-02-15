@@ -41,8 +41,9 @@ def test_backend(backend_name=None):
             factory.createLabel(vbox, "ComboBox Test: Use SPACE to expand")
             factory.createLabel(vbox, "Then use ARROWS and ENTER to select")
         
-        # Input fields
-        input_field = factory.createInputField(vbox, "Username:")
+        # Input fields: Username and Password (password mode)
+        input_field = factory.createInputField(vbox, "Username")
+        password_field = factory.createInputField(vbox, "Password", True)
         
         # ComboBox - NEW WIDGET
         combo = factory.createComboBox(vbox, "Select option:", False)
@@ -78,7 +79,7 @@ def test_backend(backend_name=None):
                 elif wdg == combo:
                     selected.setText(f"Selected: '{combo.value()}'")                
                 elif wdg == ok_button:
-                    selected.setText(f"OK clicked. - {input_field.value()}")
+                    selected.setText(f"OK clicked. - user='{input_field.value()}' password='{password_field.value()}'")
                 elif wdg == checkbox:
                     selected.setText(f"{checkbox.label()} - {checkbox.value()}")
         
