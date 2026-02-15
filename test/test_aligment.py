@@ -2,9 +2,33 @@
 
 import os
 import sys
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Configure file logger for this test: write DEBUG logs to '<testname>.log' in cwd
+try:
+  log_name = os.path.splitext(os.path.basename(__file__))[0] + '.log'
+  fh = logging.FileHandler(log_name, mode='w')
+  fh.setLevel(logging.DEBUG)
+  fh.setFormatter(logging.Formatter('%(asctime)s %(name)s %(levelname)s: %(message)s'))
+  root_logger = logging.getLogger()
+  root_logger.setLevel(logging.DEBUG)
+  existing = False
+  for h in list(root_logger.handlers):
+    try:
+      if isinstance(h, logging.FileHandler) and os.path.abspath(getattr(h, 'baseFilename', '')) == os.path.abspath(log_name):
+        existing = True
+        break
+    except Exception:
+      pass
+  if not existing:
+    root_logger.addHandler(fh)
+  print(f"Logging test output to: {os.path.abspath(log_name)}")
+except Exception as _e:
+  print(f"Failed to configure file logger: {_e}")
+
 
 def test_Alignment(backend_name=None):
     if backend_name:
