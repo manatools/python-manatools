@@ -21,6 +21,37 @@ import logging
 from ...yui_common import *
 from ... import yui as yui_mod
 
+
+class _YDialogMeasureWindow(Gtk.Window):
+    """Gtk.Window subclass delegating size measurement to YDialogGtk."""
+
+    def __init__(self, owner, title=""):
+        """Initialize the measuring window.
+
+        Args:
+            owner: Owning YDialogGtk instance.
+            title: Initial window title.
+        """
+        super().__init__(title=title)
+        self._owner = owner
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        try:
+            return self._owner.do_measure(orientation, for_size)
+        except Exception:
+            self._owner._logger.exception("Dialog backend do_measure delegation failed", exc_info=True)
+            return (0, 0, -1, -1)
+
+
 class YDialogGtk(YSingleChildContainerWidget):
     """Gtk4 dialog window with nested-loop event handling and default button support."""
     _open_dialogs = []
@@ -35,6 +66,7 @@ class YDialogGtk(YSingleChildContainerWidget):
         self._glib_loop = None
         self._default_button = None
         self._default_key_controller = None
+        self._content_widget = None
         YDialogGtk._open_dialogs.append(self)
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
@@ -257,6 +289,38 @@ class YDialogGtk(YSingleChildContainerWidget):
             self._logger.exception("Failed to activate default button")
             return False
         return True
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        container = getattr(self, "_content_widget", None)
+        if container is not None:
+            try:
+                cmin, cnat, _bmin, _bnat = container.measure(orientation, for_size)
+                margin = 20
+                minimum_size = int(cmin + margin)
+                natural_size = int(cnat + margin)
+                self._logger.debug(
+                    "Dialog do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+                    orientation,
+                    for_size,
+                    minimum_size,
+                    natural_size,
+                )
+                return (minimum_size, natural_size, -1, -1)
+            except Exception:
+                self._logger.exception("Dialog content measure failed", exc_info=True)
+
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            return (420, 600, -1, -1)
+        return (280, 400, -1, -1)
     
     def _create_backend_widget(self):
         # Determine window title from YApplicationGtk instance stored on the YUI backend
@@ -280,7 +344,7 @@ class YDialogGtk(YSingleChildContainerWidget):
             pass
 
         # Create Gtk4 Window
-        self._window = Gtk.Window(title=title)
+        self._window = _YDialogMeasureWindow(self, title=title)
         # set window icon if available
         try:
             if _resolved_pixbuf is not None:
@@ -304,10 +368,10 @@ class YDialogGtk(YSingleChildContainerWidget):
                     pass
         except Exception:
             pass
-        try:
-            self._window.set_default_size(600, 400)
-        except Exception:
-            pass
+        #try:
+        #    self._window.set_default_size(600, 400)
+        #except Exception:
+        #    pass
 
         # Content container with margins (window.set_child used in Gtk4)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
@@ -315,6 +379,7 @@ class YDialogGtk(YSingleChildContainerWidget):
         content.set_margin_end(10)
         content.set_margin_top(10)
         content.set_margin_bottom(10)
+        self._content_widget = content
         
         child = self.child()
         if child:

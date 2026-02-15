@@ -21,7 +21,39 @@ import logging
 from ...yui_common import *
 
 
+class _YLabelMeasure(Gtk.Label):
+    """Gtk.Label subclass delegating size measurement to YLabelGtk."""
+
+    def __init__(self, owner, label=""):
+        """Initialize the measuring label.
+
+        Args:
+            owner: Owning YLabelGtk instance.
+            label: Initial label text.
+        """
+        super().__init__(label=label)
+        self._owner = owner
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        try:
+            return self._owner.do_measure(orientation, for_size)
+        except Exception:
+            self._owner._logger.exception("Label backend do_measure delegation failed", exc_info=True)
+            return (0, 0, -1, -1)
+
+
 class YLabelGtk(YWidget):
+    """GTK4 label widget with heading/output-field options and wrapping."""
+
     def __init__(self, parent=None, text="", isHeading=False, isOutputField=False):
         super().__init__(parent)
         self._text = text
@@ -79,8 +111,50 @@ class YLabelGtk(YWidget):
         except Exception:
             pass
 
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        widget = getattr(self, "_backend_widget", None)
+        if widget is not None:
+            try:
+                minimum_size, natural_size, minimum_baseline, natural_baseline = Gtk.Label.do_measure(widget, orientation, for_size)
+                if orientation == Gtk.Orientation.HORIZONTAL:
+                    minimum_baseline = -1
+                    natural_baseline = -1
+                measured = (minimum_size, natural_size, minimum_baseline, natural_baseline)
+                self._logger.debug("Label do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
+                return measured
+            except Exception:
+                self._logger.exception("Label base do_measure failed", exc_info=True)
+
+        text = str(getattr(self, "_text", "") or "")
+        line_count = max(1, text.count("\n") + 1)
+        longest_line = max((len(line) for line in text.splitlines()), default=len(text))
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            minimum_size = min(80, max(8, longest_line * 5))
+            natural_size = max(minimum_size, longest_line * 8)
+        else:
+            minimum_size = max(18, line_count * 18)
+            natural_size = minimum_size
+        self._logger.debug(
+            "Label fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+            orientation,
+            for_size,
+            minimum_size,
+            natural_size,
+        )
+        return (minimum_size, natural_size, -1, -1)
+
     def _create_backend_widget(self):
-        self._backend_widget = Gtk.Label(label=self._text)
+        """Create backend label and apply visual and sizing policy."""
+        self._backend_widget = _YLabelMeasure(self, label=self._text)
         try:
             # alignment API in Gtk4 differs; fall back to setting xalign if available
             if hasattr(self._backend_widget, "set_xalign"):

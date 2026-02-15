@@ -17,7 +17,39 @@ import re
 from ...yui_common import *
 
 
+
+class _YRichTextMeasureScrolledWindow(Gtk.ScrolledWindow):
+    """Gtk.ScrolledWindow subclass delegating size measurement to YRichTextGtk."""
+
+    def __init__(self, owner):
+        """Initialize the measuring scrolled window.
+
+        Args:
+            owner: Owning YRichTextGtk instance.
+        """
+        super().__init__()
+        self._owner = owner
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        try:
+            return self._owner.do_measure(orientation, for_size)
+        except Exception:
+            self._owner._logger.exception("RichText backend do_measure delegation failed", exc_info=True)
+            return (0, 0, -1, -1)
+
+
 class YRichTextGtk(YWidget):
+    """GTK4 rich text widget with plain/markup rendering and link activation."""
+
     def __init__(self, parent=None, text: str = "", plainTextMode: bool = False):
         super().__init__(parent)
         self._text = text or ""
@@ -182,6 +214,47 @@ class YRichTextGtk(YWidget):
     def lastActivatedUrl(self):
         return self._last_url
 
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        widget = getattr(self, "_backend_widget", None)
+        if widget is not None:
+            try:
+                minimum_size, natural_size, minimum_baseline, natural_baseline = Gtk.ScrolledWindow.do_measure(widget, orientation, for_size)
+                if orientation == Gtk.Orientation.HORIZONTAL:
+                    minimum_baseline = -1
+                    natural_baseline = -1
+                measured = (minimum_size, natural_size, minimum_baseline, natural_baseline)
+                self._logger.debug("RichText do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
+                return measured
+            except Exception:
+                self._logger.exception("RichText base do_measure failed", exc_info=True)
+
+        text = str(getattr(self, "_text", "") or "")
+        line_count = max(1, text.count("\n") + 1)
+        longest_line = max((len(line) for line in text.splitlines()), default=len(text))
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            minimum_size = 160
+            natural_size = max(minimum_size, min(900, max(220, longest_line * 7)))
+        else:
+            minimum_size = max(72, min(240, line_count * 18))
+            natural_size = max(minimum_size, min(720, line_count * 22))
+        self._logger.debug(
+            "RichText fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+            orientation,
+            for_size,
+            minimum_size,
+            natural_size,
+        )
+        return (minimum_size, natural_size, -1, -1)
+
     def _create_content(self):
         # Create the content widget according to mode
         try:
@@ -253,7 +326,8 @@ class YRichTextGtk(YWidget):
             self._content_widget = Gtk.Label(label=self._text)
 
     def _create_backend_widget(self):
-        sw = Gtk.ScrolledWindow()
+        """Create scrolled backend and attach rich text content widget."""
+        sw = _YRichTextMeasureScrolledWindow(self)
         try:
             # let size policy decide final expand/align; start with sane defaults
             sw.set_hexpand(True)

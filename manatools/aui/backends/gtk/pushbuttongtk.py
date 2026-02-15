@@ -23,6 +23,39 @@ from ...yui_common import *
 from .commongtk import _resolve_icon, _convert_mnemonic_to_gtk
 
 
+class _YPushButtonMeasure(Gtk.Button):
+    """Gtk.Button subclass delegating size measurement to YPushButtonGtk."""
+
+    def __init__(self, owner, label=None):
+        """Initialize the measuring button.
+
+        Args:
+            owner: Owning YPushButtonGtk instance.
+            label: Optional initial label.
+        """
+        if label is None:
+            super().__init__()
+        else:
+            super().__init__(label=label)
+        self._owner = owner
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        try:
+            return self._owner.do_measure(orientation, for_size)
+        except Exception:
+            self._owner._logger.exception("PushButton backend do_measure delegation failed", exc_info=True)
+            return (0, 0, -1, -1)
+
+
 class YPushButtonGtk(YWidget):
     """Gtk4 push button wrapper supporting icons, mnemonics, and default state."""
     def __init__(self, parent=None, label: str="", icon_name: Optional[str]=None, icon_only: Optional[bool]=False):
@@ -54,18 +87,54 @@ class YPushButtonGtk(YWidget):
     def default(self) -> bool:
         """Return True if this button is currently the default."""
         return bool(getattr(self, "_is_default", False))
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        widget = getattr(self, "_backend_widget", None)
+        if widget is not None:
+            try:
+                measured = Gtk.Button.do_measure(widget, orientation, for_size)
+                self._logger.debug("PushButton do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
+                return measured
+            except Exception:
+                self._logger.exception("PushButton base do_measure failed", exc_info=True)
+
+        text = str(getattr(self, "_label", "") or "")
+        text_len = max(1, len(text.replace("_", "")))
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            minimum_size = max(48, text_len * 6 + 18)
+            natural_size = max(minimum_size, text_len * 9 + 28)
+        else:
+            minimum_size = 30
+            natural_size = 34
+        self._logger.debug(
+            "PushButton fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+            orientation,
+            for_size,
+            minimum_size,
+            natural_size,
+        )
+        return (minimum_size, natural_size, -1, -1)
     
     def _create_backend_widget(self):
         if self._icon_only:
             self._logger.info(f"Creating icon-only button '{self._label}'")
-            self._backend_widget = Gtk.Button()
+            self._backend_widget = _YPushButtonMeasure(self)
             self._backend_widget.set_use_underline(True)
             if self._icon_name:
                 self._backend_widget.set_icon_name(self._icon_name)
         else:
             self._logger.info(f"Creating button with icon and label '{self._label}'")
             try:
-                self._backend_widget = Gtk.Button(label=self._label)
+                self._backend_widget = _YPushButtonMeasure(self, label=self._label)
                 self._backend_widget.set_use_underline(True)
                 hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
                 if self._icon_name:

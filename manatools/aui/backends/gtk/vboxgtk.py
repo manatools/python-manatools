@@ -20,7 +20,39 @@ import os
 import logging
 from ...yui_common import *
 
+
+class _YVBoxMeasureBox(Gtk.Box):
+    """Gtk.Box subclass delegating size requests to YVBoxGtk."""
+
+    def __init__(self, owner):
+        """Initialize the measuring box.
+
+        Args:
+            owner: Owning YVBoxGtk instance.
+        """
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self._owner = owner
+
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        try:
+            return self._owner.do_measure(orientation, for_size)
+        except Exception:
+            self._owner._logger.exception("VBox backend do_measure delegation failed", exc_info=True)
+            return (0, 0, -1, -1)
+
+
 class YVBoxGtk(YWidget):
+    """Vertical GTK4 container with weight-aware geometry management."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
@@ -37,8 +69,68 @@ class YVBoxGtk(YWidget):
                 return True
         return False
 
+    def do_measure(self, orientation, for_size):
+        """GTK4 virtual method for size measurement.
+
+        Args:
+            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
+            for_size: Size in the opposite orientation (-1 if not constrained)
+
+        Returns:
+            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
+        """
+        children = list(getattr(self, "_children", []) or [])
+        if not children:
+            return (0, 0, -1, -1)
+
+        spacing = 5
+        try:
+            if getattr(self, "_backend_widget", None) is not None and hasattr(self._backend_widget, "get_spacing"):
+                spacing = int(self._backend_widget.get_spacing())
+        except Exception:
+            self._logger.exception("Failed to read VBox spacing for measure", exc_info=True)
+            spacing = 5
+
+        minimum_size = 0
+        natural_size = 0
+        maxima_minimum = 0
+        maxima_natural = 0
+
+        for child in children:
+            try:
+                child_widget = child.get_backend_widget()
+                cmin, cnat, _cbase_min, _cbase_nat = child_widget.measure(orientation, for_size)
+            except Exception:
+                self._logger.exception("VBox measure failed for child %s", getattr(child, "debugLabel", lambda: "<unknown>")(), exc_info=True)
+                cmin, cnat = 0, 0
+
+            if orientation == Gtk.Orientation.VERTICAL:
+                minimum_size += int(cmin)
+                natural_size += int(cnat)
+            else:
+                maxima_minimum = max(maxima_minimum, int(cmin))
+                maxima_natural = max(maxima_natural, int(cnat))
+
+        if orientation == Gtk.Orientation.VERTICAL:
+            gap_total = max(0, len(children) - 1) * spacing
+            minimum_size += gap_total
+            natural_size += gap_total
+        else:
+            minimum_size = maxima_minimum
+            natural_size = maxima_natural
+
+        self._logger.debug(
+            "VBox do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+            orientation,
+            for_size,
+            minimum_size,
+            natural_size,
+        )
+        return (minimum_size, natural_size, -1, -1)
+
     def _create_backend_widget(self):
-        self._backend_widget = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        """Create backend widget and configure weight/stretch behavior."""
+        self._backend_widget = _YVBoxMeasureBox(self)
         
         # Collect children first so we can apply weight-based heuristics
         children = list(self._children)
@@ -118,15 +210,23 @@ class YVBoxGtk(YWidget):
                             _apply_vweights()
                         except Exception:
                             pass
-                    try:
-                        def _on_size_allocate(widget, allocation):
-                            try:
-                                _apply_vweights()
-                            except Exception:
-                                pass
-                        self._backend_widget.connect('size-allocate', _on_size_allocate)
-                    except Exception:
-                        pass
+                    def _on_resize_update(*_args):
+                        try:
+                            _apply_vweights()
+                        except Exception:
+                            self._logger.exception("_on_resize_update: failed", exc_info=True)
+
+                    connected = False
+                    for signal_name in ("size-allocate", "notify::height", "notify::height-request"):
+                        try:
+                            self._backend_widget.connect(signal_name, _on_resize_update)
+                            connected = True
+                            self._logger.debug("Connected VBox resize hook using signal '%s'", signal_name)
+                            break
+                        except Exception:
+                            continue
+                    if not connected:
+                        self._logger.debug("No supported resize signal found for VBox; dynamic weight refresh disabled")
         except Exception:
             pass
 
