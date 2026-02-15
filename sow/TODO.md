@@ -55,6 +55,7 @@ Nice to have: improvements outside YUI API
 
     [X] window title
     [X] window icons
+    [ ] window title at window/dialog level
     [ ] Context menu support
     [ ] selected YItem(s) in event
     [ ] Improving YEvents management (adding info on widget event containing data
