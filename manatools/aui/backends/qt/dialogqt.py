@@ -161,6 +161,12 @@ class YDialogQt(YSingleChildContainerWidget):
         return True
     
     def _create_backend_widget(self):
+        """Create the Qt window and initialize title, icon, content, and initial size.
+
+        Popup dialogs should honor content-driven minimum size hints (e.g. from
+        createMinSize in BaseDialog) instead of forcing a large default size.
+        Main dialogs keep a larger default for usability.
+        """
         self._qwidget = QtWidgets.QMainWindow()
         # Determine window title:from YApplicationQt instance stored on the YUI backend
         title = "Manatools Qt Dialog"
@@ -203,7 +209,6 @@ class YDialogQt(YSingleChildContainerWidget):
                 self._qwidget.setWindowIcon(_resolved_qicon)
         except Exception:
             pass
-        self._qwidget.resize(600, 400)
 
         central_widget = QtWidgets.QWidget()
         self._qwidget.setCentralWidget(central_widget)
@@ -214,6 +219,11 @@ class YDialogQt(YSingleChildContainerWidget):
             layout.addWidget(self.child().get_backend_widget())
             # If the child is a layout box with a menubar as first child, Qt can display QMenuBar inline.
             # Alternatively, backends may add YMenuBarQt directly to layout.
+
+        try:
+            self._apply_initial_size()
+        except Exception:
+            self._logger.exception("Failed to apply initial dialog size", exc_info=True)
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
@@ -222,6 +232,36 @@ class YDialogQt(YSingleChildContainerWidget):
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def _apply_initial_size(self):
+        """Apply initial size policy based on dialog type and content hints.
+
+        - Main dialogs: keep a generous default size.
+        - Popup dialogs: size to content/minimum hints from the layout tree.
+        """
+        if getattr(self, "_qwidget", None) is None:
+            return
+
+        if self._dialog_type == YDialogType.YMainDialog:
+            try:
+                self._qwidget.resize(600, 400)
+            except Exception:
+                self._logger.exception("Failed to set default main-dialog size", exc_info=True)
+            return
+
+        # Popup: derive initial size from content to better match GTK behavior.
+        try:
+            self._qwidget.adjustSize()
+        except Exception:
+            self._logger.exception("adjustSize failed for popup dialog", exc_info=True)
+
+        try:
+            hint = self._qwidget.sizeHint()
+            if hint is not None and hint.isValid():
+                self._qwidget.resize(hint)
+                self._logger.debug("Applied popup size from sizeHint: %sx%s", hint.width(), hint.height())
+        except Exception:
+            self._logger.exception("Failed to apply popup sizeHint", exc_info=True)
     
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog window and propagate to logical child widgets."""
