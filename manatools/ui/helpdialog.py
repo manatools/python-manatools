@@ -83,12 +83,16 @@ class HelpDialog(basedialog.BaseDialog):
     self.text = self.factory.createRichText(content_parent, "", False)
     self.text.setStretchable(yui.YUIDimension.YD_HORIZ, True)
     self.text.setStretchable(yui.YUIDimension.YD_VERT, True)
+    self.text.setWeight(yui.YUIDimension.YD_HORIZ, 1)
+    self.text.setWeight(yui.YUIDimension.YD_VERT, 1)
     self.text.setValue(self.info.home())
     logger.debug("Initial help content loaded")
 
     button_row = self.factory.createHBox(content_parent)
-    self.factory.createHStretch(button_row)
-    self.quitButton = self.factory.createPushButton(button_row, _("Quit"))
+    button_row.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+    button_row.setWeight(yui.YUIDimension.YD_HORIZ, 1)
+    right_align = self.factory.createRight(button_row)
+    self.quitButton = self.factory.createPushButton(right_align, _("Quit"))
     self.eventManager.addWidgetEvent(self.quitButton, self.onQuitEvent)
     logger.debug("Quit button registered")
 
