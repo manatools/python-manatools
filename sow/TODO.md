@@ -37,16 +37,6 @@ Optional/special widgets (from `YOptionalWidgetFactory`):
     [X] YSlider
     [X] YDateField
     [X] YTimeField
-    [ ] YBarGraph
-    [ ] YPatternSelector (createPatternSelector)
-    [ ] YSimplePatchSelector (createSimplePatchSelector)
-    [ ] YMultiProgressMeter
-    [ ] YPartitionSplitter
-    [ ] YDownloadProgress
-    [ ] YDummySpecialWidget
-    [ ] YTimezoneSelector
-    [ ] YGraph
-    [ ] Context menu support / hasContextMenu
 
 To check/review:
     how to manage YEvents [X] and YItems [X] (verify selection attirbute).
@@ -55,15 +45,16 @@ To check/review:
     [X] askForExistingDirectory
     [X] askForExistingFile
     [X] askForSaveFileName
-    [ ] YAboutDialog (aka YMGAAboutDialog)
-    [ ] adding factory create alternative methods (e.g. createMultiSelectionBox)
+    [X] YAboutDialog (aka YMGAAboutDialog) - Implemented in manatools.ui
+    [X] adding factory create alternative methods (e.g. createMultiSelectionBox)
     [X] managing shortcuts (only menu and pushbutton)
     [ ] localization
 
 Nice to have: improvements outside YUI API
 
-    [ ] window title
-    [ ] window icons
+    [X] window title
+    [X] window icons
+    [ ] Context menu support
     [ ] selected YItem(s) in event
     [ ] Improving YEvents management (adding info on widget event containing data
         such as item selection/s, checked item, rich text url, etc.)
@@ -77,6 +68,16 @@ Skipped widgets:
     [-] YEmpty            (not ported)
     [-] YSquash / createSquash (not ported)
     [-] YMenuButton (legacy menus)
+    [-] YBarGraph
+    [-] YPatternSelector (createPatternSelector)
+    [-] YSimplePatchSelector (createSimplePatchSelector)
+    [-] YMultiProgressMeter
+    [-] YPartitionSplitter
+    [-] YDownloadProgress
+    [-] YDummySpecialWidget
+    [-] YTimezoneSelector
+    [-] YGraph
+    [-] Context menu support / hasContextMenu
 
 Documentation gaps and recommendations
 --------------------------------------
