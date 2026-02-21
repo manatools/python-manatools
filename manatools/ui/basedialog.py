@@ -22,12 +22,12 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.ui.basedialog
 '''
 
-import yui
+from ..aui import yui as yui
 
 from enum import Enum
 
-import manatools.event as event
-import manatools.eventmanager as eventManager
+from .. import event as event
+from .. import eventmanager as eventManager
 
 class DialogType(Enum):
     MAIN  = 1
@@ -61,9 +61,10 @@ class BaseDialog :
     @param title dialog title
     @param icon dialog icon
     @param dialogType (DialogType.MAIN or DialogType.POPUP)
-    @param minWidth > 0 mim width size, see libYui createMinSize
-    @param minHeight > 0 mim height size, see libYui createMinSize
+    @param minWidth > 0 min width size in pixels
+    @param minHeight > 0 min height size in pixels
     '''
+    print(f"BaseDialog init title={title} icon={icon} dialogType={dialogType} minWidth={minWidth} minHeight={minHeight}")
     self._dialogType = dialogType
     self._icon = icon
     self._title = title
@@ -116,13 +117,13 @@ class BaseDialog :
     '''
     run the Dialog
     '''
+    self._setupUI()
+    
     self.backupTitle = yui.YUI.app().applicationTitle()
     yui.YUI.app().setApplicationTitle(self._title)
     if self._icon:
       backupIcon = yui.YUI.app().applicationIcon()
       yui.YUI.app().setApplicationIcon(self._icon)
-
-    self._setupUI()
     
     self._running = True
     self._handleEvents()
@@ -130,10 +131,10 @@ class BaseDialog :
     #restore old application title
     yui.YUI.app().setApplicationTitle(self.backupTitle)
     if self._icon:
-      yui.YUI.app().setApplicationTitle(backupIcon)
-
-    self.dialog.destroy()
-    self.dialog = None
+      yui.YUI.app().setApplicationIcon(backupIcon)
+    if self.dialog is not None:
+      self.dialog.destroy()
+      self.dialog = None
 
   @property
   def eventManager(self):
@@ -149,43 +150,23 @@ class BaseDialog :
     return yui widget factory
     '''
     return yui.YUI.widgetFactory()
-
-  @property
-  def optFactory(self):
-    '''
-    return yui optional widget factory
-    '''
-    return yui.YUI.optionalWidgetFactory()
-
-  @property
-  def mgaFactory(self):
-    '''
-    return yui mageia extended widget factory
-    '''
-    if (not self._mgaFactory) :
-      self.factory
-      MGAPlugin = "mga"
-      mgaFact = yui.YExternalWidgets.externalWidgetFactory(MGAPlugin)
-      self._mgaFactory = yui.YMGAWidgetFactory.getYMGAWidgetFactory(mgaFact)
-    return self._mgaFactory
-  
   
   def _setupUI(self):
     
     self.dialog = self.factory.createPopupDialog() if self._dialogType == DialogType.POPUP else self.factory.createMainDialog()
-    
-    parent = self.dialog
-    if self._minSize:
-       parent = self.factory.createMinSize(parent, self._minSize['minWidth'], self._minSize['minHeight'])
-    
-    vbox = self.factory.createVBox(parent)
-    self.UIlayout(vbox)
 
-  def pollEvent(self):
-    '''
-    perform yui pollEvent
-    '''
-    return self.dialog.pollEvent()
+    # If a minimum size is requested, wrap the layout inside a MinSize container.
+    # IMPORTANT: MinSize is a single-child container -> add a VBox inside it and
+    # pass that VBox to UIlayout so multiple children can be attached there.
+    content_vbox = None
+    if self._minSize is not None:
+        min_container = self.factory.createMinSize(self.dialog, self._minSize['minWidth'], self._minSize['minHeight'])
+        content_vbox = self.factory.createVBox(min_container)        
+    else:
+        content_vbox = self.factory.createVBox(self.dialog)
+    layout_parent = content_vbox
+    # Build the dialog layout using the chosen parent (MinSize->VBox or root VBox)
+    self.UIlayout(layout_parent)
 
   def _handleEvents(self):
     '''
@@ -194,29 +175,30 @@ class BaseDialog :
     while self._running == True:
 
       event = self.dialog.waitForEvent(self.timeout)
+      if event is not None:
+        eventType = event.eventType()
 
-      eventType = event.eventType()
-
-      rebuild_package_list = False
-      group = None
-      #event type checking
-      if (eventType == yui.YEvent.WidgetEvent) :
-        # widget selected
-        widget  = event.widget()
-        wEvent = yui.toYWidgetEvent(event)
-        self.eventManager.widgetEvent(widget, wEvent)
-      elif (eventType == yui.YEvent.MenuEvent) :
-        ### MENU ###
-        item = event.item()
-        mEvent = yui.toYMenuEvent(event)
-        self.eventManager.menuEvent(item, mEvent)
-      elif (eventType == yui.YEvent.CancelEvent) :
-        self.eventManager.cancelEvent()
-        break
-      elif (eventType == yui.YEvent.TimeoutEvent) :
-        self.eventManager.timeoutEvent()
+        rebuild_package_list = False
+        group = None
+        #event type checking
+        if (eventType == yui.YEventType.WidgetEvent) :
+          # widget selected
+          widget  = event.widget()
+          self.eventManager.widgetEvent(widget, event)
+        elif (eventType == yui.YEventType.MenuEvent) :
+          ### MENU ###
+          item = event.item()
+          self.eventManager.menuEvent(item, event)
+        elif (eventType == yui.YEventType.CancelEvent) :
+          self.eventManager.cancelEvent()
+          break
+        elif (eventType == yui.YEventType.TimeoutEvent) :
+          self.eventManager.timeoutEvent()
+        else:
+          print(f"Unmanaged event type {eventType}")
       else:
-        print("Unmanaged event type %d"%(eventType))
+        #TODO logging
+        pass
 
       self.doSomethingIntoLoop()
 
