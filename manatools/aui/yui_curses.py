@@ -57,6 +57,10 @@ class YUICurses:
                 curses.endwin()
         except:
             pass
+
+    def shutdown(self):
+        """Restore terminal state for ncurses applications."""
+        self._cleanup_curses()
     
     def __del__(self):
         self._cleanup_curses()

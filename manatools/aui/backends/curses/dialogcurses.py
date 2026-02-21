@@ -127,6 +127,13 @@ class YDialogCurses(YSingleChildContainerWidget):
             self._logger.debug("dialog destroyed; remaining open=%d", len(YDialogCurses._open_dialogs))
         except Exception:
             pass
+        if not YDialogCurses._open_dialogs:
+            try:
+                ui = yui_mod.YUI.ui()
+                if hasattr(ui, "shutdown"):
+                    ui.shutdown()
+            except Exception:
+                pass
         return True
     
     @classmethod
