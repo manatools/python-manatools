@@ -438,9 +438,17 @@ class YWidgetFactoryQt:
         """
         return YSpacingQt(parent, dim, stretchable, size_px)
 
-    def createImage(self, parent, imageFileName):
-        """Create an image widget."""
-        return YImageQt(parent, imageFileName)
+    def createImage(self, parent, imageFileName, fallBackName=None):
+        """Create an image widget.
+
+        Args:
+            parent: Parent widget or container.
+            imageFileName: Path to an image file or a theme icon name.
+            fallBackName: Optional label shown by text-mode backends instead of
+                the image.  Ignored by GUI backends.  When omitted the basename
+                of *imageFileName* is used by text-mode backends.
+        """
+        return YImageQt(parent, imageFileName, fallBackName=fallBackName)
 
     # Create a Spacing widget variant
     def createHStretch(self, parent):

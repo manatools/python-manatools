@@ -637,9 +637,17 @@ class YWidgetFactoryCurses:
         """
         return YSpacingCurses(parent, dim, stretchable, size_px)
 
-    def createImage(self, parent, imageFileName):
-        """Create an image widget as an empty frame for curses."""
-        return YImageCurses(parent, imageFileName)
+    def createImage(self, parent, imageFileName, fallBackName=None):
+        """Create an image widget as an empty frame for curses.
+
+        Args:
+            parent: Parent widget or container.
+            imageFileName: Path to an image file or a theme icon name.
+                Not rendered in curses; used only as a fallback label source.
+            fallBackName: Optional text shown centred inside the placeholder
+                frame.  When omitted the basename of *imageFileName* is used.
+        """
+        return YImageCurses(parent, imageFileName, fallBackName=fallBackName)
     
     # Create a Spacing widget variant
     def createHStretch(self, parent):
