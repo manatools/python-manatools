@@ -28,11 +28,15 @@ class YTableGtk(YSelectionWidget):
     GTK4 implementation of YTable with resizable columns and proper alignment.
     
     Features:
-    - Column resizing via draggable header separators
+    - Column resizing via draggable header separators (all columns, including last)
     - Uniform column widths across header and all rows
     - Checkbox column support with proper alignment
     - Single/Multi selection modes
+    - Horizontal + vertical scrolling via a single ScrolledWindow
     """
+
+    # CSS provider is registered once per process/display to avoid accumulation.
+    _css_provider_installed: bool = False
     
     def __init__(self, parent=None, header: YTableHeader = None, multiSelection=False):
         super().__init__(parent)
@@ -69,7 +73,11 @@ class YTableGtk(YSelectionWidget):
         self._drag_data = None
         self._header_cells = []
         self._header_labels = []  # Store header labels separately
-        
+
+        # stretched by default; can be overridden by setStretchable
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
+
         # Initialize column widths
         self._init_column_widths()
 
@@ -97,16 +105,49 @@ class YTableGtk(YSelectionWidget):
         # ListBox inside ScrolledWindow for rows
         self._create_listbox()
         
-        sw = Gtk.ScrolledWindow()
+        # Inner content vbox: header + separator + rows — all inside ONE ScrolledWindow
+        # so both scroll together horizontally.
+        # hexpand=True: content fills the SW's allocated width.  The horizontal scrollbar
+        # appears automatically when the sum of fixed column set_size_request values
+        # (which set the child's natural minimum width) exceeds the SW's allocation.
+        inner_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        inner_vbox.set_hexpand(True)
+        inner_vbox.set_vexpand(True)
         try:
-            sw.set_child(self._listbox)
+            inner_vbox.append(self._header_box)
+            inner_vbox.append(separator)
+            inner_vbox.append(self._listbox)
         except Exception:
             try:
-                sw.add(self._listbox)
+                inner_vbox.add(self._header_box)
+                inner_vbox.add(separator)
+                inner_vbox.add(self._listbox)
             except Exception:
                 pass
 
-        # Set expansion properties
+        # Single ScrolledWindow: horizontal scrollbar covers header + rows together.
+        self._sw = Gtk.ScrolledWindow()
+        self._sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        # Propagate natural height so the SW requests enough vertical space for the
+        # content (otherwise the viewport defaults to ~0 px and the table is invisible).
+        # Do NOT propagate width: that would eliminate the horizontal scrollbar.
+        try:
+            self._sw.set_propagate_natural_height(True)
+        except Exception:
+            pass
+        try:
+            self._sw.set_child(inner_vbox)
+        except Exception:
+            try:
+                self._sw.add(inner_vbox)
+            except Exception:
+                pass
+
+        # Set expansion properties.
+        # hexpand is always True so the table participates in equal space sharing
+        # when placed in an HBox (stretchable is a YUI-level concept handled above).
+        # vexpand follows the stretchable flag so the table grows vertically only
+        # when explicitly requested.
         try:
             vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
             vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
@@ -114,24 +155,20 @@ class YTableGtk(YSelectionWidget):
             self._listbox.set_hexpand(True)
             self._listbox.set_vexpand(True)
             self._listbox.set_valign(Gtk.Align.FILL)
-            sw.set_hexpand(True)
-            sw.set_vexpand(True)
-            sw.set_valign(Gtk.Align.FILL)
+            self._sw.set_hexpand(True)
+            self._sw.set_vexpand(True)
+            self._sw.set_valign(Gtk.Align.FILL)
         except Exception:
             pass
 
         self._backend_widget = vbox
 
-        # Assemble the widget
+        # Assemble: outer vbox wraps only the single ScrolledWindow
         try:
-            vbox.append(self._header_box)
-            vbox.append(separator)
-            vbox.append(sw)
+            vbox.append(self._sw)
         except Exception:
             try:
-                vbox.add(self._header_box)
-                vbox.add(separator)
-                vbox.add(sw)
+                vbox.add(self._sw)
             except Exception:
                 pass
 
@@ -259,8 +296,30 @@ class YTableGtk(YSelectionWidget):
                 col_box.append(lbl)
                 col_box.append(sep_container)
             else:
+                # Last column: add a right-edge drag handle so it is also resizable.
+                sep_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+                sep_handle = Gtk.Box()
+                sep_handle.set_size_request(8, -1)
+                sep_handle.get_style_context().add_class("col-sep-handle")
+
+                motion_ctrl = Gtk.EventControllerMotion.new()
+                drag_ctrl = Gtk.GestureDrag.new()
+                sep_handle.column_index = col
+                sep_container.column_index = col
+
+                motion_ctrl.connect("enter", self._on_separator_enter)
+                motion_ctrl.connect("leave", self._on_separator_leave)
+                drag_ctrl.connect("drag-begin", self._on_drag_begin)
+                drag_ctrl.connect("drag-update", self._on_drag_update)
+                drag_ctrl.connect("drag-end", self._on_drag_end)
+
+                sep_handle.add_controller(motion_ctrl)
+                sep_handle.add_controller(drag_ctrl)
+                sep_container.append(sep_handle)
+
                 col_box.append(lbl)
-            
+                col_box.append(sep_container)
+
             self._header_box.append(col_box)
             self._header_cells.append(col_box)
             
@@ -268,7 +327,14 @@ class YTableGtk(YSelectionWidget):
         self._setup_header_css()
 
     def _setup_header_css(self):
-        """Setup CSS for header styling."""
+        """Setup CSS for header styling — CSS provider is registered once per process."""
+        # Always tag the current header box, regardless of whether CSS was already loaded.
+        try:
+            self._header_box.get_style_context().add_class("y-table-header")
+        except Exception:
+            pass
+        if YTableGtk._css_provider_installed:
+            return
         css_provider = Gtk.CssProvider()
         css = """
         /* Style for column separator handles */
@@ -308,12 +374,8 @@ class YTableGtk(YSelectionWidget):
                 css_provider.load_from_data(css, -1)
             except TypeError:
                 css_provider.load_from_data(css.encode())
-            
-            # Add CSS class to header
-            ctx = self._header_box.get_style_context()
-            ctx.add_class("y-table-header")
-            
-            # Apply provider
+
+            # Apply provider globally; class is already set above.
             display = Gdk.Display.get_default()
             if display:
                 Gtk.StyleContext.add_provider_for_display(
@@ -321,6 +383,7 @@ class YTableGtk(YSelectionWidget):
                     css_provider,
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
                 )
+                YTableGtk._css_provider_installed = True
         except Exception as e:
             self._logger.debug("CSS setup failed: %s", str(e))
 
@@ -663,7 +726,7 @@ class YTableGtk(YSelectionWidget):
                 except Exception:
                     pass
             
-            # For single selection, ensure only one is selected
+            # For single selection, ensure only one is selected in both UI and model
             if not self._multi and len(selected_items) > 1:
                 for it in selected_items[1:]:
                     try:
@@ -672,7 +735,13 @@ class YTableGtk(YSelectionWidget):
                             self._listbox.unselect_row(row)
                     except Exception:
                         pass
-                        
+                selected_items = selected_items[:1]
+
+            # Sync the cached list so it matches what was just set in the UI.
+            # This is critical: callers that query selectedItems() immediately
+            # after rebuildTable() / addItems() must see the correct selection.
+            self._selected_items = list(selected_items)
+
         finally:
             self._suppress_selection_handler = False
 
@@ -780,8 +849,10 @@ class YTableGtk(YSelectionWidget):
                         it.setSelected(True)
                     except Exception:
                         pass
+                    self._old_selected_items = self._selected_items
                     self._selected_items = [it]
             else:
+                self._old_selected_items = self._selected_items
                 self._selected_items = []
             # notify
             try:
@@ -804,6 +875,10 @@ class YTableGtk(YSelectionWidget):
                 it = self._row_to_item.get(row)
                 if it is not None:
                     new_selected.append(it)
+            # Truncate to a single item for single-selection BEFORE updating model flags
+            # so the .selected() state on discarded items is not set True.
+            if not self._multi and len(new_selected) > 1:
+                new_selected = [new_selected[-1]]
             # set flags
             try:
                 for it in list(getattr(self, '_items', []) or []):
@@ -812,9 +887,7 @@ class YTableGtk(YSelectionWidget):
                     it.setSelected(True)
             except Exception:
                 pass
-            if not self._multi and len(new_selected) > 1:
-                new_selected = [new_selected[-1]]
-            
+
             self._old_selected_items = self._selected_items
             self._selected_items = new_selected
             # notify
@@ -902,6 +975,12 @@ class YTableGtk(YSelectionWidget):
             self._suppress_selection_handler = True
             if selected:
                 if not self._multi:
+                    # Deselect previously selected items in both UI and model.
+                    for prev_it in list(self._selected_items):
+                        try:
+                            prev_it.setSelected(False)
+                        except Exception:
+                            pass
                     try:
                         for r in list(self._listbox.get_selected_rows() or []):
                             self._listbox.unselect_row(r)
@@ -913,6 +992,14 @@ class YTableGtk(YSelectionWidget):
                     self._listbox.unselect_row(row)
                 except Exception:
                     pass
+            # Manually sync _selected_items: the handler is suppressed so it won't fire.
+            if selected:
+                if not self._multi:
+                    self._selected_items = [item]
+                elif item not in self._selected_items:
+                    self._selected_items.append(item)
+            else:
+                self._selected_items = [i for i in self._selected_items if i is not item]
         finally:
             self._suppress_selection_handler = False
 
@@ -922,9 +1009,10 @@ class YTableGtk(YSelectionWidget):
             super().deleteAllItems()
         except Exception:
             self._items = []
-            self._selected_items = []
-            self._changed_item = None
-        
+        # Always clear local state regardless of what the base class did.
+        self._selected_items = []
+        self._old_selected_items = []
+        self._changed_item = None
         self._clear_rows()
 
     def changedItem(self):
