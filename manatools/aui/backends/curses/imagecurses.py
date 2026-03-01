@@ -14,28 +14,25 @@ import logging
 import os
 from ...yui_common import *
 
-# Module-level logger for image curses backend
-_mod_logger = logging.getLogger("manatools.aui.curses.image.module")
-if not logging.getLogger().handlers:
-    _h = logging.StreamHandler()
-    _h.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s: %(message)s"))
-    _mod_logger.addHandler(_h)
-    _mod_logger.setLevel(logging.INFO)
-
 
 class YImageCurses(YWidget):
-    def __init__(self, parent=None, imageFileName=""):
+    def __init__(self, parent=None, imageFileName="", fallBackName=None):
         super().__init__(parent)
         self._imageFileName = imageFileName
+        # Text shown in the placeholder frame.  If `fallBackName` is given it
+        # is used as-is; otherwise we fall back to the basename of imageFileName.
+        if fallBackName is not None:
+            self._fallback_name = str(fallBackName)
+        elif imageFileName:
+            self._fallback_name = os.path.basename(imageFileName)
+        else:
+            self._fallback_name = ""
         self._auto_scale = False
         self._zero_size = {YUIDimension.YD_HORIZ: False, YUIDimension.YD_VERT: False}
         self._height = 3
         self._width = 10
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
-        if not self._logger.handlers and not logging.getLogger().handlers:
-            for h in _mod_logger.handlers:
-                self._logger.addHandler(h)
-        self._logger.debug("%s.__init__ file=%s", self.__class__.__name__, imageFileName)
+        self._logger.debug("%s.__init__ file=%s fallBackName=%s", self.__class__.__name__, imageFileName, self._fallback_name)
 
     def widgetClass(self):
         return "YImage"
@@ -45,7 +42,13 @@ class YImageCurses(YWidget):
 
     def setImage(self, imageFileName):
         try:
+            # Compute the old derived name BEFORE updating the stored filename.
+            old_derived = os.path.basename(self._imageFileName) if self._imageFileName else ""
             self._imageFileName = imageFileName
+            # Refresh fallback name only if it was still set to the old derived
+            # basename (i.e. no explicit fallBackName was supplied at construction).
+            if self._fallback_name == old_derived or not self._fallback_name:
+                self._fallback_name = os.path.basename(imageFileName) if imageFileName else ""
         except Exception:
             self._logger.exception("setImage failed")
 
@@ -118,10 +121,10 @@ class YImageCurses(YWidget):
                 except curses.error:
                     pass
 
-            # show filename centered (single line) if space
-            if self._imageFileName:
-                fname = os.path.basename(self._imageFileName)
-                line = f" {fname} "
+            # show fallback text centered (single line) if space
+            display_text = self._fallback_name
+            if display_text:
+                line = f" {display_text} "
                 if len(line) > max(0, width - 2):
                     line = line[:max(0, width - 5)] + '...'
                 try:
