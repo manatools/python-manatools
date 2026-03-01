@@ -36,15 +36,19 @@ class YHBoxQt(YWidget):
         return False
 
     def _create_backend_widget(self):
+        """Create the Qt HBox backend widget and configure per-child stretch factors.
+
+        Uses ``QLayout.SetDefaultConstraint`` instead of ``SetMinimumSize`` so that
+        parent containers can freely resize this widget below its minimum size hint,
+        enabling proportional weight splits.
+        """
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QHBoxLayout(self._backend_widget)
         layout.setContentsMargins(1, 1, 1, 1)
-        # Keep the layout constrained to its minimum sizeHint so children are not
-        # compressed to invisible sizes by parent layouts. This is required in our
-        # UI because many child widgets use Preferred/Fixed policies and rely on
-        # the layout's minimumSizeHint to be respected.
-        layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
-        #layout.setSpacing(1)
+        # SetDefaultConstraint (Qt default) does NOT pin min size to minimumSizeHint,
+        # allowing parent QSplitters / weighted VBoxes to allocate less space.
+        # SetMinimumSize was blocking the 2/3-1/3 split at startup.
+        layout.setSizeConstraint(QtWidgets.QLayout.SetDefaultConstraint)
         
         # Map YWidget weights and stretchable flags to Qt layout stretch factors.
         # Weight semantics: if any child has a positive weight (>0) use those

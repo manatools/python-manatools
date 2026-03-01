@@ -36,13 +36,22 @@ class YVBoxQt(YWidget):
         return False
 
     def _create_backend_widget(self):
+        """Create the Qt VBox backend widget and configure per-child stretch factors.
+
+        Uses ``QLayout.SetDefaultConstraint`` instead of ``SetMinimumSize`` so that
+        parent containers (e.g. a QSplitter / YPanedQt) can freely resize this widget
+        below its minimum size hint, enabling proportional weight splits.
+        The native Qt ``stretch`` parameter in ``addWidget`` translates YWidget weights
+        directly into QBoxLayout proportional space allocation.
+        """
         self._backend_widget = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(self._backend_widget)
         layout.setContentsMargins(1, 1, 1, 1)
-        # Keep the layout constrained to its minimum sizeHint so children are not
-        # compressed to invisible sizes by parent layouts. This matches HBox/Frame behavior.
-        layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
-        #layout.setSpacing(1)
+        # SetDefaultConstraint (the Qt default) does NOT pin the widget minimum to
+        # minimumSizeHint(), allowing parent containers to allocate less space when
+        # proportional weights demand it.  SetMinimumSize was preventing the 2/3-1/3
+        # split because the tree/table VBox had a large minimumSizeHint.
+        layout.setSizeConstraint(QtWidgets.QLayout.SetDefaultConstraint)
         
         # Map YWidget weights and stretchable flags to Qt layout stretch factors.
         # Weight semantics: if any child has a positive weight (>0) use those
