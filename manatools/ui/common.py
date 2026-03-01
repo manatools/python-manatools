@@ -189,7 +189,7 @@ def warningMsgBox (info) :
         # Icon (warning)
         try:
             icon_align = factory.createTop(row)
-            icon = factory.createImage(icon_align, "dialog-warning")
+            icon = factory.createImage(icon_align, "dialog-warning", fallBackName='[!]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
             icon.setAutoScale(False)
@@ -266,7 +266,7 @@ def infoMsgBox (info) :
         # Icon (information)
         try:
             icon_align = factory.createTop(row)
-            icon = factory.createImage(icon_align, "dialog-information")
+            icon = factory.createImage(icon_align, "dialog-information", fallBackName='[I]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
             icon.setAutoScale(False)
@@ -413,7 +413,7 @@ def askOkCancel (info) :
         # Icon (information)
         try:
             icon_align = factory.createTop(row)
-            icon = factory.createImage(icon_align, "dialog-information")
+            icon = factory.createImage(icon_align, "dialog-information", fallBackName='[I]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
             icon.setAutoScale(False)
@@ -503,7 +503,7 @@ def askYesOrNo (info) :
         # Icon (question)
         try:
             icon_align = factory.createTop(row)
-            icon = factory.createImage(icon_align, "dialog-question")
+            icon = factory.createImage(icon_align, "dialog-question", fallBackName="[?]")
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
             icon.setAutoScale(False)
@@ -694,7 +694,7 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
         header = factory.createHBox(vbox)
         if logo:
             try:
-                factory.createImage(header, logo)
+                factory.createImage(header, logo, fallBackName=name or _("Logo"))
                 factory.createHSpacing(header, 8)
             except Exception as exc:
                 logger.debug("Unable to load logo '%s': %s", logo, exc)
