@@ -78,6 +78,10 @@ class YTableGtk(YSelectionWidget):
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
+        # Saved horizontal scroll position used to block GTK's
+        # automatic "scroll selected row into view" behaviour.
+        self._saved_hscroll: float = 0.0
+
         # Initialize column widths
         self._init_column_widths()
 
@@ -144,10 +148,9 @@ class YTableGtk(YSelectionWidget):
                 pass
 
         # Set expansion properties.
-        # hexpand is always True so the table participates in equal space sharing
-        # when placed in an HBox (stretchable is a YUI-level concept handled above).
-        # vexpand follows the stretchable flag so the table grows vertically only
-        # when explicitly requested.
+        # Both stretchable flags are True by default (set in __init__), so the table
+        # grows to fill available space in any container.  The stretchable() calls
+        # here reflect that default and allow callers to override via setStretchable().
         try:
             vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
             vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
@@ -426,6 +429,16 @@ class YTableGtk(YSelectionWidget):
 
     def _connect_selection_handlers(self):
         """Connect selection event handlers."""
+        # GestureClick on the listbox: save horizontal scroll offset BEFORE GTK
+        # internally selects the row and auto-scrolls it into view.  The saved
+        # value is then restored via idle_add in each selection signal handler.
+        try:
+            click_ctrl = Gtk.GestureClick.new()
+            click_ctrl.connect("pressed", self._on_listbox_press)
+            self._listbox.add_controller(click_ctrl)
+        except Exception:
+            self._logger.debug("Could not attach GestureClick to listbox")
+
         if self._multi:
             try:
                 self._listbox.connect("selected-rows-changed", 
@@ -440,6 +453,34 @@ class YTableGtk(YSelectionWidget):
                                     lambda lb, row: self._on_row_selected(lb, row))
             except Exception:
                 self._logger.exception("Failed to connect single-selection handler")
+
+    def _on_listbox_press(self, gesture, n_press, x, y):
+        """Save horizontal scroll offset before the click triggers row selection."""
+        try:
+            hadj = self._sw.get_hadjustment()
+            if hadj:
+                self._saved_hscroll = hadj.get_value()
+        except Exception:
+            pass
+
+    def _schedule_hscroll_restore(self, saved: float):
+        """Restore the horizontal scroll position after GTK has finished processing
+        the selection event (scheduled via idle_add so it runs after the frame)."""
+        sw = getattr(self, '_sw', None)
+        if sw is None:
+            return
+        def _restore():
+            try:
+                hadj = sw.get_hadjustment()
+                if hadj:
+                    hadj.set_value(saved)
+            except Exception:
+                pass
+            return False  # don't repeat
+        try:
+            GLib.idle_add(_restore)
+        except Exception:
+            pass
 
     def _get_column_width(self, col):
         """Get width for specified column."""
@@ -702,6 +743,12 @@ class YTableGtk(YSelectionWidget):
 
     def _apply_model_selection(self):
         """Apply selection state from model to UI."""
+        # Save horizontal scroll so programmatic select_row calls don't move the viewport.
+        try:
+            hadj = self._sw.get_hadjustment() if getattr(self, '_sw', None) else None
+            saved_h = hadj.get_value() if hadj else 0.0
+        except Exception:
+            saved_h = 0.0
         try:
             self._suppress_selection_handler = True
             
@@ -744,6 +791,7 @@ class YTableGtk(YSelectionWidget):
 
         finally:
             self._suppress_selection_handler = False
+            self._schedule_hscroll_restore(saved_h)
 
     # Column resizing handlers
     def _on_separator_enter(self, controller, x, y):
@@ -831,10 +879,13 @@ class YTableGtk(YSelectionWidget):
             except Exception:
                 pass
 
-    # Selection handlers (maintained from original)
+    # Selection handlers
     def _on_row_selected(self, listbox, row):
         if self._suppress_selection_handler:
             return
+        # Restore horizontal scroll: GTK scrolled the row into view before this
+        # signal fired; undo that via idle_add using the value saved at click time.
+        self._schedule_hscroll_restore(self._saved_hscroll)
         try:
             # Update selected flags
             for it in list(getattr(self, '_items', []) or []):
@@ -868,6 +919,7 @@ class YTableGtk(YSelectionWidget):
     def _on_selected_rows_changed(self, listbox):
         if self._suppress_selection_handler:
             return
+        self._schedule_hscroll_restore(self._saved_hscroll)
         try:
             selected_rows = listbox.get_selected_rows() or []
             new_selected = []
@@ -907,6 +959,7 @@ class YTableGtk(YSelectionWidget):
         """
         if self._suppress_selection_handler:
             return
+        self._schedule_hscroll_restore(self._saved_hscroll)
         self._logger.debug("_on_row_selected_for_multi called")
         sel_rows = listbox.get_selected_rows()
         it = self._row_to_item.get(row, None)
@@ -964,6 +1017,7 @@ class YTableGtk(YSelectionWidget):
                     pass
             return
         
+        saved_h: float = 0.0
         try:
             row = self._item_to_row.get(item)
             if row is None:
@@ -971,7 +1025,14 @@ class YTableGtk(YSelectionWidget):
                 row = self._item_to_row.get(item)
             if row is None:
                 return
-            
+
+            # Save horizontal scroll before programmatic select_row.
+            try:
+                hadj = self._sw.get_hadjustment() if getattr(self, '_sw', None) else None
+                saved_h = hadj.get_value() if hadj else 0.0
+            except Exception:
+                saved_h = 0.0
+
             self._suppress_selection_handler = True
             if selected:
                 if not self._multi:
@@ -1002,6 +1063,7 @@ class YTableGtk(YSelectionWidget):
                 self._selected_items = [i for i in self._selected_items if i is not item]
         finally:
             self._suppress_selection_handler = False
+            self._schedule_hscroll_restore(saved_h)
 
     def deleteAllItems(self):
         """Delete all items from the table."""
