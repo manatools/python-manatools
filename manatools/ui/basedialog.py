@@ -104,8 +104,26 @@ class BaseDialog :
 
   def UIlayout(self, layout):
     '''
-    super class must implement this to draw the dialog layout
-    @param layout: a YUI vertical box layout
+    Implement this method in subclasses to build the dialog widget tree.
+
+    @param layout  A VBox that is the content root of the dialog.  Append all
+                   top-level widgets here.  When minWidth/minHeight were given
+                   to BaseDialog.__init__() this VBox sits inside a MinSize
+                   container that enforces the overall dialog minimum size.
+
+    Per-column minimum widths
+    -------------------------
+    When the layout contains a ReplacePoint whose content changes at runtime,
+    sibling columns can be squeezed.  Use protect_column_min_width() to wrap
+    any column that must keep a guaranteed minimum width::
+
+      hbox = self.factory.createHBox(layout)
+      tree_col = self.createMinSize(hbox, 160, 1)  # Min width 160px, min height 1px to prevent collapse
+      tree_col.setWeight(MUI.YUIDimension.YD_HORIZ, 25)
+      self.tree = self.factory.createTree(tree_col, "")
+      frame = self.factory.createFrame(hbox, "")
+      frame.setWeight(MUI.YUIDimension.YD_HORIZ, 75)
+      self.rp = self.factory.createReplacePoint(frame)
     '''
     raise NotImplementedError("UIlayout is not implemented")
 
@@ -159,7 +177,15 @@ class BaseDialog :
     return yui.YUI.widgetFactory()
   
   def _setupUI(self):
-    
+    '''
+    Create the dialog window, build an optional overall MinSize container, and
+    invoke UIlayout().
+
+    Subclassing
+    -----------
+    Override UIlayout(layout) - do not override _setupUI unless necessary.
+    The dialog is opened lazily on the first call to dialog.waitForEvent().
+    '''
     self.dialog = self.factory.createPopupDialog() if self._dialogType == DialogType.POPUP else self.factory.createMainDialog()
 
     # If a minimum size is requested, wrap the layout inside a MinSize container.
