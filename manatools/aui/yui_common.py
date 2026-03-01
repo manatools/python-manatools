@@ -277,20 +277,45 @@ class YWidget:
             self._stretchable_vert = new_stretch
     
     def weight(self, dim):
-        """ 
-            The weight is used when all widgets can get their preferred size and yet space is available. 
-            The remaining space will be devided between all stretchable widgets according to their weights.
-            A widget with greater weight will get more space. The default weight for all widgets is 0. 
-            The weight range is 0-99.
+        """Return the layout weight for the given dimension.
+
+        The weight controls how extra space is distributed among stretchable
+        widgets inside a container. A widget with a larger weight receives a
+        proportionally larger share of the remaining space. The default weight
+        is 0 (no preference). Any non-negative integer is a valid weight value;
+        relative ratios (e.g. 67 vs 33 for a 2/3-1/3 split) are common.
+
+        Args:
+            dim: YUIDimension.YD_HORIZ or YUIDimension.YD_VERT.
+
+        Returns:
+            int: Current weight (>= 0) for the requested dimension.
         """
         if dim == YUIDimension.YD_HORIZ:
             return self._weight_horiz
         else:
             return self._weight_vert
-    
+
     def setWeight(self, dim, weight: int):
-        w = weight % 100 if weight >= 0 else 0
-        
+        """Set the layout weight for the given dimension.
+
+        Weights are non-negative integers used by container backends to
+        distribute available space proportionally among children.  There is no
+        upper limit; what matters is the ratio between sibling weights
+        (e.g. setWeight(YD_VERT, 67) paired with setWeight(YD_VERT, 33) will
+        give the first widget approximately twice the space of the second).
+
+        The only constraint is weight >= 0.
+
+        Args:
+            dim:    YUIDimension.YD_HORIZ or YUIDimension.YD_VERT.
+            weight: Non-negative integer. Negative values are clamped to 0.
+        """
+        try:
+            w = max(0, int(weight))
+        except (TypeError, ValueError):
+            w = 0
+
         if dim == YUIDimension.YD_HORIZ:
             self._weight_horiz = w
         else:
