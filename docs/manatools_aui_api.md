@@ -1014,6 +1014,248 @@ All `createXxx()` methods are implemented across all three backends unless noted
 
 ---
 
-## 13. License and Contribution
+---
+
+## 14. manatools.ui — High-level UI Helpers
+
+`manatools.ui` provides ready-made helpers and base classes that sit on top of the AUI factory API. They handle the dialog lifecycle, event loop and title-bar save/restore automatically, so callers only need to supply a small `info` dictionary.
+
+### 14.1 Import
+
+```python
+from manatools.ui import common
+from manatools.ui.basedialog import BaseDialog, DialogType
+from manatools.ui.helpdialog import HelpDialog
+```
+
+### 14.2 Message-box helpers (`manatools.ui.common`)
+
+All helpers accept an `info` dictionary with the following keys. Keys marked *optional* may be omitted.
+
+| Key | Type | Description |
+|---|---|---|
+| `title` | `str` | Window/title-bar label (optional) |
+| `text` | `str` | Message body |
+| `richtext` | `bool` | Render `text` as HTML/rich markup (default `False`) |
+| `default_button` | `int` | Preselect button: `1` = affirmative, other = negative (optional) |
+| `size` | `dict` \| `list/tuple` | Minimum size hint – see below |
+
+#### Size hint
+
+```python
+# Dict form (pixels):
+{'width': 480, 'height': 160}
+# Legacy aliases accepted: 'column'/'columns', 'lines'/'rows'
+
+# List / tuple form:
+[480, 160]   # [width, height]
+```
+
+#### `destroyUI()`
+
+```python
+common.destroyUI()
+```
+
+No-op stub kept for API compatibility with legacy code. AUI handles backend lifecycle internally.
+
+#### `msgBox(info)` → `int`
+
+Plain message dialog with a single **Ok** button.
+
+```python
+common.msgBox({'title': 'Done', 'text': 'Operation completed.'})
+```
+
+Returns `1` always; `0` if `info` is falsy.
+
+#### `infoMsgBox(info)` → `int`
+
+Same as `msgBox` but displays a standard *information* icon next to the text.
+
+#### `warningMsgBox(info)` → `int`
+
+Same as `msgBox` but displays a standard *warning* icon.
+
+#### `askOkCancel(info)` → `bool`
+
+Dialog with **Ok** and **Cancel** buttons.
+
+```python
+confirmed = common.askOkCancel({
+    'title': 'Confirm',
+    'text': 'Delete selected items?',
+    'default_button': 1,   # Ok is the default
+})
+```
+
+Returns `True` (Ok pressed) or `False` (Cancel / window close).
+
+#### `askYesOrNo(info)` → `bool`
+
+Same as `askOkCancel` but labels the buttons **Yes** and **No**.
+
+Returns `True` (Yes) or `False` (No / window close).
+
+#### `AboutDialog(info=None, *, dialog_mode=AboutDialogMode.CLASSIC, size=None)`
+
+Displays application metadata in classic or tabbed layout.
+
+```python
+from manatools.ui.common import AboutDialog, AboutDialogMode
+
+AboutDialog(
+    dialog_mode=AboutDialogMode.TABBED,
+    size={'width': 480, 'height': 320},
+)
+```
+
+Metadata (name, version, authors, description, license, credits, information, logo) is read from `YUI.app()` application attributes set earlier. The deprecated `info` dict overrides individual fields but emits a `DeprecationWarning`.
+
+`AboutDialogMode`:
+
+```python
+class AboutDialogMode(Enum):
+    CLASSIC = 1   # inline rich-text sections with Info / Credits buttons
+    TABBED  = 2   # sections presented as DumbTab pages
+```
+
+### 14.3 `BaseDialog` (`manatools.ui.basedialog`)
+
+`BaseDialog` is the base class for full application dialogs with an event manager.
+
+```python
+class BaseDialog:
+    def __init__(self, title: str,
+                 icon: str = "",
+                 dialogType: DialogType = DialogType.MAIN,
+                 minWidth: int = -1,
+                 minHeight: int = -1): ...
+```
+
+Subclasses must override:
+
+```python
+def UIlayout(self, layout):
+    """Build the dialog widget tree. `layout` is a VBox inside the dialog."""
+    raise NotImplementedError
+```
+
+Optional override:
+
+```python
+def doSomethingIntoLoop(self):
+    """Called once per event-loop iteration after events are dispatched."""
+    pass
+```
+
+#### Key properties
+
+```python
+dialog.running  -> bool     # True while the event loop is active
+dialog.timeout  -> int      # waitForEvent timeout in ms (0 = infinite)
+dialog.factory  -> YWidgetFactory
+dialog.eventManager -> EventManager
+```
+
+#### Running and stopping
+
+```python
+d = MyDialog()
+d.run()          # blocks until ExitLoop() is called or dialog is closed
+
+# inside any event handler:
+self.ExitLoop()  # requests the loop to stop after the current iteration
+```
+
+#### `EventManager` (`manatools.eventmanager`)
+
+Dispatches YUI events to registered Python callbacks. Obtained via `dialog.eventManager`.
+
+```python
+em = dialog.eventManager
+
+# Widget events
+em.addWidgetEvent(widget, callback)
+em.addWidgetEvent(widget, callback, sendWidget=True)  # callback(widget, event)
+em.removeWidgetEvent(widget, callback)
+
+# Menu events
+em.addMenuEvent(menuItem, callback)          # menuItem=None catches all
+em.addMenuEvent(menuItem, callback, sendMenuItem=True)
+em.removeMenuEvent(menuItem, callback)
+
+# Timeout events
+em.addTimeOutEvent(callback)
+em.removeTimeOutEvent(callback)
+
+# Cancel events
+em.addCancelEvent(callback)
+em.removeCancelEvent(callback)
+```
+
+Callback signatures:
+
+```python
+# Default (sendWidget/sendMenuItem = False):
+def on_button():  ...
+
+# With widget/item forwarding:
+def on_button(widget, event): ...
+```
+
+#### Minimal `BaseDialog` example
+
+```python
+from manatools.ui import basedialog
+
+class MyDialog(basedialog.BaseDialog):
+    def __init__(self):
+        super().__init__("My dialog", minWidth=400, minHeight=200)
+
+    def UIlayout(self, layout):
+        vbox = self.factory.createVBox(layout)
+        self.label = self.factory.createLabel(vbox, "Hello, world!")
+        btn = self.factory.createPushButton(vbox, "&Close")
+        self.eventManager.addWidgetEvent(btn, self.on_close)
+
+    def on_close(self):
+        self.ExitLoop()
+
+MyDialog().run()
+```
+
+### 14.4 `HelpDialog` (`manatools.ui.helpdialog`)
+
+A popup rich-text help browser based on `BaseDialog`.
+
+```python
+from manatools.ui.helpdialog import HelpDialog
+from manatools.basehelpinfo import HelpInfoBase
+
+class MyHelp(HelpInfoBase):
+    def home(self):
+        return "<h2>Help</h2><p>Welcome to MyApp help.</p>"
+
+    def show(self, url):
+        # return HTML for internal links; None to open externally
+        return None
+
+HelpDialog(MyHelp(), title="Help", minWidth=500, minHeight=350).run()
+```
+
+- Internal links in rich text trigger `HelpInfoBase.show(url)`; if it returns a non-empty string the view is updated in place.
+- External URLs (where `show()` returns `None`/empty) are opened via `webbrowser.open()`.
+- `_normalize_dimension(value)` is a static helper that returns a positive int or 0 for invalid values.
+
+### 14.5 Common pitfalls
+
+- **`old_title` / `backupIcon` initialization** — all helpers initialize these variables to `None` before the `try` block so the `finally` clause never raises `UnboundLocalError` if dialog creation fails early.
+- **Single `destroy()` path** — dialogs are destroyed exclusively in the `finally` block; do not call `dlg.destroy()` elsewhere in the same function to avoid double-free.
+- **`DialogType.MAIN` vs `DialogType.POPUP`** — `MAIN` creates a `YMainDialog`; `POPUP` creates a `YPopupDialog` and stacks on top of the current topmost dialog. Most helpers use `POPUP`.
+
+---
+
+## 15. License and Contribution
 
 This document is part of the `python-manatools` project (LGPLv2+). Update both code docstrings and this file when the API changes.
