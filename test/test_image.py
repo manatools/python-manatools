@@ -64,9 +64,13 @@ def test_image(backend_name=None):
         # Create a MinSize wrapper so we can enforce a minimum visible size:
         # start with a conservative minimum (width x height in chars)
         min_w = 40
-        min_h = 6
+        min_h = 20  # give enough vertical space for a banner to be visible
         min_container = factory.createMinSize(vbox, min_w, min_h)
-        img = factory.createImage(min_container, "/usr/share/isodumper/header.png")
+        # Resolve image path: prefer isodumper banner, fall back to project logo or empty
+        img_path = "/usr/share/isodumper/header.png"
+        if not os.path.exists(img_path):
+            img_path = example if example else "system-software-install"
+        img = factory.createImage(min_container, img_path)
         # Keep references for interactive toggles
         current_mode = {"auto_scale": True, "vert_stretch": True, "min_h": min_h}
 
