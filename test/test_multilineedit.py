@@ -49,7 +49,8 @@ def test_multilineedit(backend_name=None):
 
         ui.application().setApplicationTitle(f"Test {backend.value} MultiLineEdit")
         dlg = factory.createPopupDialog()
-        v = factory.createVBox(dlg)
+        minSize = factory.createMinSize(dlg, 320, 200)
+        v = factory.createVBox(minSize)
 
         mled = factory.createMultiLineEdit(v, "Notes")
         mled.setStretchable(yui.YUIDimension.YD_VERT, True)
