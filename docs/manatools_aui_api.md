@@ -743,10 +743,68 @@ w.setValue(text: str)
 ### 8.23 Image
 
 ```python
-factory.createImage(parent, imageFileName: str) -> YWidget
+factory.createImage(parent,
+                     imageFileName: str,
+                     fallBackName: str = None) -> YWidget
 ```
 
-Loads and displays an image file on GUI backends. NCurses renders an empty placeholder frame.
+Displays an image on GUI backends (GTK4, Qt6). On the NCurses backend, where pixel rendering is not possible, a decorative box frame is drawn instead with a short label inside.
+
+| Parameter | Description |
+|---|---|
+| `imageFileName` | Absolute path to an image file **or** a freedesktop theme icon name (e.g. `"dialog-warning"`, `"application-exit"`). |
+| `fallBackName` | *(optional)* Text shown centred inside the NCurses placeholder frame. When omitted the basename of `imageFileName` is used. Ignored by GUI backends. |
+
+#### Stretching and scaling
+
+Two independent mechanisms control how the image fills its allocated space:
+
+**`setStretchable(dim, True)`** — marks the widget as willing to expand in the given dimension. The layout manager gives the widget all available space in that axis (equivalent to `hexpand`/`vexpand` in GTK4 and `QSizePolicy.Expanding` in Qt6). The image is then **scaled to fill the allocated area**, respecting each axis independently. Calling it on both axes produces a fully-stretched image that deforms freely.
+
+**`setAutoScale(True)`** — equivalent to setting both axes stretchable but with a **preserved aspect ratio**. The image is scaled to fit within the allocated area (width × height) using the intrinsic aspect ratio. This is the recommended mode for banners or logos.
+
+```python
+img = factory.createImage(vbox, "/usr/share/myapp/logo.png")
+
+# Fill available width, deform height to match:
+img.setStretchable(YUIDimension.YD_HORIZ, True)
+img.setStretchable(YUIDimension.YD_VERT, True)
+
+# OR: scale to fit preserving aspect ratio:
+img.setAutoScale(True)
+
+# Fixed size icon (e.g. dialog decoration, no stretching):
+img.setStretchable(YUIDimension.YD_HORIZ, False)
+img.setStretchable(YUIDimension.YD_VERT, False)
+img.setAutoScale(False)
+```
+
+#### Replacing the image at runtime
+
+```python
+img.setImage(newPath: str)   # reload from a new file or theme name
+img.imageFileName() -> str   # current source path / icon name
+img.autoScale()     -> bool
+```
+
+#### Backend-specific notes
+
+| Backend | Behaviour |
+|---|---|
+| **GTK4** | Uses `Gtk.Image` backed by `GdkPixbuf`. Theme icons are resolved via `Gio.ThemedIcon`. Scaling is applied on every GTK size-allocate signal so the image always fills its allocation when stretchable. `do_measure` returns `minimum = 0` on stretchable axes, ensuring GTK layouts can freely expand the widget. |
+| **Qt6** | Uses a `QLabel` subclass. Stretching is applied in `resizeEvent` so the image always tracks the label's allocated size. No hardcoded minimum size is enforced — the widget sizes to its natural pixmap dimensions when not stretchable, and expands freely when `setStretchable` or `setAutoScale` is used. |
+| **NCurses** | No pixel rendering. A Unicode box is drawn at the widget's character-cell allocation. The `fallBackName` text (or image basename) is displayed centred inside the frame. |
+
+#### NCurses `fallBackName` usage
+
+```python
+# Dialog warning icon with a meaningful NCurses label
+icon = factory.createImage(parent, "dialog-warning", fallBackName="!")
+
+# Application logo with descriptive text
+logo = factory.createImage(parent, "/usr/share/myapp/logo.png",
+                            fallBackName="MyApp")
+```
 
 ---
 
@@ -1005,7 +1063,7 @@ if app.isTextMode():
 | File dialogs | Gtk.FileDialog (GTK 4.10+) | QFileDialog | In-terminal overlay |
 | `busyCursor()` | Best-effort | QApplication override cursor | No-op |
 | `createPaned` divider | Gtk.Paned (idle-deferred) | QSplitter | Simulated in chars |
-| `createImage` | Full image rendering | Full image rendering | Empty placeholder |
+| `createImage` | Full image rendering (GdkPixbuf; scales on size-allocate when stretchable) | Full image rendering (QLabel+QPixmap; scales on resizeEvent when stretchable) | Unicode box frame with `fallBackName` text |
 | `createRichText` | HTML via WebKit / Gtk.Label | QTextBrowser | Plain text fallback |
 | Scrollbar auto-scroll | Supported | Supported | Limited |
 | `shutdown()` required | No | No | Yes |
