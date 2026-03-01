@@ -17,16 +17,15 @@ from .commonqt import _resolve_icon as _qt_resolve_icon
 
 
 class YImageQt(YWidget):
-    def __init__(self, parent=None, imageFileName=""):
+    def __init__(self, parent=None, imageFileName="", fallBackName=None):
         super().__init__(parent)
         self._imageFileName = imageFileName
+        # fallBackName is reserved for text-mode backends; ignored here.
+        self._fallback_name = fallBackName
         self._auto_scale = False
         self._zero_size = {YUIDimension.YD_HORIZ: False, YUIDimension.YD_VERT: False}
         self._pixmap = None
         self._qicon = None
-        # minimal visible size guard
-        self._min_w = 64
-        self._min_h = 64
         # aspect ratio tracking (w/h). default 1.0
         self._aspect_ratio = 1.0
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
@@ -114,27 +113,12 @@ class YImageQt(YWidget):
 
     def _create_backend_widget(self):
         try:
-            # Use a QLabel subclass with height-for-width to keep aspect ratio.
+            # Use a QLabel subclass with resizeEvent to apply pixmap scaling.
             class _ImageLabel(QtWidgets.QLabel):
                 def __init__(self, owner, *args, **kwargs):
                     super().__init__(*args, **kwargs)
                     self._owner = owner
 
-                #def hasHeightForWidth(self):
-                #    # Enable height-for-width only when autoscale is ON
-                #    try:
-                #        return bool(getattr(self._owner, "_auto_scale", False))
-                #    except Exception:
-                #        return False
-#
-                #def heightForWidth(self, w):
-                #    try:
-                #        ratio = max(0.0001, float(getattr(self._owner, "_aspect_ratio", 1.0)))
-                #        h = int(max(self._owner._min_h, float(w) / ratio))
-                #        return h
-                #    except Exception:
-                #        return super().heightForWidth(w)
-#
                 def resizeEvent(self, ev):
                     super().resizeEvent(ev)
                     try:
@@ -143,51 +127,36 @@ class YImageQt(YWidget):
                         pass
 
                 def sizeHint(self) -> QtCore.QSize:
-                    """
-                    Return the recommended size for the widget.
-                    
-                    This considers zero-size settings - if a dimension has zero size
-                    enabled, it returns 0 for that dimension.
+                    """Return the recommended size for the widget.
+
+                    Stretchable dimensions report 0 so the layout can freely
+                    allocate space to this widget.
                     """
                     if self._owner._auto_scale:
-                        # When auto-scaling, size hint depends on parent
                         return super().sizeHint()
-                    
                     base_hint = super().sizeHint()
-
-                    width = 0 if self._owner.stretchable(YUIDimension.YD_HORIZ) else base_hint.width()
-                    height = 0 if self._owner.stretchable(YUIDimension.YD_VERT) else base_hint.height()
+                    width  = 0 if self._owner.stretchable(YUIDimension.YD_HORIZ) else base_hint.width()
+                    height = 0 if self._owner.stretchable(YUIDimension.YD_VERT)  else base_hint.height()
                     return QtCore.QSize(width, height)
 
                 def minimumSizeHint(self) -> QtCore.QSize:
-                    """
-                    Return the minimum recommended size for the widget.
-                    
-                    This considers zero-size settings.
+                    """Return the minimum recommended size for the widget.
+
+                    Auto-scale and stretchable dimensions accept a zero minimum.
                     """
                     if self._owner._auto_scale:
-                        # When auto-scaling, can shrink to 0
                         return QtCore.QSize(0, 0)
-                    
                     base_hint = super().minimumSizeHint()
-                    
-                    width = 0 if self._owner.stretchable(YUIDimension.YD_HORIZ) else base_hint.width()
-                    height = 0 if self._owner.stretchable(YUIDimension.YD_VERT) else base_hint.height()
-                    
+                    width  = 0 if self._owner.stretchable(YUIDimension.YD_HORIZ) else base_hint.width()
+                    height = 0 if self._owner.stretchable(YUIDimension.YD_VERT)  else base_hint.height()
                     return QtCore.QSize(width, height)
 
             self._backend_widget = _ImageLabel(self)
             self._backend_widget.setAlignment(QtCore.Qt.AlignCenter)
-            # enforce a small minimum so it never vanishes
-            try:
-                self._backend_widget.setMinimumSize(self._min_w, self._min_h)
-            except Exception:
-                pass
             if self._imageFileName:
                 try:
                     self.setImage(self._imageFileName)
                 except Exception:
-                    # Fallback: try direct filesystem load
                     try:
                         if os.path.exists(self._imageFileName):
                             self._pixmap = QtGui.QPixmap(self._imageFileName)
@@ -235,7 +204,15 @@ class YImageQt(YWidget):
                         if isinstance(getattr(self, "_pixmap", None), QtGui.QPixmap) and not self._pixmap.isNull():
                             pm_w, pm_h = self._pixmap.width(), self._pixmap.height()
                         elif getattr(self, "_qicon", None) is not None:
-                            pm_w, pm_h = 64, 64
+                            # Derive natural size from the icon's available sizes
+                            pm_w, pm_h = 32, 32
+                            try:
+                                sizes = self._qicon.availableSizes()
+                                if sizes:
+                                    best = max(sizes, key=lambda sz: sz.width() * sz.height())
+                                    pm_w, pm_h = best.width(), best.height()
+                            except Exception:
+                                pass
                         if self.stretchable(YUIDimension.YD_HORIZ):
                             self._backend_widget.setMaximumWidth(QWIDGETSIZE_MAX)
                         else:
@@ -248,12 +225,6 @@ class YImageQt(YWidget):
                                 self._backend_widget.setMaximumHeight(max(self._backend_widget.maximumHeight(), pm_h))
                 except Exception:
                     self._logger.exception("_apply_size_policy: max size tuning failed")
-
-                # Keep a small minimum visible size
-                try:
-                    self._backend_widget.setMinimumSize(self._min_w, self._min_h)
-                except Exception:
-                    pass
         except Exception:
             self._logger.exception("_apply_size_policy failed")
 
@@ -263,7 +234,9 @@ class YImageQt(YWidget):
                 return
             size = self._backend_widget.size()
             if not size.isValid():
-                size = QtCore.QSize(self._min_w, self._min_h)
+                # Widget not yet laid out; use a 1×1 sentinel.  resizeEvent will
+                # call _apply_pixmap again once a real allocation is available.
+                size = QtCore.QSize(1, 1)
 
             src_icon = self._qicon
             src_pm = self._pixmap if isinstance(self._pixmap, QtGui.QPixmap) and not self._pixmap.isNull() else None
@@ -276,7 +249,7 @@ class YImageQt(YWidget):
                 except Exception:
                     ratio = 1.0
                 target_w = max(1, size.width())
-                target_h = int(max(self._min_h, target_w / ratio))
+                target_h = int(max(1, target_w / ratio))
                 target_h = min(target_h, size.height())
 
                 if src_icon is not None:
@@ -291,9 +264,22 @@ class YImageQt(YWidget):
                     self._backend_widget.clear()
                 return
 
-            # AutoScale OFF => stretch along selected dimensions, allow deformation
-            target_w = size.width()  if self.stretchable(YUIDimension.YD_HORIZ) else (src_pm.width() if src_pm else self._min_w)
-            target_h = size.height() if self.stretchable(YUIDimension.YD_VERT)  else (src_pm.height() if src_pm else self._min_h)
+            # AutoScale OFF => stretch along selected dimensions, allow deformation.
+            # For non-stretchable axes use the source's natural size.
+            # If the source is a theme icon (no pixmap), query available sizes; default 32px.
+            nat_w = nat_h = 32
+            if src_pm is not None:
+                nat_w, nat_h = src_pm.width(), src_pm.height()
+            elif src_icon is not None:
+                try:
+                    sizes = src_icon.availableSizes()
+                    if sizes:
+                        best = max(sizes, key=lambda sz: sz.width() * sz.height())
+                        nat_w, nat_h = best.width(), best.height()
+                except Exception:
+                    pass
+            target_w = size.width()  if self.stretchable(YUIDimension.YD_HORIZ) else nat_w
+            target_h = size.height() if self.stretchable(YUIDimension.YD_VERT)  else nat_h
             target_w = max(1, target_w)
             target_h = max(1, target_h)
 

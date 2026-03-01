@@ -51,9 +51,11 @@ class _YImageMeasure(Gtk.Image):
 class YImageGtk(YWidget):
     """GTK4 image widget with optional autoscale and height-for-width measurement."""
 
-    def __init__(self, parent=None, imageFileName=""):
+    def __init__(self, parent=None, imageFileName="", fallBackName=None):
         super().__init__(parent)
         self._imageFileName = imageFileName
+        # fallBackName is reserved for text-mode backends; ignored here.
+        self._fallback_name = fallBackName
         self._auto_scale = False
         self._zero_size = {YUIDimension.YD_HORIZ: False, YUIDimension.YD_VERT: False}
         self._pixbuf = None
@@ -136,9 +138,16 @@ class YImageGtk(YWidget):
         except Exception:
             pass
 
-    def _on_size_allocate(self, widget, allocation):
+    def _on_size_allocate(self, widget, width, height, baseline):
+        """GTK4 size-allocate signal: (widget, width: int, height: int, baseline: int)."""
         try:
-            if self._auto_scale and self._pixbuf is not None:
+            # Rescale whenever auto_scale is on OR when stretching on any axis.
+            should_resize = (
+                self._auto_scale
+                or self.stretchable(YUIDimension.YD_HORIZ)
+                or self.stretchable(YUIDimension.YD_VERT)
+            )
+            if should_resize and self._pixbuf is not None:
                 self._apply_pixbuf()
         except Exception:
             self._logger.exception("_on_size_allocate failed")
@@ -163,13 +172,21 @@ class YImageGtk(YWidget):
                         natural_size = max(1, int((int(for_size) * pix_w) / pix_h))
                     else:
                         natural_size = pix_w
-                    minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_HORIZ) else natural_size
+                    # When stretchable or auto_scale the widget must accept any size;
+                    # return minimum=0 so the container is not blocked from giving more space.
+                    if self._auto_scale or self.stretchable(YUIDimension.YD_HORIZ):
+                        minimum_size = 0
+                    else:
+                        minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_HORIZ) else natural_size
                 else:
                     if for_size is not None and int(for_size) > 0:
                         natural_size = max(1, int((int(for_size) * pix_h) / pix_w))
                     else:
                         natural_size = pix_h
-                    minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_VERT) else natural_size
+                    if self._auto_scale or self.stretchable(YUIDimension.YD_VERT):
+                        minimum_size = 0
+                    else:
+                        minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_VERT) else natural_size
                 self._logger.debug(
                     "Image fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s (pix=%sx%s)",
                     orientation,
@@ -258,17 +275,60 @@ class YImageGtk(YWidget):
             if not self._pixbuf:
                 self._backend_widget.clear()
                 return
-            if self._auto_scale and hasattr(self._backend_widget, 'get_allocated_width'):
+
+            stretch_h = self.stretchable(YUIDimension.YD_HORIZ)
+            stretch_v = self.stretchable(YUIDimension.YD_VERT)
+            should_resize = self._auto_scale or stretch_h or stretch_v
+
+            if should_resize:
+                # GTK4: get_width()/get_height() supersede deprecated get_allocated_*
                 try:
+                    w = self._backend_widget.get_width()
+                    h = self._backend_widget.get_height()
+                except AttributeError:
+                    # Very old GTK4 binding fallback
                     w = self._backend_widget.get_allocated_width()
                     h = self._backend_widget.get_allocated_height()
-                    if w > 1 and h > 1:
-                        scaled = self._pixbuf.scale_simple(w, h, GdkPixbuf.InterpType.BILINEAR)
-                        self._backend_widget.set_from_pixbuf(scaled)
-                        return
-                except Exception:
-                    pass
-            # fallback: set original pixbuf
+
+                if w > 1 and h > 1:
+                    src_w = self._pixbuf.get_width()
+                    src_h = self._pixbuf.get_height()
+
+                    if self._auto_scale:
+                        # Preserve aspect ratio when auto-scaling.
+                        # Scale to fill the stretchable axis; let the other follow.
+                        if stretch_h and stretch_v:
+                            # Fit inside the allocated rectangle (letterbox)
+                            ratio = min(w / src_w, h / src_h) if src_w > 0 and src_h > 0 else 1.0
+                            target_w = max(1, int(src_w * ratio))
+                            target_h = max(1, int(src_h * ratio))
+                        elif stretch_h:
+                            # Scale to width, let height follow aspect ratio
+                            target_w = w
+                            target_h = max(1, int(w * src_h / src_w)) if src_w > 0 else src_h
+                        elif stretch_v:
+                            # Scale to height, let width follow aspect ratio
+                            target_h = h
+                            target_w = max(1, int(h * src_w / src_h)) if src_h > 0 else src_w
+                        else:
+                            # auto_scale but neither axis stretchable: fit inside
+                            ratio = min(w / src_w, h / src_h) if src_w > 0 and src_h > 0 else 1.0
+                            target_w = max(1, int(src_w * ratio))
+                            target_h = max(1, int(src_h * ratio))
+                    else:
+                        # No auto-scale: stretch each axis independently (may deform)
+                        target_w = w if stretch_h else src_w
+                        target_h = h if stretch_v else src_h
+
+                    scaled = self._pixbuf.scale_simple(
+                        max(1, target_w), max(1, target_h),
+                        GdkPixbuf.InterpType.BILINEAR,
+                    )
+                    self._backend_widget.set_from_pixbuf(scaled)
+                    return
+                # widget not yet allocated — set original pixbuf (size-allocate will rescale later)
+
+            # Not resizing (or not yet allocated): show at natural size.
             self._backend_widget.set_from_pixbuf(self._pixbuf)
         except Exception:
             self._logger.exception("_apply_pixbuf failed")
