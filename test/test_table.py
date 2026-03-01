@@ -99,6 +99,9 @@ def test_table_example(backend_name=None):
     left_header.addColumn('info', alignment=yui.YAlignmentType.YAlignBegin)
     left_header.addColumn('', checkBox=True, alignment=yui.YAlignmentType.YAlignCenter)
     left_table = factory.createTable(hbox, left_header)
+    left_table.setStretchable(yui.YUIDimension.YD_VERT, True)
+    left_table.setStretchable(yui.YUIDimension.YD_HORIZ, True)
+
     #left_table.setEnabled(False)
 
     # right: multi-selection table
@@ -108,6 +111,8 @@ def test_table_example(backend_name=None):
     right_header.addColumn('zip code')
     right_header.addColumn('town')
     right_table = factory.createTable(hbox, right_header, True)
+    right_table.setStretchable(yui.YUIDimension.YD_VERT, True)
+    right_table.setStretchable(yui.YUIDimension.YD_HORIZ, True)
 
     # populate
     left_items = build_left_checkbox_table(factory, left_table)
@@ -134,7 +139,9 @@ def test_table_example(backend_name=None):
             if checked_item is not None:
                 chk_label.setText(f"Checked rows: {checked} | Selected{checked_item.label(0)}: checked:{checked_item.checked(2)}")
             else:
-                chk_label.setText(f"Checked rows: {checked}")
+                sel = left_table.selectedItems()
+                sel_text = [it.label() for it in sel]
+                chk_label.setText(f"Checked rows: {checked} | Selected: {sel_text}")
         except Exception:
             pass
 
@@ -151,7 +158,7 @@ def test_table_example(backend_name=None):
         if et == yui.YEventType.WidgetEvent:
             w = ev.widget()
             reason = ev.reason()
-            if w == right_table and reason == yui.YEventReason.SelectionChanged:
+            if (w == right_table or w == left_table) and reason == yui.YEventReason.SelectionChanged:
                 update_labels()
             elif w == left_table and reason == yui.YEventReason.ValueChanged:
                 sel = left_table.changedItem()
