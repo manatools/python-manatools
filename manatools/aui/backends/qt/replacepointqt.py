@@ -341,10 +341,22 @@ class YReplacePointQt(YSingleChildContainerWidget):
                                     pass
                         except Exception:
                             pass
+                        # Grow the window to accommodate any wider content, but
+                        # NEVER shrink: adjustSize() would shrink the window when
+                        # switching to lighter content, compressing sibling columns
+                        # (e.g. the tree column squeezed by long checkbox labels on
+                        # the other side of the HBox).
                         try:
-                            qwin.adjustSize()
+                            hint = qwin.sizeHint()
+                            cur_w = qwin.width()
+                            cur_h = qwin.height()
+                            if hint is not None and hint.isValid():
+                                new_w = max(cur_w, hint.width())
+                                new_h = max(cur_h, hint.height())
+                                if new_w != cur_w or new_h != cur_h:
+                                    qwin.resize(new_w, new_h)
                         except Exception:
-                            self._logger.exception("showChild: adjustSize failed")
+                            self._logger.exception("showChild: grow-resize failed")
                             pass
                         try:
                             app = QtWidgets.QApplication.instance()

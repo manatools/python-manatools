@@ -175,8 +175,150 @@ class YReplacePointGtk(YSingleChildContainerWidget):
         except Exception:
             pass
 
+    def _do_attach_now(self):
+        """Synchronously attach the current child's backend widget into the Stack.
+
+        This is the canonical attach implementation.  It is called directly from
+        showChild() so the widget tree is in place before the resize is requested,
+        and also scheduled via GLib.idle_add() from _attach_child_backend() for
+        the asynchronous path triggered by addChild().
+
+        Returns False so the method can be passed directly to GLib.idle_add()
+        without additional wrapping (idle callbacks that return False are not
+        repeated).
+        """
+        if self._content is None:
+            return False
+        try:
+            # Clear previous Stack children first
+            try:
+                for c in list(self._content.get_children()):
+                    try:
+                        self._content.remove(c)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            ch = self.child()
+            if ch is None:
+                return False
+            cw = ch.get_backend_widget()
+            if cw:
+                try:
+                    # Wrap child in a VBox so it fills the Stack page like other backends
+                    wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+                    try:
+                        wrapper.set_hexpand(True)
+                        wrapper.set_vexpand(True)
+                        try:
+                            wrapper.set_halign(Gtk.Align.FILL)
+                            wrapper.set_valign(Gtk.Align.FILL)
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+
+                    # Unparent cw from any previous container
+                    try:
+                        parent = cw.get_parent()
+                        if parent is not None:
+                            try:
+                                parent.remove(cw)
+                            except Exception:
+                                try:
+                                    cw.unparent()
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
+                    # Attach cw to the wrapper (Gtk4: append)
+                    try:
+                        wrapper.append(cw)
+                    except Exception:
+                        try:
+                            wrapper.add(cw)
+                        except Exception:
+                            pass
+
+                    # Encourage cw to expand/fill so layout behaves like Qt
+                    try:
+                        if hasattr(cw, 'set_hexpand'):
+                            cw.set_hexpand(True)
+                        if hasattr(cw, 'set_vexpand'):
+                            cw.set_vexpand(True)
+                        if hasattr(cw, 'set_halign'):
+                            cw.set_halign(Gtk.Align.FILL)
+                        if hasattr(cw, 'set_valign'):
+                            cw.set_valign(Gtk.Align.FILL)
+                    except Exception:
+                        pass
+                    try:
+                        for inner in list(getattr(cw, 'get_children', lambda: [])()):
+                            try:
+                                if hasattr(inner, 'set_hexpand'):
+                                    inner.set_hexpand(True)
+                            except Exception:
+                                pass
+                            try:
+                                if hasattr(inner, 'set_vexpand'):
+                                    inner.set_vexpand(True)
+                            except Exception:
+                                pass
+                            try:
+                                if hasattr(inner, 'set_halign'):
+                                    inner.set_halign(Gtk.Align.FILL)
+                            except Exception:
+                                pass
+                            try:
+                                if hasattr(inner, 'set_valign'):
+                                    inner.set_valign(Gtk.Align.FILL)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    # Second pass: remove any children added between first clear and now
+                    try:
+                        for c in list(self._content.get_children()):
+                            try:
+                                self._content.remove(c)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    # Add wrapper to Stack and show it
+                    name = f"child_{self._stack_page_counter}"
+                    self._stack_page_counter += 1
+                    try:
+                        self._content.add_titled(wrapper, name, name)
+                    except Exception:
+                        try:
+                            self._content.add(wrapper)
+                        except Exception:
+                            pass
+                    try:
+                        self._content.set_visible_child(wrapper)
+                    except Exception:
+                        pass
+                    try:
+                        wrapper.set_visible(True)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return False  # idle_add: do not repeat
+
     def _attach_child_backend(self):
-        """Attach the current child's backend into the content box (no redraw)."""
+        """Schedule the child backend attach via GLib.idle_add (no redraw).
+
+        Called from addChild() where the child's backend widget may not yet be
+        fully constructed; idle_add defers execution until the next main-loop
+        iteration by which time the widget tree is ready.
+        """
         if not (self._backend_widget and self._content and self.child()):
             self._logger.debug("_attach_child_backend called but no backend or no child to attach")
             return
@@ -185,145 +327,31 @@ class YReplacePointGtk(YSingleChildContainerWidget):
                 self.get_backend_widget()
             if self._content is None:
                 return
-            # Use idle_add to defer the attach until the child's backend is fully ready
-            def _do_attach():
-                try:
-                    # Clear previous stack children
-                    try:
-                        # Gtk.Stack doesn't provide a direct clear; remove children one by one
-                        for c in list(self._content.get_children()):
-                            try:
-                                self._content.remove(c)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                    ch = self.child()
-                    if ch is None:
-                        return False
-                    cw = ch.get_backend_widget()
-                    if cw:
-                        try:
-                            # Wrap the child in a vertical Box so it fills and aligns like other backends
-                            wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-                            try:
-                                wrapper.set_hexpand(True)
-                                wrapper.set_vexpand(True)
-                                try:
-                                    wrapper.set_halign(Gtk.Align.FILL)
-                                    wrapper.set_valign(Gtk.Align.FILL)
-                                except Exception:
-                                    pass
-                            except Exception:
-                                pass
-
-                            # If cw has an existing parent, try to unparent it first
-                            try:
-                                parent = cw.get_parent()
-                                if parent is not None:
-                                    try:
-                                        parent.remove(cw)
-                                    except Exception:
-                                        try:
-                                            cw.unparent()
-                                        except Exception:
-                                            pass
-                            except Exception:
-                                pass
-
-                            # append cw into wrapper (Gtk4 uses append)
-                            try:
-                                wrapper.append(cw)
-                            except Exception:
-                                try:
-                                    wrapper.add(cw)
-                                except Exception:
-                                    pass
-
-                            # Encourage cw and its children to expand/fill so layout behaves like Qt
-                            try:
-                                if hasattr(cw, 'set_hexpand'):
-                                    cw.set_hexpand(True)
-                                if hasattr(cw, 'set_vexpand'):
-                                    cw.set_vexpand(True)
-                                if hasattr(cw, 'set_halign'):
-                                    cw.set_halign(Gtk.Align.FILL)
-                                if hasattr(cw, 'set_valign'):
-                                    cw.set_valign(Gtk.Align.FILL)
-                            except Exception:
-                                pass
-                            try:
-                                for inner in list(getattr(cw, 'get_children', lambda: [])()):
-                                    try:
-                                        if hasattr(inner, 'set_hexpand'):
-                                            inner.set_hexpand(True)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        if hasattr(inner, 'set_vexpand'):
-                                            inner.set_vexpand(True)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        if hasattr(inner, 'set_halign'):
-                                            inner.set_halign(Gtk.Align.FILL)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        if hasattr(inner, 'set_valign'):
-                                            inner.set_valign(Gtk.Align.FILL)
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
-
-                            # Remove previous stack children
-                            try:
-                                for c in list(self._content.get_children()):
-                                    try:
-                                        self._content.remove(c)
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
-
-                            # Add wrapper to stack and show it
-                            name = f"child_{self._stack_page_counter}"
-                            self._stack_page_counter += 1
-                            try:
-                                self._content.add_titled(wrapper, name, name)
-                            except Exception:
-                                try:
-                                    self._content.add(wrapper)
-                                except Exception:
-                                    pass
-                            try:
-                                self._content.set_visible_child(wrapper)
-                            except Exception:
-                                pass
-                            try:
-                                wrapper.set_visible(True)
-                            except Exception:
-                                pass
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                # return False to run only once
-                return False
-
+            # Defer so the child widget tree is fully initialised before attaching
             try:
-                GLib.idle_add(_do_attach)
+                GLib.idle_add(self._do_attach_now)
             except Exception:
-                _do_attach()
+                self._do_attach_now()
         except Exception:
             pass
 
     def showChild(self):
-        """Attach child backend and then force a dialog relayout/redraw."""
+        """Attach child backend synchronously, then force a dialog relayout/redraw.
+
+        Performs the Stack attachment *synchronously* (unlike addChild which defers
+        via idle_add) so the new widget is in place before queue_resize() is called.
+        This prevents the window from trying to measure layout with stale content.
+        """
         if not (self._backend_widget and self._content and self.child()):
             self._logger.debug("showChild called but no backend or no child to attach")
-            return       
+            return
+        # Synchronously attach the child backend so the widget tree is up to date
+        # before we trigger a layout pass.  (addChild uses idle_add which would be
+        # too late when queue_resize runs at the end of this method.)
+        try:
+            self._do_attach_now()
+        except Exception:
+            self._logger.debug("showChild: _do_attach_now failed", exc_info=True)
         # Force a dialog layout/reallocation and redraw (GTK4 best-effort)
         try:
             dlg = self.findDialog()
@@ -355,30 +383,6 @@ class YReplacePointGtk(YSingleChildContainerWidget):
                             pass
                         return False
                     GLib.idle_add(_idle_relayout)
-                except Exception:
-                    pass
-                # Also ensure stack shows the current child and the window updates
-                try:
-                    if self._content is not None:
-                        try:
-                            cw = None
-                            # get visible child if possible
-                            try:
-                                cw = self._content.get_visible_child()
-                            except Exception:
-                                # fallback: use first child
-                                try:
-                                    children = self._content.get_children()
-                                    cw = children[0] if children else None
-                                except Exception:
-                                    cw = None
-                            if cw is not None:
-                                try:
-                                    cw.set_visible(True)
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
                 except Exception:
                     pass
         except Exception:
