@@ -167,9 +167,126 @@ class YPanedGtk(YWidget):
         except Exception:
             self._logger.error("Failed to configure paned behavior", exc_info=True)
 
+    def _schedule_weight_position(self):
+        """Schedule setting the Gtk.Paned divider position based on child weights.
+
+        ``Gtk.Paned.set_position()`` must be called after the widget has been
+        allocated a real size (non-zero), so this method registers an idle
+        callback that retries until a valid allocation is available, and then
+        connects ``notify::height`` (vertical) or ``notify::width`` (horizontal)
+        for subsequent resize events.
+
+        Weight semantics:
+        * ``start_child.weight(axis)`` expresses the fraction of total size for
+          the start pane:  position = total_size * w_start / (w_start + w_end).
+        * If the start child has no weight but the end child does, the fraction
+          is deduced as 1 - w_end / total.
+        * If neither child has a weight declared, no automatic positioning is done
+          and GTK chooses the split freely.
+        """
+        if Gtk is None or self._backend_widget is None:
+            return
+
+        children = list(getattr(self, "_children", []))
+        if len(children) < 2:
+            return  # need both panes to compute a ratio
+
+        # Determine which dimension drives the split.
+        is_vert = self._orientation != YUIDimension.YD_HORIZ
+        axis = YUIDimension.YD_VERT if is_vert else YUIDimension.YD_HORIZ
+
+        try:
+            w_start = int(children[0].weight(axis) or 0)
+        except Exception:
+            w_start = 0
+        try:
+            w_end = int(children[1].weight(axis) or 0)
+        except Exception:
+            w_end = 0
+
+        total_w = w_start + w_end
+        if total_w <= 0:
+            self._logger.debug(
+                "Paned _schedule_weight_position: no weights declared (%s) – skipping",
+                "V" if is_vert else "H",
+            )
+            return
+
+        self._logger.debug(
+            "Paned _schedule_weight_position: orientation=%s w_start=%d w_end=%d",
+            "V" if is_vert else "H", w_start, w_end,
+        )
+
+        def _apply_pos(*_args):
+            """Compute pixel position and call Gtk.Paned.set_position()."""
+            try:
+                if is_vert:
+                    total_px = self._backend_widget.get_height()
+                else:
+                    total_px = self._backend_widget.get_width()
+
+                if not total_px or total_px <= 0:
+                    self._logger.debug(
+                        "Paned _apply_pos: no allocation yet (total_px=%s) – retrying",
+                        total_px,
+                    )
+                    return True  # keep retrying via idle / stay connected via notify
+
+                pos = int(total_px * w_start / total_w)
+                self._logger.debug(
+                    "Paned _apply_pos: total_px=%d w_start=%d total_w=%d -> pos=%d",
+                    total_px, w_start, total_w, pos,
+                )
+                try:
+                    self._backend_widget.set_position(pos)
+                except Exception:
+                    self._logger.exception("Paned set_position(%d) failed", pos)
+            except Exception:
+                self._logger.exception("Paned _apply_pos: unexpected failure")
+            return False  # remove from idle queue after first success
+
+        try:
+            from gi.repository import GLib
+            GLib.idle_add(_apply_pos)
+        except Exception:
+            self._logger.exception("Paned: GLib.idle_add failed; applying position immediately")
+            try:
+                _apply_pos()
+            except Exception:
+                pass
+
+        # Connect size-change signal for subsequent resize events so the ratio
+        # is preserved when the window is resized.
+        notify_signal = "notify::height" if is_vert else "notify::width"
+
+        def _on_resize(*_args):
+            try:
+                _apply_pos()
+            except Exception:
+                self._logger.exception("Paned _on_resize: position re-application failed")
+
+        connected = False
+        for sig in (notify_signal, "size-allocate"):
+            try:
+                self._backend_widget.connect(sig, _on_resize)
+                connected = True
+                self._logger.debug("Paned connected resize signal '%s' for weight positioning", sig)
+                break
+            except Exception:
+                continue
+        if not connected:
+            self._logger.warning(
+                "Paned: no resize signal available; weight position will not update on resize"
+            )
+
     def _create_backend_widget(self):
         """
         Create the underlying Gtk.Paned with the chosen orientation and attach existing children.
+
+        After attaching children, schedules a ``notify::height`` (vertical paned) or
+        ``notify::width`` (horizontal paned) callback that calls ``Gtk.Paned.set_position()``
+        to honour the weight declared on the start child.  This gives the deterministic
+        2/3-1/3 (or any other ratio) split that plain Gtk.Paned does not provide on its own.
         """
         if Gtk is None:
             raise RuntimeError("GTK4 is not available")
@@ -212,10 +329,14 @@ class YPanedGtk(YWidget):
         # Apply size policy once backend is ready
         self._apply_size_policy()
 
-    def addChild(self, child: YWidget):
+        # Schedule weight-based initial divider position.
+        self._schedule_weight_position()
+
+    def addChild(self, child: "YWidget"):
         """
         Add a child to the paned: first goes to 'start', second to 'end'.
-        Children are set to expand and fill.
+        Children are set to expand and fill.  When the end child is attached,
+        a weight-based initial divider position is scheduled.
         """
         if len(self._children) == 2:
             self._logger.warning("YPanedGtk can only manage two children; ignoring extra child")
@@ -235,6 +356,8 @@ class YPanedGtk(YWidget):
                     self._backend_widget.set_end_child(widget)
                     self._apply_child_props(widget)
                 self._logger.debug("Set end child: %s", getattr(child, "debugLabel", lambda: repr(child))())
+                # Both children are now present; apply weight-based position.
+                self._schedule_weight_position()
             else:
                 self._logger.warning("YPanedGtk can only manage two children; ignoring extra child")
         except Exception as e:

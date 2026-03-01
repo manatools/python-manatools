@@ -128,20 +128,29 @@ class YHBoxGtk(YWidget):
         return (minimum_size, natural_size, -1, -1)
 
     def _create_backend_widget(self):
-        """Create backend widget and configure weight/stretch behavior."""
+        """Create the GTK4 HBox backend and apply weight-based horizontal sizing.
+
+        Gtk.Box does not natively support per-child stretch factors.  This
+        method installs a resize callback (``notify::width``) that translates
+        YWidget horizontal weights into ``set_size_request(px, -1)`` calls.
+
+        Rules:
+        * Children with ``weight(YD_HORIZ) > 0`` share available horizontal
+          space proportionally to their weights.
+        * Children with weight=0 get their natural width and are excluded from
+          the weighted pool.
+        * All children with ``stretchable(YD_HORIZ)`` or positive weight get
+          ``set_hexpand(True)`` so GTK still allows them to grow.
+        * Works for any number of children.
+        """
         self._backend_widget = _YHBoxMeasureBox(self)
 
-        # Collect children first so we can apply weight-based heuristics
+        # Snapshot children list once; weight application reads from this snapshot.
         children = list(self._children)
 
         for child in children:
-            try:
-                self._logger.debug("HBox child: %s stretch(H)=%s weight(H)=%s stretch(V)=%s", child.widgetClass(), child.stretchable(YUIDimension.YD_HORIZ), child.weight(YUIDimension.YD_HORIZ), child.stretchable(YUIDimension.YD_VERT))
-            except Exception:
-                pass
             widget = child.get_backend_widget()
             try:
-                # Respect per-axis stretch flags
                 hexp = bool(child.stretchable(YUIDimension.YD_HORIZ) or child.weight(YUIDimension.YD_HORIZ))
                 vexp = bool(child.stretchable(YUIDimension.YD_VERT) or child.weight(YUIDimension.YD_VERT))
                 widget.set_hexpand(hexp)
@@ -154,8 +163,13 @@ class YHBoxGtk(YWidget):
                     widget.set_valign(Gtk.Align.FILL if vexp else Gtk.Align.CENTER)
                 except Exception:
                     pass
+                self._logger.debug(
+                    "_create_backend_widget child=%s hexp=%s vexp=%s weight_h=%s weight_v=%s",
+                    child.debugLabel(), hexp, vexp,
+                    child.weight(YUIDimension.YD_HORIZ), child.weight(YUIDimension.YD_VERT),
+                )
             except Exception:
-                pass
+                self._logger.exception("HBox: failed to configure expand/align for child")
 
             try:
                 self._backend_widget.append(widget)
@@ -163,77 +177,139 @@ class YHBoxGtk(YWidget):
                 try:
                     self._backend_widget.add(widget)
                 except Exception:
-                    pass
+                    self._logger.exception("HBox: failed to append child widget")
+
         self._backend_widget.set_sensitive(self._enabled)
+        self._logger.debug("_create_backend_widget: <%s> children=%d", self.debugLabel(), len(children))
 
-        # If there are exactly two children and both declare positive horizontal
-        # weights, attempt to enforce a proportional split according to weights.
-        # Gtk.Box does not have native per-child weight factors, so we set
-        # size requests on the children based on the container allocation.
+        # --- Weight-based horizontal size distribution ---
+        # Children with weight(YD_HORIZ) > 0 share available width
+        # proportionally; weight=0 children keep their natural width.
         try:
-            if len(children) == 2:
-                w0 = int(children[0].weight(YUIDimension.YD_HORIZ) or 0)
-                w1 = int(children[1].weight(YUIDimension.YD_HORIZ) or 0)
-                if w0 > 0 and w1 > 0:
-                    left = children[0].get_backend_widget()
-                    right = children[1].get_backend_widget()
-                    total_weight = max(1, w0 + w1)
+            child_hweights = []
+            for c in children:
+                try:
+                    w = int(c.weight(YUIDimension.YD_HORIZ) or 0)
+                except Exception:
+                    w = 0
+                child_hweights.append(w)
 
-                    def _apply_weights(*args):
-                        try:
-                            alloc = self._backend_widget.get_width()
-                            if not alloc or alloc <= 0:
-                                return True
-                            # subtract spacing and margins conservatively
-                            spacing = getattr(self._backend_widget, 'get_spacing', lambda: 5)()
-                            avail = max(0, alloc - spacing)
-                            left_px = int(avail * w0 / total_weight)
-                            right_px = max(0, avail - left_px)
-                            try:
-                                left.set_size_request(left_px, -1)
-                            except Exception:
-                                pass
-                            try:
-                                right.set_size_request(right_px, -1)
-                            except Exception:
-                                pass
-                        except Exception:
-                            self._logger.exception("_apply_weights: failed", exc_info=True)
-                        # remove idle after first successful sizing; keep size-allocate
-                        return False
+            total_weight = sum(child_hweights)
+            has_weighted = total_weight > 0
 
+            if has_weighted:
+                backend_widgets = []
+                for c in children:
                     try:
-                        GLib.idle_add(_apply_weights)
+                        backend_widgets.append(c.get_backend_widget())
                     except Exception:
+                        backend_widgets.append(None)
+
+                self._logger.debug(
+                    "HBox weight distribution enabled: weights=%s total=%d",
+                    child_hweights, total_weight,
+                )
+
+                def _apply_weights(*_args):
+                    """Compute and apply size_request per child from current allocation.
+
+                    Called on the first idle tick and on ``notify::width`` for
+                    subsequent resizes.
+                    """
+                    try:
+                        alloc = self._backend_widget.get_width()
+                        if not alloc or alloc <= 0:
+                            self._logger.debug("HBox _apply_weights: no allocation yet, skipping")
+                            return True  # retry via idle
+
+                        spacing = 5
                         try:
-                            # fallback: call once
-                            _apply_weights()
+                            spacing = int(self._backend_widget.get_spacing())
                         except Exception:
                             pass
-                    # keep children proportional on subsequent resizes if possible
-                    def _on_resize_update(*_args):
-                        try:
-                            _apply_weights()
-                        except Exception:
-                            self._logger.exception("_on_resize_update: failed", exc_info=True)
 
-                    connected = False
-                    for signal_name in ("size-allocate", "notify::width", "notify::width-request"):
-                        try:
-                            self._backend_widget.connect(signal_name, _on_resize_update)
-                            connected = True
-                            self._logger.debug("Connected HBox resize hook using signal '%s'", signal_name)
-                            break
-                        except Exception:
-                            continue
-                    if not connected:
-                        self._logger.debug("No supported resize signal found for HBox; dynamic weight refresh disabled")
+                        n_visible = sum(1 for bw in backend_widgets if bw is not None)
+                        gap_total = max(0, n_visible - 1) * spacing
+
+                        # Reserve natural width of unweighted children.
+                        fixed_total = 0
+                        for idx, bw in enumerate(backend_widgets):
+                            if bw is None or child_hweights[idx] > 0:
+                                continue
+                            try:
+                                _, nat, _, _ = bw.measure(Gtk.Orientation.HORIZONTAL, -1)
+                                fixed_total += max(0, int(nat))
+                            except Exception:
+                                pass
+
+                        avail = max(0, alloc - gap_total - fixed_total)
+                        self._logger.debug(
+                            "HBox _apply_weights: alloc=%d gap=%d fixed=%d avail=%d weights=%s",
+                            alloc, gap_total, fixed_total, avail, child_hweights,
+                        )
+
+                        allocated_px = []
+                        remainder = avail
+                        for idx, w in enumerate(child_hweights):
+                            if w <= 0:
+                                allocated_px.append(None)
+                            else:
+                                px = int(avail * w / total_weight)
+                                allocated_px.append(px)
+                                remainder -= px
+
+                        # Give remainder to the last weighted child.
+                        if remainder > 0:
+                            for idx in range(len(allocated_px) - 1, -1, -1):
+                                if allocated_px[idx] is not None:
+                                    allocated_px[idx] += remainder
+                                    break
+
+                        for bw, px in zip(backend_widgets, allocated_px):
+                            if bw is None or px is None:
+                                continue
+                            try:
+                                bw.set_size_request(max(1, px), -1)
+                            except Exception:
+                                pass
+
+                        self._logger.debug("HBox _apply_weights: applied=%s", allocated_px)
+                    except Exception:
+                        self._logger.exception("HBox _apply_weights: unexpected failure")
+                    return False  # remove from idle queue after first success
+
+                try:
+                    GLib.idle_add(_apply_weights)
+                except Exception:
+                    self._logger.exception("HBox: GLib.idle_add failed; applying weights immediately")
+                    try:
+                        _apply_weights()
+                    except Exception:
+                        pass
+
+                def _on_resize(*_args):
+                    """Re-apply weights after the container is resized."""
+                    try:
+                        _apply_weights()
+                    except Exception:
+                        self._logger.exception("HBox _on_resize: weight re-application failed")
+
+                connected = False
+                for sig in ("notify::width", "size-allocate"):
+                    try:
+                        self._backend_widget.connect(sig, _on_resize)
+                        connected = True
+                        self._logger.debug("HBox connected resize signal '%s'", sig)
+                        break
+                    except Exception:
+                        continue
+                if not connected:
+                    self._logger.warning(
+                        "HBox: no resize signal available; weight proportions will not "
+                        "update on window resize"
+                    )
         except Exception:
-            pass
-        try:
-            self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-        except Exception:
-            pass
+            self._logger.exception("HBox weight distribution setup failed")
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the HBox and propagate to children."""
