@@ -227,11 +227,14 @@ class YTableGtk(YSelectionWidget):
             cols = 0
             
         for col in range(cols):
-            # Create container for this column header
+            # Create container for this column header.
+            # The last column expands to fill remaining space so its content is
+            # never clipped when the window is wider than the sum of column widths.
+            # All other columns are given a fixed minimum width.
             col_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            col_box.set_hexpand(False)
+            col_box.set_hexpand(col == cols - 1)
             
-            # Apply column width
+            # Apply column width (used as minimum; last column may grow further)
             width = self._get_column_width(col)
             col_box.set_size_request(width, -1)
             
@@ -606,11 +609,17 @@ class YTableGtk(YSelectionWidget):
             except Exception:
                 align_t = YAlignmentType.YAlignBegin
             
-            # Create container with exact column width
+            # Create container for this cell.
+            # The last column is allowed to fill the remaining row width so that
+            # it stays aligned with its header and content is never clipped.
             cell_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            cell_container.set_hexpand(False)
+            try:
+                total_cols = self._header.columns()
+            except Exception:
+                total_cols = -1
+            cell_container.set_hexpand(col == total_cols - 1)
             
-            # Apply exact column width from header
+            # Apply column width (minimum; last column may grow further)
             width = self._get_column_width(col)
             cell_container.set_size_request(width, -1)
             
@@ -820,7 +829,15 @@ class YTableGtk(YSelectionWidget):
             col_index = widget.column_index
             
             if col_index < len(self._column_widths):
-                current_width = self._column_widths[col_index]
+                # Use the actual allocated width as the drag baseline rather than
+                # the stored value.  This matters for the last column which has
+                # hexpand=True: GTK may have allocated it more space than the
+                # stored minimum, so the drag must start from what the user sees.
+                if col_index < len(self._header_cells):
+                    allocated = self._header_cells[col_index].get_allocated_width()
+                    current_width = allocated if allocated > 0 else self._column_widths[col_index]
+                else:
+                    current_width = self._column_widths[col_index]
                 self._drag_data = {
                     'column_index': col_index,
                     'start_width': current_width,
