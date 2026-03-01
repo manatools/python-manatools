@@ -25,6 +25,9 @@ Author:  Angelo Naselli <anaselli@linux.it>
 from ..aui import yui as yui
 
 from enum import Enum
+import logging
+
+logger = logging.getLogger("manatools.ui.basedialog")
 
 from .. import event as event
 from .. import eventmanager as eventManager
@@ -64,7 +67,7 @@ class BaseDialog :
     @param minWidth > 0 min width size in pixels
     @param minHeight > 0 min height size in pixels
     '''
-    print(f"BaseDialog init title={title} icon={icon} dialogType={dialogType} minWidth={minWidth} minHeight={minHeight}")
+    logger.debug("BaseDialog init title=%s icon=%s dialogType=%s minWidth=%s minHeight=%s", title, icon, dialogType, minWidth, minHeight)
     self._dialogType = dialogType
     self._icon = icon
     self._title = title
@@ -121,8 +124,12 @@ class BaseDialog :
     
     self.backupTitle = yui.YUI.app().applicationTitle()
     yui.YUI.app().setApplicationTitle(self._title)
+    backupIcon = None
     if self._icon:
-      backupIcon = yui.YUI.app().applicationIcon()
+      try:
+        backupIcon = yui.YUI.app().applicationIcon()
+      except Exception:
+        pass
       yui.YUI.app().setApplicationIcon(self._icon)
     
     self._running = True
@@ -130,7 +137,7 @@ class BaseDialog :
 
     #restore old application title
     yui.YUI.app().setApplicationTitle(self.backupTitle)
-    if self._icon:
+    if self._icon and backupIcon is not None:
       yui.YUI.app().setApplicationIcon(backupIcon)
     if self.dialog is not None:
       self.dialog.destroy()
@@ -177,9 +184,6 @@ class BaseDialog :
       event = self.dialog.waitForEvent(self.timeout)
       if event is not None:
         eventType = event.eventType()
-
-        rebuild_package_list = False
-        group = None
         #event type checking
         if (eventType == yui.YEventType.WidgetEvent) :
           # widget selected
@@ -195,9 +199,8 @@ class BaseDialog :
         elif (eventType == yui.YEventType.TimeoutEvent) :
           self.eventManager.timeoutEvent()
         else:
-          print(f"Unmanaged event type {eventType}")
+          logger.warning("Unmanaged event type %s", eventType)
       else:
-        #TODO logging
         pass
 
       self.doSomethingIntoLoop()

@@ -164,6 +164,7 @@ def warningMsgBox (info) :
         return 0
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -214,7 +215,6 @@ def warningMsgBox (info) :
             if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
                 break
 
-        dlg.destroy()
         return 1
     finally:
         if dlg is not None:
@@ -241,6 +241,7 @@ def infoMsgBox (info) :
         return 0
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -290,7 +291,6 @@ def infoMsgBox (info) :
             if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
                 break
 
-        dlg.destroy()
         return 1
     finally:
         if dlg is not None:
@@ -317,6 +317,7 @@ def msgBox (info) :
         return 0
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -355,7 +356,6 @@ def msgBox (info) :
             if et == yui.YEventType.WidgetEvent and ev.widget() == ok_btn and ev.reason() == yui.YEventReason.Activated:
                 break
 
-        dlg.destroy()
         return 1
     finally:
         if dlg is not None:
@@ -388,6 +388,7 @@ def askOkCancel (info) :
         return False
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -446,7 +447,6 @@ def askOkCancel (info) :
                 if w == cancel_btn and ev.reason() == yui.YEventReason.Activated:
                     result = False
                     break
-        dlg.destroy()
         return result
     finally:
         if dlg is not None:
@@ -479,6 +479,7 @@ def askYesOrNo (info) :
         return False
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -536,7 +537,6 @@ def askYesOrNo (info) :
                 if w == no_btn and ev.reason() == yui.YEventReason.Activated:
                     result = False
                     break
-        dlg.destroy()
         return result
     finally:
         if dlg is not None:
@@ -665,6 +665,7 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
         return width, height
 
     dlg = None
+    old_title = None
     try:
         factory = yui.YUI.widgetFactory()
         dlg = factory.createPopupDialog()
@@ -694,7 +695,7 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
         if logo:
             try:
                 factory.createImage(header, logo)
-                factory.createSpacing(header, 8)
+                factory.createHSpacing(header, 8)
             except Exception as exc:
                 logger.debug("Unable to load logo '%s': %s", logo, exc)
         labels = factory.createVBox(header)
@@ -831,7 +832,6 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
 
             logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())
 
-        dlg.destroy()
     finally:
         if dlg is not None:
             try:

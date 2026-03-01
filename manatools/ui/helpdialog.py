@@ -31,9 +31,6 @@ logger = logging.getLogger("manatools.ui.helpdialog")
 class HelpDialog(basedialog.BaseDialog):
   """Simple rich-text help browser dialog with internal navigation."""
   def __init__(self, info, title=_("Help dialog"), icon="", minWidth=320, minHeight=200):
-    self._minWidthHint = self._normalize_dimension(minWidth)
-    self._minHeightHint = self._normalize_dimension(minHeight)
-    basedialog.BaseDialog.__init__(self, title, icon, basedialog.DialogType.POPUP, -1, -1)
     '''
     HelpDialog constructor
     @param title dialog title
@@ -41,6 +38,9 @@ class HelpDialog(basedialog.BaseDialog):
     @param minWidth > 0 mim width size in pixels
     @param minHeight > 0 mim height size in pixels
     '''
+    self._minWidthHint = self._normalize_dimension(minWidth)
+    self._minHeightHint = self._normalize_dimension(minHeight)
+    basedialog.BaseDialog.__init__(self, title, icon, basedialog.DialogType.POPUP, -1, -1)
     if not isinstance(info, helpdata.HelpInfoBase):
       raise TypeError("info must be a HelpInfoBase instance")
     self.info = info
