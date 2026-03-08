@@ -58,8 +58,18 @@ class YTableCurses(YSelectionWidget):
         self._hover_row = 0
         self._scroll_offset = 0
         self._selected_items = []
+        # Parallel set for O(1) membership tests in _draw() (avoids O(N) list scan
+        # per visible row when checking the multi-selection marker).
+        self._selected_set: set = set()
         self._changed_item = None
         self._current_visible_rows = None
+        # Column-width cache: maps total_width -> (widths, sep) to avoid
+        # per-frame arithmetic recomputation on every _draw() call.
+        self._col_width_cache = None  # (cached_total_width, widths, sep) | None
+        # Per-column metadata: list of (is_checkbox, alignment) tuples computed
+        # once from the header so that _draw() avoids repeated method calls inside
+        # the inner visible-row × column loop.
+        self._col_meta: list = []
         # widget position
         self._x = 0
         self._y = 0
@@ -77,6 +87,31 @@ class YTableCurses(YSelectionWidget):
         except Exception:
             pass
         return None
+
+    def _build_col_meta(self) -> list:
+        """
+        Precompute (is_checkbox, alignment) tuples for every column.
+
+        Called once when the backend is created. The result is stored in
+        self._col_meta and consumed by _draw() to avoid repeated
+        self._header.isCheckboxColumn() / alignment() calls inside the
+        per-visible-row × per-column inner loop.
+        """
+        meta = []
+        try:
+            for c in range(self._header.columns()):
+                try:
+                    is_cb = bool(self._header.isCheckboxColumn(c))
+                except Exception:
+                    is_cb = False
+                try:
+                    align = self._header.alignment(c)
+                except Exception:
+                    align = YAlignmentType.YAlignBegin
+                meta.append((is_cb, align))
+        except Exception as exc:
+            self._logger.debug("_build_col_meta: %s", exc)
+        return meta
 
     def _create_backend_widget(self):
         # Associate backend with self, compute minimal height, and reflect model selection.
@@ -110,10 +145,19 @@ class YTableCurses(YSelectionWidget):
         except Exception:
             pass
         self._selected_items = sel
+        self._selected_set = set(sel)
         self._hover_row = 0
         self._scroll_offset = 0
         self._current_visible_rows = None
-        self._logger.debug("_create_backend_widget: items=%d selected=%d", len(self._items) if self._items else 0, len(self._selected_items))
+        # Pre-build column metadata so _draw() does not call header methods per row.
+        self._col_meta = self._build_col_meta()
+        self._col_width_cache = None
+        self._logger.debug(
+            "_create_backend_widget: items=%d selected=%d col_meta=%d",
+            len(self._items) if self._items else 0,
+            len(self._selected_items),
+            len(self._col_meta),
+        )
         # respect initial enabled state
         try:
             self._set_backend_enabled(self.isEnabled())
@@ -149,11 +193,21 @@ class YTableCurses(YSelectionWidget):
             self._scroll_offset = self._hover_row - visible + 1
 
     def _col_widths(self, total_width):
+        """
+        Return (widths, sep) for *total_width* characters.
+
+        The result is cached by total_width to avoid repeating the arithmetic
+        on every _draw() call. The cache is invalidated automatically when the
+        terminal is resized and total_width changes.
+        """
+        cache = getattr(self, '_col_width_cache', None)
+        if cache is not None and cache[0] == total_width:
+            return cache[1], cache[2]
         try:
             cols = max(1, int(self._header.columns()))
         except Exception:
             cols = 1
-        # Divide width equally across columns, leaving 1 char separator
+        # Divide width equally across columns with a 1-character separator.
         sep = 1
         usable = max(1, total_width - (cols - 1) * sep)
         base = max(1, usable // cols)
@@ -161,6 +215,7 @@ class YTableCurses(YSelectionWidget):
         remainder = usable - base * cols
         for i in range(remainder):
             widths[i] += 1
+        self._col_width_cache = (total_width, widths, sep)
         return widths, sep
 
     def _align_text(self, text, width, align: YAlignmentType):
@@ -223,21 +278,19 @@ class YTableCurses(YSelectionWidget):
                     break
                 it = self._items[row_idx]
                 cells = []
+                # Use precomputed column metadata to avoid header method calls
+                # inside the inner visible-row × column loop.
+                col_meta = self._col_meta if self._col_meta else self._build_col_meta()
                 for c in range(len(widths)):
                     try:
                         cell = it.cell(c)
                     except Exception:
                         cell = None
-                    is_cb = False
-                    try:
-                        is_cb = self._header.isCheckboxColumn(c)
-                    except Exception:
+                    if c < len(col_meta):
+                        is_cb, align = col_meta[c]
+                    else:
                         is_cb = False
-                    align = YAlignmentType.YAlignBegin
-                    try:
-                        align = self._header.alignment(c)
-                    except Exception:
-                        pass
+                        align = YAlignmentType.YAlignBegin
                     if is_cb:
                         val = False
                         try:
@@ -256,7 +309,8 @@ class YTableCurses(YSelectionWidget):
                 # selection marker for multi-selection without checkbox columns
                 if use_selection_marker:
                     try:
-                        marker = "[x] " if (it in self._selected_items) else "[ ] "
+                        # _selected_set gives O(1) membership test vs O(N) list scan.
+                        marker = "[x] " if (it in self._selected_set) else "[ ] "
                     except Exception:
                         marker = "[ ] "
                     row_text = marker + row_text
@@ -333,7 +387,7 @@ class YTableCurses(YSelectionWidget):
                 else:
                     # Use SPACE to toggle row selection in multi-selection mode
                     if self._multi:
-                        was_selected = it in self._selected_items
+                        was_selected = it in self._selected_set
                         if was_selected:
                             try:
                                 it.setSelected(False)
@@ -341,6 +395,7 @@ class YTableCurses(YSelectionWidget):
                                 pass
                             try:
                                 self._selected_items.remove(it)
+                                self._selected_set.discard(it)
                             except Exception:
                                 pass
                         else:
@@ -349,6 +404,7 @@ class YTableCurses(YSelectionWidget):
                             except Exception:
                                 pass
                             self._selected_items.append(it)
+                            self._selected_set.add(it)
                         # notify selection change
                         if self.notify():
                             dlg = self.findDialog()
@@ -358,7 +414,7 @@ class YTableCurses(YSelectionWidget):
             if 0 <= self._hover_row < len(self._items):
                 it = self._items[self._hover_row]
                 if self._multi:
-                    was_selected = it in self._selected_items
+                    was_selected = it in self._selected_set
                     if was_selected:
                         try:
                             it.setSelected(False)
@@ -366,6 +422,7 @@ class YTableCurses(YSelectionWidget):
                             pass
                         try:
                             self._selected_items.remove(it)
+                            self._selected_set.discard(it)
                         except Exception:
                             pass
                     else:
@@ -374,6 +431,7 @@ class YTableCurses(YSelectionWidget):
                         except Exception:
                             pass
                         self._selected_items.append(it)
+                        self._selected_set.add(it)
                 else:
                     # single selection: make it sole selected
                     prev = self._selected_items[0] if self._selected_items else None
@@ -387,6 +445,7 @@ class YTableCurses(YSelectionWidget):
                     except Exception:
                         pass
                     self._selected_items = [it]
+                    self._selected_set = {it}
                 # notify selection change
                 if self.notify():
                     dlg = self.findDialog()
@@ -418,11 +477,61 @@ class YTableCurses(YSelectionWidget):
                         except Exception:
                             pass
                     self._selected_items = [item]
+                    self._selected_set = {item}
                 else:
-                    if item not in self._selected_items:
+                    if item not in self._selected_set:
                         self._selected_items.append(item)
+                        self._selected_set.add(item)
         except Exception:
             pass
+
+    def addItems(self, items):
+        """
+        Add multiple items in a single call.
+
+        More efficient than N addItem() calls because the selection-flag scan
+        is done once at the end in a single pass instead of per item.
+        """
+        for item in items:
+            if isinstance(item, str):
+                item = YTableItem(item)
+            if not isinstance(item, YTableItem):
+                raise TypeError("YTableCurses.addItem expects a YTableItem or string label")
+            super().addItem(item)
+            try:
+                item.setIndex(len(self._items) - 1)
+            except Exception:
+                pass
+        # Single-pass selection sync from model flags.
+        try:
+            if self._multi:
+                for it in list(getattr(self, '_items', []) or []):
+                    try:
+                        if it.selected() and it not in self._selected_set:
+                            self._selected_items.append(it)
+                            self._selected_set.add(it)
+                    except Exception:
+                        pass
+            else:
+                # Last item marked selected wins in single-selection mode.
+                chosen = None
+                for it in reversed(list(getattr(self, '_items', []) or [])):
+                    try:
+                        if it.selected():
+                            chosen = it
+                            break
+                    except Exception:
+                        pass
+                if chosen is not None and chosen not in self._selected_set:
+                    for prev in self._selected_items:
+                        try:
+                            prev.setSelected(False)
+                        except Exception:
+                            pass
+                    self._selected_items = [chosen]
+                    self._selected_set = {chosen}
+        except Exception as exc:
+            self._logger.debug("addItems: selection sync failed: %s", exc)
 
     def selectItem(self, item, selected=True):
         try:
@@ -438,13 +547,16 @@ class YTableCurses(YSelectionWidget):
                     except Exception:
                         pass
                 self._selected_items = [item]
+                self._selected_set = {item}
             else:
-                if item not in self._selected_items:
+                if item not in self._selected_set:
                     self._selected_items.append(item)
+                    self._selected_set.add(item)
         else:
             try:
-                if item in self._selected_items:
+                if item in self._selected_set:
                     self._selected_items.remove(item)
+                    self._selected_set.discard(item)
             except Exception:
                 pass
         # move hover to this item if present
@@ -464,6 +576,7 @@ class YTableCurses(YSelectionWidget):
             self._items = []
         try:
             self._selected_items = []
+            self._selected_set = set()
             self._hover_row = 0
             self._scroll_offset = 0
             self._current_visible_rows = None
