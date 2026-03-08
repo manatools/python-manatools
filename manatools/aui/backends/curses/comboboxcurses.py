@@ -90,10 +90,14 @@ class YComboBoxCurses(YSelectionWidget):
             if not hasattr(self, "_saved_can_focus"):
                 self._saved_can_focus = getattr(self, "_can_focus", True)
             if not enabled:
-                try:
-                    self._saved_can_focus = self._can_focus
-                except Exception:
-                    self._saved_can_focus = True
+                # Only save when currently focusable (True→False transition).
+                # Prevents overwriting the saved True with False on repeated
+                # setEnabled(False) calls (e.g. direct + container propagation).
+                if getattr(self, "_can_focus", True):
+                    try:
+                        self._saved_can_focus = self._can_focus
+                    except Exception:
+                        self._saved_can_focus = True
                 self._can_focus = False
                 # collapse expanded dropdown if any
                 try:
