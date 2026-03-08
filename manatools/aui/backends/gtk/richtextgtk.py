@@ -382,9 +382,9 @@ class YRichTextGtk(YWidget):
         Supports: h1-h6 (as bold spans with size), b/i/em/u, a href, p/br, ul/li.
         Unknown tags are stripped.
         """
-        self._logger.debug("Converted markup: %s", s)
         if not s:
             return ""
+        self._logger.debug("Converted markup: %s", s)
         t = s
         # Normalize newlines for paragraphs and breaks
         t = re.sub(r"<br\s*/?>", "\n", t, flags=re.IGNORECASE)
