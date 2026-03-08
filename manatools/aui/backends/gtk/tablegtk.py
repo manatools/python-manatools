@@ -1,51 +1,118 @@
 # vim: set fileencoding=utf-8 :
 # vim: set et ts=4 sw=4:
 """
-GTK backend for YTable using Gtk4.
+GTK4 backend for YTable using GtkColumnView (virtual/lazy rendering).
 
-Renders a header row via Gtk.Grid and rows via Gtk.ListBox. Supports:
-- Column headers from `YTableHeader.header()`
-- Column alignment from `YTableHeader.alignment()`
-- Checkbox columns declared via `YTableHeader.isCheckboxColumn()`
-- Selection driven by `YTableItem.selected()`; emits SelectionChanged on change
-- Checkbox toggles emit ValueChanged and update `YTableCell.checked()`
-- Resizable columns with drag handles between headers
-- Column alignment between header and rows
+Architecture
+============
+GtkListBox renders *all* rows eagerly: building 50 000 Gtk.CheckButton /
+Gtk.Label widgets took 30 s+.  GtkColumnView uses SignalListItemFactory
+callbacks and renders only the ~20-40 rows that fit in the viewport,
+regardless of the total number of items.
 
-Sorting UI is not implemented; if needed we can add clickable headers.
+Pipeline
+--------
+  YTableItem list
+      |
+      v
+  Gio.ListStore[_RowObject]           -- data store,  O(1) append / O(N) splice
+      |
+      v
+  Gtk.SortListModel                   -- sorting layer driven by header clicks
+      |
+      v
+  Gtk.SingleSelection / MultiSelection -- selection model
+      |
+      v
+  Gtk.ColumnView                      -- virtual view
+       |
+       +-- GtkColumnViewColumn x N    -- one per YTableHeader column
+              |
+              +-- GtkSignalListItemFactory  -- setup/bind/unbind/teardown
+                   (called only for visible rows, O(visible x cols) total)
+
+Complexity comparison
+---------------------
+                  GtkListBox (old)        GtkColumnView (new)
+  rebuildTable()  O(N x cols) widgets     O(N) _RowObject alloc + splice()
+  addItem()       O(N x cols)             O(1) store.append()
+  addItems(N)     O(N x cols)             O(N) store.splice()
+  scroll repaint  O(visible x cols)       O(visible x cols)  -- same
+
+Sorting
+-------
+Clicking a column header toggles Ascending / Descending / None via
+Gtk.ColumnViewSorter.  Sort key is cell.sortKey() if set, else cell.label().
+Checkbox columns sort by checked state (False < True).
+
+Preserved features
+------------------
+- Column headers from YTableHeader.header()
+- Column alignment (Begin / Center / End) for header and cells
+- Checkbox columns declared via YTableHeader.isCheckboxColumn()
+- Selection driven by YTableItem.selected(); emits SelectionChanged
+- Checkbox toggles emit ValueChanged and update YTableCell.checked()
+- Single / multi selection modes
+- Resizable columns via Gtk.ColumnViewColumn.set_resizable(True)
 """
 
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, GLib, Gdk, Pango
+from gi.repository import Gtk, GLib, Gdk, GObject, Gio, Pango
 import logging
 from ...yui_common import *
 
 
+# ---------------------------------------------------------------------------
+# GObject wrapper so YTableItem can live in a Gio.ListStore
+# ---------------------------------------------------------------------------
+
+class _RowObject(GObject.Object):
+    """
+    Lightweight GObject wrapper around a YTableItem.
+
+    Gio.ListStore requires GObject instances.  This wrapper adds no overhead
+    beyond GObject reference-counting machinery.
+    """
+    __gtype_name__ = '_YTableRowObject'
+
+    def __init__(self, item: YTableItem):
+        super().__init__()
+        self.item = item
+
+
 class YTableGtk(YSelectionWidget):
     """
-    GTK4 implementation of YTable with resizable columns and proper alignment.
-    
-    Features:
-    - Column resizing via draggable header separators (all columns, including last)
-    - Uniform column widths across header and all rows
-    - Checkbox column support with proper alignment
-    - Single/Multi selection modes
-    - Horizontal + vertical scrolling via a single ScrolledWindow
+    GTK4 implementation of YTable backed by GtkColumnView.
+
+    GtkColumnView is a *virtual* list widget: it creates GTK widgets only for
+    the rows that are currently visible in the viewport.  Adding 50 000 rows
+    is O(N) memory (one _RowObject wrapper per row) and O(visible x cols)
+    rendering cost -- independent of total row count.
+
+    Features
+    --------
+    - Virtual rendering: ~20-40 row widgets allocated regardless of total rows
+    - Sortable columns via clickable column headers (Gtk.SortListModel)
+    - Resizable columns via Gtk.ColumnViewColumn.set_resizable(True)
+    - Checkbox column support with alignment
+    - Single / multi selection
+    - CSS theming
     """
 
     # CSS provider is registered once per process/display to avoid accumulation.
     _css_provider_installed: bool = False
-    
-    def __init__(self, parent=None, header: YTableHeader = None, multiSelection=False):
+
+    def __init__(self, parent=None, header: YTableHeader = None,
+                 multiSelection: bool = False):
         super().__init__(parent)
         if header is None:
             raise ValueError("YTableGtk requires a YTableHeader")
         self._header = header
         self._multi = bool(multiSelection)
-        
-        # Force single-selection if any checkbox columns present
+
+        # Force single-selection when any checkbox column is present.
         try:
             for c_idx in range(self._header.columns()):
                 if self._header.isCheckboxColumn(c_idx):
@@ -53,955 +120,618 @@ class YTableGtk(YSelectionWidget):
                     break
         except Exception:
             pass
-        
-        self._backend_widget = None
-        self._header_box = None
-        self._listbox = None
-        self._row_to_item = {}
-        self._item_to_row = {}
-        self._rows = []
-        self._suppress_selection_handler = False
-        self._suppress_item_change = False
-        self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
-        self._old_selected_items = []
-        self._changed_item = None
-        
-        # Column width management
-        self._column_widths = []
-        self._min_column_width = 50
-        self._default_column_width = 100
-        self._drag_data = None
-        self._header_cells = []
-        self._header_labels = []  # Store header labels separately
 
-        # stretched by default; can be overridden by setStretchable
+        self._backend_widget = None   # outer Gtk.ScrolledWindow
+        self._column_view = None      # Gtk.ColumnView
+        self._store = None            # Gio.ListStore[_RowObject]
+        self._sort_model = None       # Gtk.SortListModel
+        self._selection_model = None  # Single / MultiSelection
+
+        # item -> position in _store (before sorting)
+        self._item_to_pos: dict = {}
+        self._suppress_selection = False
+        self._changed_item = None
+
+        self._logger = logging.getLogger(
+            f"manatools.aui.gtk.{self.__class__.__name__}"
+        )
+
+        # Stretched by default; callers can override via setStretchable().
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
 
-        # Saved horizontal scroll position used to block GTK's
-        # automatic "scroll selected row into view" behaviour.
-        self._saved_hscroll: float = 0.0
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
-        # Initialize column widths
-        self._init_column_widths()
-
-    def widgetClass(self):
+    def widgetClass(self) -> str:
         return "YTable"
 
-    def _create_backend_widget(self):
-        """
-        Create the GTK widget hierarchy for the table.
-        
-        Structure:
-        - Main vertical box (vbox)
-          - Header box with column labels and resize handles
-          - Separator
-          - ScrolledWindow with ListBox for rows
-        """
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        
-        # Create header with resizable columns
-        self._create_header()
-        
-        # Horizontal separator between header and content
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        
-        # ListBox inside ScrolledWindow for rows
-        self._create_listbox()
-        
-        # Inner content vbox: header + separator + rows — all inside ONE ScrolledWindow
-        # so both scroll together horizontally.
-        # hexpand=True: content fills the SW's allocated width.  The horizontal scrollbar
-        # appears automatically when the sum of fixed column set_size_request values
-        # (which set the child's natural minimum width) exceeds the SW's allocation.
-        inner_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        inner_vbox.set_hexpand(True)
-        inner_vbox.set_vexpand(True)
-        try:
-            inner_vbox.append(self._header_box)
-            inner_vbox.append(separator)
-            inner_vbox.append(self._listbox)
-        except Exception:
-            try:
-                inner_vbox.add(self._header_box)
-                inner_vbox.add(separator)
-                inner_vbox.add(self._listbox)
-            except Exception:
-                pass
-
-        # Single ScrolledWindow: horizontal scrollbar covers header + rows together.
-        self._sw = Gtk.ScrolledWindow()
-        self._sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        # Propagate natural height so the SW requests enough vertical space for the
-        # content (otherwise the viewport defaults to ~0 px and the table is invisible).
-        # Do NOT propagate width: that would eliminate the horizontal scrollbar.
-        try:
-            self._sw.set_propagate_natural_height(True)
-        except Exception:
-            pass
-        try:
-            self._sw.set_child(inner_vbox)
-        except Exception:
-            try:
-                self._sw.add(inner_vbox)
-            except Exception:
-                pass
-
-        # Set expansion properties.
-        # Both stretchable flags are True by default (set in __init__), so the table
-        # grows to fill available space in any container.  The stretchable() calls
-        # here reflect that default and allow callers to override via setStretchable().
-        try:
-            vbox.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
-            vbox.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
-            vbox.set_valign(Gtk.Align.FILL)
-            self._listbox.set_hexpand(True)
-            self._listbox.set_vexpand(True)
-            self._listbox.set_valign(Gtk.Align.FILL)
-            self._sw.set_hexpand(True)
-            self._sw.set_vexpand(True)
-            self._sw.set_valign(Gtk.Align.FILL)
-        except Exception:
-            pass
-
-        self._backend_widget = vbox
-
-        # Assemble: outer vbox wraps only the single ScrolledWindow
-        try:
-            vbox.append(self._sw)
-        except Exception:
-            try:
-                vbox.add(self._sw)
-            except Exception:
-                pass
-
-        # Apply initial state
-        self._apply_initial_state()
-        
-        # Connect selection handlers
-        self._connect_selection_handlers()
-        
-        self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
-
-        # Populate if items exist
-        try:
-            if getattr(self, "_items", None):
-                self.rebuildTable()
-        except Exception:
-            self._logger.exception("rebuildTable failed during _create_backend_widget")
-
-    def _init_column_widths(self):
-        """Initialize column widths based on header content."""
-        try:
-            cols = self._header.columns()
-            self._column_widths = [self._default_column_width] * cols
-            
-            # Adjust based on header text length
-            for col in range(cols):
-                try:
-                    header_text = self._header.header(col)
-                    if header_text:
-                        # Estimate width based on text length
-                        text_width = len(header_text) * 8 + 20  # Rough estimate
-                        self._column_widths[col] = max(text_width, self._min_column_width)
-                except Exception:
-                    pass
-        except Exception:
-            self._column_widths = []
-
-    def _create_header(self):
-        """
-        Create header with column labels and resizable separators.
-        
-        Each column has:
-        - Label with proper alignment
-        - Resizable separator (except last column)
-        """
-        self._header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        self._header_cells = []
-        self._header_labels = []
-        
-        try:
-            cols = self._header.columns()
-        except Exception:
-            cols = 0
-            
-        for col in range(cols):
-            # Create container for this column header.
-            # The last column expands to fill remaining space so its content is
-            # never clipped when the window is wider than the sum of column widths.
-            # All other columns are given a fixed minimum width.
-            col_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            col_box.set_hexpand(col == cols - 1)
-            
-            # Apply column width (used as minimum; last column may grow further)
-            width = self._get_column_width(col)
-            col_box.set_size_request(width, -1)
-            
-            # Create label with proper alignment
-            try:
-                txt = self._header.header(col)
-            except Exception:
-                txt = ""
-                
-            lbl = Gtk.Label(label=txt)
-            lbl.set_halign(Gtk.Align.START)
-            lbl.set_margin_start(5)
-            lbl.set_margin_end(5)
-            lbl.set_hexpand(True)
-            
-            # Apply alignment to header label
-            try:
-                align = self._header.alignment(col)
-                if align == YAlignmentType.YAlignCenter:
-                    lbl.set_xalign(0.5)
-                elif align == YAlignmentType.YAlignEnd:
-                    lbl.set_xalign(1.0)
-                else:
-                    lbl.set_xalign(0.0)
-            except Exception:
-                lbl.set_xalign(0.0)
-            
-            self._header_labels.append(lbl)
-            
-            # Add separator for resizing (except last column)
-            if col < cols - 1:
-                # Create separator container
-                sep_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-                
-                # Create draggable handle
-                sep_handle = Gtk.Box()
-                sep_handle.set_size_request(8, -1)
-                sep_handle.get_style_context().add_class("col-sep-handle")
-                
-                # Add event controllers for dragging
-                motion_ctrl = Gtk.EventControllerMotion.new()
-                drag_ctrl = Gtk.GestureDrag.new()
-                
-                # Store column index
-                sep_handle.column_index = col
-                sep_container.column_index = col
-                
-                # Connect signals
-                motion_ctrl.connect("enter", self._on_separator_enter)
-                motion_ctrl.connect("leave", self._on_separator_leave)
-                drag_ctrl.connect("drag-begin", self._on_drag_begin)
-                drag_ctrl.connect("drag-update", self._on_drag_update)
-                drag_ctrl.connect("drag-end", self._on_drag_end)
-                
-                sep_handle.add_controller(motion_ctrl)
-                sep_handle.add_controller(drag_ctrl)
-                
-                # Create visual separator
-                sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-                sep.set_margin_end(5)
-                
-                sep_container.append(sep_handle)
-                sep_container.append(sep)
-                
-                col_box.append(lbl)
-                col_box.append(sep_container)
-            else:
-                # Last column: add a right-edge drag handle so it is also resizable.
-                sep_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-                sep_handle = Gtk.Box()
-                sep_handle.set_size_request(8, -1)
-                sep_handle.get_style_context().add_class("col-sep-handle")
-
-                motion_ctrl = Gtk.EventControllerMotion.new()
-                drag_ctrl = Gtk.GestureDrag.new()
-                sep_handle.column_index = col
-                sep_container.column_index = col
-
-                motion_ctrl.connect("enter", self._on_separator_enter)
-                motion_ctrl.connect("leave", self._on_separator_leave)
-                drag_ctrl.connect("drag-begin", self._on_drag_begin)
-                drag_ctrl.connect("drag-update", self._on_drag_update)
-                drag_ctrl.connect("drag-end", self._on_drag_end)
-
-                sep_handle.add_controller(motion_ctrl)
-                sep_handle.add_controller(drag_ctrl)
-                sep_container.append(sep_handle)
-
-                col_box.append(lbl)
-                col_box.append(sep_container)
-
-            self._header_box.append(col_box)
-            self._header_cells.append(col_box)
-            
-        # Setup CSS for styling
-        self._setup_header_css()
-
-    def _setup_header_css(self):
-        """Setup CSS for header styling — CSS provider is registered once per process."""
-        # Always tag the current header box, regardless of whether CSS was already loaded.
-        try:
-            self._header_box.get_style_context().add_class("y-table-header")
-        except Exception:
-            pass
-        if YTableGtk._css_provider_installed:
-            return
-        css_provider = Gtk.CssProvider()
-        css = """
-        /* Style for column separator handles */
-        .col-sep-handle {
-            background-color: transparent;
-            min-width: 8px;
-        }
-        
-        .col-sep-handle:hover {
-            background-color: alpha(@theme_fg_color, 0.2);
-        }
-        
-        /* Style for header */
-        .y-table-header {
-            padding: 4px 0px;
-            background-color: @theme_bg_color;
-            border-bottom: 1px solid @borders;
-        }
-        
-        .y-table-header label {
-            padding: 4px 8px;
-            font-weight: bold;
-        }
-        
-        /* Style for table rows */
-        .y-table-row {
-            border-bottom: 1px solid alpha(@theme_fg_color, 0.1);
-        }
-        
-        .y-table-row:hover {
-            background-color: alpha(@theme_selected_bg_color, 0.1);
-        }
-        """
-        
-        try:
-            try:
-                css_provider.load_from_data(css, -1)
-            except TypeError:
-                css_provider.load_from_data(css.encode())
-
-            # Apply provider globally; class is already set above.
-            display = Gdk.Display.get_default()
-            if display:
-                Gtk.StyleContext.add_provider_for_display(
-                    display,
-                    css_provider,
-                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-                )
-                YTableGtk._css_provider_installed = True
-        except Exception as e:
-            self._logger.debug("CSS setup failed: %s", str(e))
-
-    def _create_listbox(self):
-        """Create the ListBox for table rows."""
-        self._listbox = Gtk.ListBox()
-        try:
-            mode = Gtk.SelectionMode.MULTIPLE if self._multi else Gtk.SelectionMode.SINGLE
-            self._listbox.set_selection_mode(mode)
-        except Exception:
-            self._logger.exception("Failed to set selection mode on ListBox")
-
-    def _apply_initial_state(self):
-        """Apply initial widget state (enabled, tooltip, visibility)."""
-        # Enabled state
-        try:
-            if hasattr(self._backend_widget, "set_sensitive"):
-                self._backend_widget.set_sensitive(bool(getattr(self, "_enabled", True)))
-            if hasattr(self._listbox, "set_sensitive"):
-                self._listbox.set_sensitive(bool(getattr(self, "_enabled", True)))
-        except Exception:
-            pass
-        
-        # Help text (tooltip)
-        try:
-            if getattr(self, "_help_text", None):
-                try:
-                    self._backend_widget.set_tooltip_text(self._help_text)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        
-        # Visibility
-        try:
-            if hasattr(self._backend_widget, "set_visible"):
-                self._backend_widget.set_visible(self.visible())
-        except Exception:
-            pass
-
-    def _connect_selection_handlers(self):
-        """Connect selection event handlers."""
-        # GestureClick on the listbox: save horizontal scroll offset BEFORE GTK
-        # internally selects the row and auto-scrolls it into view.  The saved
-        # value is then restored via idle_add in each selection signal handler.
-        try:
-            click_ctrl = Gtk.GestureClick.new()
-            click_ctrl.connect("pressed", self._on_listbox_press)
-            self._listbox.add_controller(click_ctrl)
-        except Exception:
-            self._logger.debug("Could not attach GestureClick to listbox")
-
-        if self._multi:
-            try:
-                self._listbox.connect("selected-rows-changed", 
-                                    lambda lb: self._on_selected_rows_changed(lb))
-                self._listbox.connect("row-activated", 
-                                    lambda lb, row: self._on_row_selected_for_multi(lb, row))
-            except Exception:
-                self._logger.exception("Failed to connect multi-selection handlers")
-        else:
-            try:
-                self._listbox.connect("row-selected", 
-                                    lambda lb, row: self._on_row_selected(lb, row))
-            except Exception:
-                self._logger.exception("Failed to connect single-selection handler")
-
-    def _on_listbox_press(self, gesture, n_press, x, y):
-        """Save horizontal scroll offset before the click triggers row selection."""
-        try:
-            hadj = self._sw.get_hadjustment()
-            if hadj:
-                self._saved_hscroll = hadj.get_value()
-        except Exception:
-            pass
-
-    def _schedule_hscroll_restore(self, saved: float):
-        """Restore the horizontal scroll position after GTK has finished processing
-        the selection event (scheduled via idle_add so it runs after the frame)."""
-        sw = getattr(self, '_sw', None)
-        if sw is None:
-            return
-        def _restore():
-            try:
-                hadj = sw.get_hadjustment()
-                if hadj:
-                    hadj.set_value(saved)
-            except Exception:
-                pass
-            return False  # don't repeat
-        try:
-            GLib.idle_add(_restore)
-        except Exception:
-            pass
-
-    def _get_column_width(self, col):
-        """Get width for specified column."""
-        if col < len(self._column_widths):
-            width = self._column_widths[col]
-            return max(width, self._min_column_width) if width > 0 else self._default_column_width
-        return self._default_column_width
-
-    def _header_is_checkbox(self, col):
-        """Check if column is a checkbox column."""
+    def _header_is_checkbox(self, col: int) -> bool:
+        """Return True when column *col* is declared as a checkbox column."""
         try:
             return bool(self._header.isCheckboxColumn(col))
         except Exception:
             return False
 
-    def rebuildTable(self):
-        """
-        Rebuild the entire table from scratch.
-        
-        This ensures column alignment between header and all rows.
-        """
-        self._logger.debug("rebuildTable: %d items", len(self._items) if self._items else 0)
-        if self._backend_widget is None or self._listbox is None:
-            self._create_backend_widget()
-
-        # Clear existing rows
-        self._clear_rows()
-
-        # Build new rows
+    def _col_align(self, col: int):
+        """Return the YAlignmentType for *col* (defaults to YAlignBegin)."""
         try:
-            cols = self._header.columns()
+            return self._header.alignment(col)
         except Exception:
-            cols = 0
-        if cols <= 0:
-            cols = 1
+            return YAlignmentType.YAlignBegin
 
-        for row_idx, it in enumerate(list(getattr(self, '_items', []) or [])):
+    @staticmethod
+    def _gtk_halign(align_t) -> Gtk.Align:
+        """Map YAlignmentType -> Gtk.Align."""
+        if align_t == YAlignmentType.YAlignCenter:
+            return Gtk.Align.CENTER
+        if align_t == YAlignmentType.YAlignEnd:
+            return Gtk.Align.END
+        return Gtk.Align.START
+
+    @staticmethod
+    def _xalign(align_t) -> float:
+        if align_t == YAlignmentType.YAlignCenter:
+            return 0.5
+        if align_t == YAlignmentType.YAlignEnd:
+            return 1.0
+        return 0.0
+
+    # ------------------------------------------------------------------
+    # CSS (registered once per display)
+    # ------------------------------------------------------------------
+
+    def _install_css(self):
+        """Register the application CSS once per process."""
+        if YTableGtk._css_provider_installed:
+            return
+        css_provider = Gtk.CssProvider()
+        css = """
+        columnview.y-table > listview > row:nth-child(even) {
+            background-color: alpha(@theme_bg_color, 0.5);
+        }
+        columnview.y-table > listview > row:hover {
+            background-color: alpha(@theme_selected_bg_color, 0.15);
+        }
+        columnview.y-table > listview > row:selected {
+            background-color: @theme_selected_bg_color;
+            color: @theme_selected_fg_color;
+        }
+        """
+        try:
             try:
-                row = self._create_row(it, cols)
-                if row:
-                    self._listbox.append(row)
-                    self._row_to_item[row] = it
-                    self._item_to_row[it] = row
-                    self._rows.append(row)
+                css_provider.load_from_data(css, -1)
+            except TypeError:
+                css_provider.load_from_data(css.encode())
+            display = Gdk.Display.get_default()
+            if display:
+                Gtk.StyleContext.add_provider_for_display(
+                    display, css_provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
+                YTableGtk._css_provider_installed = True
+        except Exception as exc:
+            self._logger.debug("CSS setup failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Widget creation
+    # ------------------------------------------------------------------
+
+    def _create_backend_widget(self):
+        """
+        Build the GtkColumnView hierarchy.
+
+        Structure
+        ---------
+        Gtk.ScrolledWindow
+          +-- Gtk.ColumnView  (virtual, one column per YTableHeader column)
+                model: Gtk.SingleSelection | Gtk.MultiSelection
+                         +-- Gtk.SortListModel
+                               +-- Gio.ListStore[_RowObject]
+        """
+        self._install_css()
+
+        # Data store
+        self._store = Gio.ListStore.new(_RowObject)
+
+        # Sorting layer -- driven by ColumnView header clicks automatically.
+        self._sort_model = Gtk.SortListModel.new(self._store, None)
+
+        # Selection model
+        if self._multi:
+            self._selection_model = Gtk.MultiSelection.new(self._sort_model)
+        else:
+            self._selection_model = Gtk.SingleSelection.new(self._sort_model)
+            try:
+                self._selection_model.set_autoselect(False)
             except Exception:
-                self._logger.exception("Failed to create row %d", row_idx)
+                pass
 
-        # Apply selection from model
-        self._apply_model_selection()
-
-    def _clear_rows(self):
-        """Clear all rows from the table."""
+        # ColumnView
+        self._column_view = Gtk.ColumnView.new(self._selection_model)
+        self._column_view.set_show_row_separators(True)
+        self._column_view.set_show_column_separators(True)
+        self._column_view.set_hexpand(True)
+        self._column_view.set_vexpand(True)
         try:
-            self._row_to_item.clear()
-            self._item_to_row.clear()
+            self._column_view.get_style_context().add_class("y-table")
         except Exception:
-            self._logger.exception("Failed to clear row-item mappings")
-        
-        try:
-            for row in self._rows:
-                try:
-                    self._listbox.remove(row)
-                except Exception:
-                    self._logger.exception("Failed to remove row during clear_rows")
-            self._rows = []
-        except Exception:
-            self._logger.exception("Failed to clear rows")
+            pass
 
-    def _create_row(self, item, cols):
-        """
-        Create a single table row with proper column alignment.
-        
-        Args:
-            item: YTableItem for this row
-            cols: Number of columns
-            
-        Returns:
-            Gtk.ListBoxRow or None on error
-        """
+        # Wire the ColumnView's built-in sorter to SortListModel so that
+        # clicking a header automatically sorts the model.
         try:
-            row = Gtk.ListBoxRow()
-            ctx = row.get_style_context()
-            ctx.add_class("y-table-row")
-            
-            # Use Grid instead of Box for better column control
-            grid = Gtk.Grid()
-            grid.set_column_spacing(0)
-            grid.set_row_spacing(0)
-            grid.set_hexpand(True)
-            
-            # Create cells for each column with exact widths
-            for col in range(cols):
-                cell_widget = self._create_cell_widget(item, col)
-                if cell_widget:
-                    # Attach cell to grid at column position
-                    grid.attach(cell_widget, col, 0, 1, 1)
-            
-            row.set_child(grid)
-            return row
-        except Exception:
-            self._logger.exception("Failed to create row")
-            return None
+            self._sort_model.set_sorter(self._column_view.get_sorter())
+        except Exception as exc:
+            self._logger.debug("set_sorter failed: %s", exc)
 
-    def _create_cell_widget(self, item, col):
-        """
-        Create widget for a single cell with proper width and alignment.
-        
-        Args:
-            item: YTableItem containing cell data
-            col: Column index
-            
-        Returns:
-            Gtk.Widget for the cell
-        """
+        # Build one column per header entry.
+        self._build_columns()
+
+        # Selection-changed signal.
         try:
-            # Get cell data
-            cell = item.cell(col) if hasattr(item, 'cell') else None
+            self._selection_model.connect(
+                "selection-changed", self._on_selection_changed
+            )
+        except Exception as exc:
+            self._logger.debug("selection-changed connect failed: %s", exc)
+
+        # ScrolledWindow wrapper.
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        try:
+            sw.set_propagate_natural_height(True)
+        except Exception:
+            pass
+        try:
+            sw.set_child(self._column_view)
+        except Exception:
+            sw.add(self._column_view)
+
+        sw.set_hexpand(self.stretchable(YUIDimension.YD_HORIZ))
+        sw.set_vexpand(self.stretchable(YUIDimension.YD_VERT))
+
+        self._backend_widget = sw
+
+        self._apply_initial_state()
+        self._logger.debug("_create_backend_widget: %s", self.debugLabel())
+
+        # Populate if items were added before the widget was created.
+        if getattr(self, '_items', None):
+            self.rebuildTable()
+
+    def _build_columns(self):
+        """Create one GtkColumnViewColumn per header column."""
+        try:
+            n_cols = int(self._header.columns())
+        except Exception:
+            return
+
+        for col in range(n_cols):
             is_cb = self._header_is_checkbox(col)
-            
-            # Get alignment for this column
             try:
-                align_t = self._header.alignment(col)
+                title = self._header.header(col) or ""
             except Exception:
-                align_t = YAlignmentType.YAlignBegin
-            
-            # Create container for this cell.
-            # The last column is allowed to fill the remaining row width so that
-            # it stays aligned with its header and content is never clipped.
-            cell_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            try:
-                total_cols = self._header.columns()
-            except Exception:
-                total_cols = -1
-            cell_container.set_hexpand(col == total_cols - 1)
-            
-            # Apply column width (minimum; last column may grow further)
-            width = self._get_column_width(col)
-            cell_container.set_size_request(width, -1)
-            
-            # Create cell content based on type
-            if is_cb:
-                content = self._create_checkbox_content(cell, align_t, item, col)
-            else:
-                content = self._create_label_content(cell, align_t)
-            
-            if content:
-                cell_container.append(content)
-            
-            return cell_container
-        except Exception:
-            self._logger.exception("Failed to create cell widget for column %d", col)
-            # Return empty container with correct width
-            empty = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-            empty.set_size_request(self._get_column_width(col), -1)
-            return empty
+                title = ""
 
-    def _create_checkbox_content(self, cell, align_t, item, col):
-        """
-        Create checkbox cell content with proper alignment.
-        
-        Args:
-            cell: YTableCell or None
-            align_t: Alignment type
-            item: Parent YTableItem
-            col: Column index
-            
-        Returns:
-            Gtk.Widget for checkbox cell
-        """
-        try:
-            # Create checkbox
-            chk = Gtk.CheckButton()
-            try:
-                chk.set_active(cell.checked() if cell is not None else False)
-            except Exception:
-                chk.set_active(False)
+            factory = Gtk.SignalListItemFactory.new()
+            factory.connect(
+                "setup", lambda f, li, c=col: self._factory_setup(li, c)
+            )
+            factory.connect(
+                "bind", lambda f, li, c=col: self._factory_bind(li, c)
+            )
+            factory.connect(
+                "unbind", lambda f, li, c=col: self._factory_unbind(li, c)
+            )
+            factory.connect(
+                "teardown", lambda f, li, c=col: self._factory_teardown(li, c)
+            )
 
-            # Build an explicit fill wrapper and place checkbox according to
-            # column alignment. This is more reliable than relying on halign
-            # on Gtk.CheckButton alone in fixed-width table cells.
-            wrapper = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+            column = Gtk.ColumnViewColumn.new(title, factory)
+            column.set_resizable(True)
+            # Checkbox columns are narrow; text columns expand to fill space.
+            column.set_expand(not is_cb)
+
+            # Attach a CustomSorter so the column is sortable.
+            try:
+                sorter = Gtk.CustomSorter.new(
+                    self._make_sort_func(col), None
+                )
+                column.set_sorter(sorter)
+            except Exception as exc:
+                self._logger.debug("column %d sorter failed: %s", col, exc)
+
+            self._column_view.append_column(column)
+
+    def _make_sort_func(self, col: int):
+        """Return a GtkCustomSorterFunc for column *col*."""
+        is_cb = self._header_is_checkbox(col)
+
+        def _sort(a: GObject.Object, b: GObject.Object, _user_data) -> int:
+            def _key(obj):
+                try:
+                    cell = obj.item.cell(col)
+                    if cell is None:
+                        return ""
+                    if is_cb:
+                        return 0 if not cell.checked() else 1
+                    if hasattr(cell, 'hasSortKey') and cell.hasSortKey():
+                        return str(cell.sortKey())
+                    return cell.label() or ""
+                except Exception:
+                    return ""
+
+            ka, kb = _key(a), _key(b)
+            if ka < kb:
+                return -1
+            if ka > kb:
+                return 1
+            return 0
+        return _sort
+
+    # ------------------------------------------------------------------
+    # SignalListItemFactory callbacks  (called only for visible rows)
+    # ------------------------------------------------------------------
+
+    def _factory_setup(self, list_item: Gtk.ListItem, col: int):
+        """
+        Create the GTK widget for one cell slot.
+
+        Called once when a row slot enters the visible area.  The widget is
+        reused for different data via bind/unbind -- no allocation per row.
+        """
+        align_t = self._col_align(col)
+        is_cb = self._header_is_checkbox(col)
+
+        if is_cb:
+            # CheckButton in an alignment wrapper.
+            wrapper = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL, spacing=0
+            )
             wrapper.set_hexpand(True)
             wrapper.set_halign(Gtk.Align.FILL)
 
-            def _hspacer():
-                spacer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-                spacer.set_hexpand(True)
-                return spacer
+            chk = Gtk.CheckButton()
+            chk.set_valign(Gtk.Align.CENTER)
+
+            def _spacer():
+                s = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+                s.set_hexpand(True)
+                return s
 
             if align_t == YAlignmentType.YAlignCenter:
-                wrapper.append(_hspacer())
-                chk.set_margin_start(0)
-                chk.set_margin_end(0)
+                wrapper.append(_spacer())
                 wrapper.append(chk)
-                wrapper.append(_hspacer())
+                wrapper.append(_spacer())
             elif align_t == YAlignmentType.YAlignEnd:
-                wrapper.append(_hspacer())
-                chk.set_margin_start(0)
+                wrapper.append(_spacer())
                 chk.set_margin_end(6)
                 wrapper.append(chk)
             else:
                 chk.set_margin_start(6)
-                chk.set_margin_end(0)
                 wrapper.append(chk)
-                wrapper.append(_hspacer())
+                wrapper.append(_spacer())
 
-            chk.set_valign(Gtk.Align.CENTER)
-            
-            # Connect toggle handler
-            def _on_toggled(btn, item=item, cindex=col):
-                try:
-                    c = item.cell(cindex)
-                    if c is not None:
-                        c.setChecked(bool(btn.get_active()))
-                    # Track changed item
-                    self._changed_item = item
-                    # Emit value changed
-                    dlg = self.findDialog()
-                    if dlg is not None and self.notify():
-                        dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
-                except Exception:
-                    self._logger.exception("Checkbox toggle failed")
-            
-            chk.connect("toggled", _on_toggled)
-
-            return wrapper
-        except Exception:
-            self._logger.exception("Failed to create checkbox content")
-            return Gtk.Label(label="")
-
-    def _create_label_content(self, cell, align_t):
-        """
-        Create label cell content with proper alignment.
-        
-        Args:
-            cell: YTableCell or None
-            align_t: Alignment type
-            
-        Returns:
-            Gtk.Label widget
-        """
-        try:
-            # Get text
-            txt = cell.label() if cell is not None else ""
-            lbl = Gtk.Label(label=txt)
-            lbl.set_halign(Gtk.Align.FILL)
+            # Stash direct reference so bind() can find the CheckButton.
+            wrapper._chk = chk
+            wrapper._chk_handler_id = None
+            list_item.set_child(wrapper)
+        else:
+            lbl = Gtk.Label()
+            lbl.set_halign(self._gtk_halign(align_t))
+            lbl.set_xalign(self._xalign(align_t))
             lbl.set_margin_start(5)
             lbl.set_margin_end(5)
             lbl.set_hexpand(True)
             lbl.set_ellipsize(Pango.EllipsizeMode.END)
-            
-            # Apply alignment
-            if align_t == YAlignmentType.YAlignCenter:
-                lbl.set_xalign(0.5)
-            elif align_t == YAlignmentType.YAlignEnd:
-                lbl.set_xalign(1.0)
-            else:
-                lbl.set_xalign(0.0)
-            
-            return lbl
-        except Exception:
-            self._logger.exception("Failed to create label content")
-            lbl = Gtk.Label(label="")
-            lbl.set_xalign(0.0)
-            return lbl
+            list_item.set_child(lbl)
 
-    def _apply_model_selection(self):
-        """Apply selection state from model to UI."""
-        # Save horizontal scroll so programmatic select_row calls don't move the viewport.
-        try:
-            hadj = self._sw.get_hadjustment() if getattr(self, '_sw', None) else None
-            saved_h = hadj.get_value() if hadj else 0.0
-        except Exception:
-            saved_h = 0.0
-        try:
-            self._suppress_selection_handler = True
-            
-            # Clear all selections first
+    def _factory_bind(self, list_item: Gtk.ListItem, col: int):
+        """
+        Populate the recycled widget with data from the current row.
+
+        Called every time a row scrolls into view (or data changes).
+        O(1) per cell -- no widget allocation.
+        """
+        row_obj = list_item.get_item()
+        if row_obj is None:
+            return
+        item = row_obj.item
+        child = list_item.get_child()
+        if child is None:
+            return
+
+        if self._header_is_checkbox(col):
+            chk = getattr(child, '_chk', None)
+            if chk is None:
+                return
+            cell = None
             try:
-                self._listbox.unselect_all()
+                cell = item.cell(col)
             except Exception:
                 pass
-            
-            # Apply selection from model
-            selected_items = []
-            for it in list(getattr(self, '_items', []) or []):
-                if hasattr(it, 'selected') and it.selected():
-                    selected_items.append(it)
-            
-            # Select items in UI
-            for it in selected_items:
+            checked = bool(cell.checked()) if cell is not None else False
+
+            # Disconnect any previous handler before changing state.
+            hid = getattr(child, '_chk_handler_id', None)
+            if hid is not None:
                 try:
-                    row = self._item_to_row.get(it)
-                    if row is not None:
-                        self._listbox.select_row(row)
+                    chk.disconnect(hid)
                 except Exception:
                     pass
-            
-            # For single selection, ensure only one is selected in both UI and model
-            if not self._multi and len(selected_items) > 1:
-                for it in selected_items[1:]:
-                    try:
-                        row = self._item_to_row.get(it)
-                        if row is not None:
-                            self._listbox.unselect_row(row)
-                    except Exception:
-                        pass
-                selected_items = selected_items[:1]
+                child._chk_handler_id = None
 
-            # Sync the cached list so it matches what was just set in the UI.
-            # This is critical: callers that query selectedItems() immediately
-            # after rebuildTable() / addItems() must see the correct selection.
-            self._selected_items = list(selected_items)
+            chk.set_active(checked)
 
-        finally:
-            self._suppress_selection_handler = False
-            self._schedule_hscroll_restore(saved_h)
-
-    # Column resizing handlers
-    def _on_separator_enter(self, controller, x, y):
-        """Change cursor to col-resize when hovering over separator."""
-        try:
-            widget = controller.get_widget()
-            display = widget.get_display()
-            cursor = Gdk.Cursor.new_from_name(display, "col-resize")
-            if cursor:
-                widget.get_root().set_cursor(cursor)
-        except Exception:
-            pass
-
-    def _on_separator_leave(self, controller):
-        """Reset cursor when leaving separator."""
-        try:
-            widget = controller.get_widget()
-            widget.get_root().set_cursor(None)
-        except Exception:
-            pass
-
-    def _on_drag_begin(self, gesture, start_x, start_y):
-        """Begin column resize drag operation."""
-        try:
-            widget = gesture.get_widget()
-            col_index = widget.column_index
-            
-            if col_index < len(self._column_widths):
-                # Use the actual allocated width as the drag baseline rather than
-                # the stored value.  This matters for the last column which has
-                # hexpand=True: GTK may have allocated it more space than the
-                # stored minimum, so the drag must start from what the user sees.
-                if col_index < len(self._header_cells):
-                    allocated = self._header_cells[col_index].get_allocated_width()
-                    current_width = allocated if allocated > 0 else self._column_widths[col_index]
-                else:
-                    current_width = self._column_widths[col_index]
-                self._drag_data = {
-                    'column_index': col_index,
-                    'start_width': current_width,
-                    'start_x': start_x
-                }
-        except Exception:
-            self._drag_data = None
-
-    def _on_drag_update(self, gesture, offset_x, offset_y):
-        """Update column width during drag."""
-        if not self._drag_data:
-            return
-            
-        try:
-            col_index = self._drag_data['column_index']
-            new_width = max(self._min_column_width, 
-                          self._drag_data['start_width'] + offset_x)
-            
-            # Update column width
-            self._update_column_width(col_index, new_width)
-            
-            self._drag_data['current_width'] = new_width
-        except Exception:
-            self._logger.exception("Drag update failed")
-
-    def _on_drag_end(self, gesture, offset_x, offset_y):
-        """End column resize drag operation."""
-        self._drag_data = None
-
-    def _update_column_width(self, col_index, new_width):
-        """
-        Update width for a specific column in header and all rows.
-        """
-        if col_index >= len(self._column_widths):
-            return
-            
-        # Update stored width
-        self._column_widths[col_index] = new_width
-        
-        # Update header cell
-        if col_index < len(self._header_cells):
-            try:
-                self._header_cells[col_index].set_size_request(new_width, -1)
-            except Exception:
-                pass
-        
-        # Update all rows
-        for row in self._rows:
-            try:
-                grid = row.get_child()
-                if grid and isinstance(grid, Gtk.Grid):
-                    # Get the cell container at this column index
-                    cell_widget = grid.get_child_at(col_index, 0)
-                    if cell_widget:
-                        cell_widget.set_size_request(new_width, -1)
-            except Exception:
-                pass
-
-    # Selection handlers
-    def _on_row_selected(self, listbox, row):
-        if self._suppress_selection_handler:
-            return
-        # Restore horizontal scroll: GTK scrolled the row into view before this
-        # signal fired; undo that via idle_add using the value saved at click time.
-        self._schedule_hscroll_restore(self._saved_hscroll)
-        try:
-            # Update selected flags
-            for it in list(getattr(self, '_items', []) or []):
+            def _on_toggled(btn, _item=item, _col=col):
                 try:
-                    it.setSelected(False)
-                except Exception:
-                    pass
-            if row is not None:
-                it = self._row_to_item.get(row)
-                if it is not None:
-                    try:
-                        it.setSelected(True)
-                    except Exception:
-                        pass
-                    self._old_selected_items = self._selected_items
-                    self._selected_items = [it]
-            else:
-                self._old_selected_items = self._selected_items
-                self._selected_items = []
-            # notify
-            try:
-                if self.notify():
+                    c = _item.cell(_col)
+                    if c is not None:
+                        c.setChecked(bool(btn.get_active()))
+                    self._changed_item = _item
                     dlg = self.findDialog()
-                    if dlg is not None:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                    if dlg is not None and self.notify():
+                        dlg._post_event(
+                            YWidgetEvent(self, YEventReason.ValueChanged)
+                        )
+                except Exception:
+                    self._logger.exception("Checkbox toggle failed")
+
+            child._chk_handler_id = chk.connect("toggled", _on_toggled)
+        else:
+            cell = None
+            try:
+                cell = item.cell(col)
             except Exception:
                 pass
+            txt = cell.label() if cell is not None else ""
+            child.set_text(txt if txt is not None else "")
+
+    def _factory_unbind(self, list_item: Gtk.ListItem, col: int):
+        """
+        Disconnect the toggled signal before the widget is recycled.
+
+        Prevents stale item references from leaking into the recycled widget.
+        """
+        if not self._header_is_checkbox(col):
+            return
+        child = list_item.get_child()
+        if child is None:
+            return
+        chk = getattr(child, '_chk', None)
+        hid = getattr(child, '_chk_handler_id', None)
+        if chk is not None and hid is not None:
+            try:
+                chk.disconnect(hid)
+            except Exception:
+                pass
+            child._chk_handler_id = None
+
+    def _factory_teardown(self, list_item: Gtk.ListItem, col: int):
+        """Remove the child widget when the slot is permanently destroyed."""
+        try:
+            list_item.set_child(None)
         except Exception:
             pass
 
-    def _on_selected_rows_changed(self, listbox):
-        if self._suppress_selection_handler:
+    # ------------------------------------------------------------------
+    # Selection signal
+    # ------------------------------------------------------------------
+
+    def _on_selection_changed(self, sel_model, position: int, n_items: int):
+        """Slot for SelectionModel::selection-changed."""
+        if self._suppress_selection:
             return
-        self._schedule_hscroll_restore(self._saved_hscroll)
+        self._logger.debug("_on_selection_changed position=%d n=%d",
+                           position, n_items)
         try:
-            selected_rows = listbox.get_selected_rows() or []
             new_selected = []
-            for row in selected_rows:
-                it = self._row_to_item.get(row)
-                if it is not None:
-                    new_selected.append(it)
-            # Truncate to a single item for single-selection BEFORE updating model flags
-            # so the .selected() state on discarded items is not set True.
+            n = self._sort_model.get_n_items()
+            for i in range(n):
+                if sel_model.is_selected(i):
+                    row_obj = self._sort_model.get_item(i)
+                    if row_obj is not None:
+                        new_selected.append(row_obj.item)
+
             if not self._multi and len(new_selected) > 1:
                 new_selected = [new_selected[-1]]
-            # set flags
-            try:
-                for it in list(getattr(self, '_items', []) or []):
-                    it.setSelected(False)
-                for it in new_selected:
-                    it.setSelected(True)
-            except Exception:
-                pass
 
-            self._old_selected_items = self._selected_items
+            for it in list(getattr(self, '_items', []) or []):
+                try:
+                    it.setSelected(False)
+                except Exception:
+                    pass
+            for it in new_selected:
+                try:
+                    it.setSelected(True)
+                except Exception:
+                    pass
+
             self._selected_items = new_selected
-            # notify
+
             try:
                 if self.notify():
                     dlg = self.findDialog()
                     if dlg is not None:
-                        dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
+                        dlg._post_event(
+                            YWidgetEvent(self, YEventReason.SelectionChanged)
+                        )
             except Exception:
                 pass
+        except Exception as exc:
+            self._logger.debug("_on_selection_changed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _rebuild_index(self):
+        """Rebuild _item_to_pos from the current _store contents."""
+        self._item_to_pos.clear()
+        n = self._store.get_n_items()
+        for i in range(n):
+            obj = self._store.get_item(i)
+            if obj is not None:
+                self._item_to_pos[obj.item] = i
+
+    def _apply_selection_from_model(self):
+        """
+        Apply YTableItem.selected() flags to the GtkSelectionModel.
+
+        Called after rebuildTable() / addItems().  Positions are looked up in
+        the sort model (which may reorder rows) rather than the raw store.
+        """
+        if self._selection_model is None:
+            return
+        self._suppress_selection = True
+        try:
+            self._selection_model.unselect_all()
+            n = self._sort_model.get_n_items()
+            selected_positions = []
+            for i in range(n):
+                obj = self._sort_model.get_item(i)
+                if obj is not None:
+                    try:
+                        if obj.item.selected():
+                            selected_positions.append(i)
+                    except Exception:
+                        pass
+
+            if not self._multi and len(selected_positions) > 1:
+                selected_positions = [selected_positions[0]]
+
+            for pos in selected_positions:
+                try:
+                    self._selection_model.select_item(pos, False)
+                except Exception:
+                    pass
+
+            self._selected_items = []
+            for pos in selected_positions:
+                obj = self._sort_model.get_item(pos)
+                if obj is not None:
+                    self._selected_items.append(obj.item)
+        except Exception as exc:
+            self._logger.debug("_apply_selection_from_model: %s", exc)
+        finally:
+            self._suppress_selection = False
+
+    def _apply_initial_state(self):
+        """Apply enabled, tooltip and visibility after widget creation."""
+        try:
+            if self._backend_widget is not None:
+                self._backend_widget.set_sensitive(
+                    bool(getattr(self, "_enabled", True))
+                )
+        except Exception:
+            pass
+        try:
+            ht = getattr(self, "_help_text", None)
+            if ht and self._backend_widget is not None:
+                self._backend_widget.set_tooltip_text(ht)
+        except Exception:
+            pass
+        try:
+            if self._backend_widget is not None:
+                self._backend_widget.set_visible(self.visible())
         except Exception:
             pass
 
-    def _on_row_selected_for_multi(self, listbox, row):
-        """
-        Handler for row selection in multi-selection mode: for de-selection.
-        """
-        if self._suppress_selection_handler:
-            return
-        self._schedule_hscroll_restore(self._saved_hscroll)
-        self._logger.debug("_on_row_selected_for_multi called")
-        sel_rows = listbox.get_selected_rows()
-        it = self._row_to_item.get(row, None)
-        if it is not None:
-            if it in self._old_selected_items:
-                self._listbox.unselect_row(row)
-                it.setSelected(False)
-                self._on_selected_rows_changed(listbox)
-            else:
-                self._old_selected_items = self._selected_items
+    # ------------------------------------------------------------------
+    # Public API -- table content
+    # ------------------------------------------------------------------
 
-    # API methods
+    def rebuildTable(self):
+        """
+        Synchronise the view with the current item list.
+
+        O(N) to wrap items in _RowObject; one Gio.ListStore.splice() call
+        replaces all existing objects atomically.  GtkColumnView repaints
+        only the visible viewport.
+        """
+        self._logger.debug("rebuildTable: %d items",
+                           len(self._items) if self._items else 0)
+        if self._column_view is None:
+            self._create_backend_widget()
+            return  # _create_backend_widget calls rebuildTable recursively
+
+        items = list(getattr(self, '_items', []) or [])
+        self._suppress_selection = True
+        try:
+            new_objects = [_RowObject(it) for it in items]
+            # splice(pos, n_remove, additions) replaces everything atomically.
+            self._store.splice(0, self._store.get_n_items(), new_objects)
+            self._rebuild_index()
+        except Exception as exc:
+            self._logger.debug("rebuildTable: splice failed: %s", exc)
+        finally:
+            self._suppress_selection = False
+
+        self._apply_selection_from_model()
+        self._logger.debug("rebuildTable: done")
+
     def addItem(self, item):
-        """Add a single item to the table."""
+        """
+        Add a single YTableItem.  O(1) via one store.append() call.
+        """
         if isinstance(item, str):
             item = YTableItem(item)
         if not isinstance(item, YTableItem):
-            raise TypeError("YTableGtk.addItem expects a YTableItem or string label")
+            raise TypeError("YTableGtk.addItem expects a YTableItem or str")
         super().addItem(item)
         item.setIndex(len(self._items) - 1)
-        if getattr(self, '_listbox', None) is not None:
-            self.rebuildTable()
+
+        if self._store is None:
+            return  # will be populated on first _create_backend_widget
+
+        pos = self._store.get_n_items()
+        self._item_to_pos[item] = pos
+        self._store.append(_RowObject(item))
+
+        # Apply pre-selection if item arrives pre-marked.
+        if getattr(item, 'selected', lambda: False)():
+            self._suppress_selection = True
+            try:
+                n = self._sort_model.get_n_items()
+                for i in range(n):
+                    obj = self._sort_model.get_item(i)
+                    if obj is not None and obj.item is item:
+                        if not self._multi:
+                            self._selection_model.unselect_all()
+                            for prev in list(self._selected_items):
+                                try:
+                                    prev.setSelected(False)
+                                except Exception:
+                                    pass
+                            self._selected_items = []
+                        self._selection_model.select_item(i, False)
+                        item.setSelected(True)
+                        if not self._multi:
+                            self._selected_items = [item]
+                        elif item not in self._selected_items:
+                            self._selected_items.append(item)
+                        break
+            except Exception as exc:
+                self._logger.debug("addItem: pre-selection failed: %s", exc)
+            finally:
+                self._suppress_selection = False
 
     def addItems(self, items):
-        """Add multiple items to the table efficiently."""
+        """
+        Add multiple items in a single batch.
+
+        O(N): wraps items in _RowObject then calls one store.splice() at the
+        tail.  GtkColumnView receives a single items-changed notification and
+        repaints the visible viewport only once.
+        """
+        items = list(items)
+        if not items:
+            return
+
+        start_pos = len(getattr(self, '_items', []) or [])
+        new_objs = []
         for item in items:
             if isinstance(item, str):
                 item = YTableItem(item)
@@ -1009,125 +739,129 @@ class YTableGtk(YSelectionWidget):
             elif isinstance(item, YTableItem):
                 super().addItem(item)
             else:
-                self._logger.error("YTable.addItem: invalid item type %s", type(item))
-                raise TypeError("YTableGtk.addItem expects a YTableItem or string label")
+                raise TypeError("YTableGtk.addItems expects YTableItem or str")
             item.setIndex(len(self._items) - 1)
-        if getattr(self, '_listbox', None) is not None:
-            self.rebuildTable()
+            new_objs.append((item, _RowObject(item)))
 
-    def selectItem(self, item, selected=True):
-        """Select or deselect an item."""
+        if self._store is None:
+            return  # will be populated in _create_backend_widget
+
+        self._store.splice(
+            start_pos, 0,
+            [obj for _, obj in new_objs]
+        )
+        for idx, (item, _) in enumerate(new_objs):
+            self._item_to_pos[item] = start_pos + idx
+
+        self._apply_selection_from_model()
+
+    def selectItem(self, item, selected: bool = True):
+        """Select or deselect *item* in both model and view."""
         try:
             item.setSelected(bool(selected))
         except Exception:
             pass
-        
-        if getattr(self, '_listbox', None) is None:
+
+        if self._selection_model is None:
             if selected:
                 if item not in self._selected_items:
-                    self._selected_items.append(item)
+                    if not self._multi:
+                        self._selected_items = [item]
+                    else:
+                        self._selected_items.append(item)
             else:
                 try:
-                    if item in self._selected_items:
-                        self._selected_items.remove(item)
-                except Exception:
+                    self._selected_items.remove(item)
+                except ValueError:
                     pass
             return
-        
-        saved_h: float = 0.0
+
+        # Find position in sort model.
+        n = self._sort_model.get_n_items()
+        pos = None
+        for i in range(n):
+            obj = self._sort_model.get_item(i)
+            if obj is not None and obj.item is item:
+                pos = i
+                break
+        if pos is None:
+            return
+
+        self._suppress_selection = True
         try:
-            row = self._item_to_row.get(item)
-            if row is None:
-                self.rebuildTable()
-                row = self._item_to_row.get(item)
-            if row is None:
-                return
-
-            # Save horizontal scroll before programmatic select_row.
-            try:
-                hadj = self._sw.get_hadjustment() if getattr(self, '_sw', None) else None
-                saved_h = hadj.get_value() if hadj else 0.0
-            except Exception:
-                saved_h = 0.0
-
-            self._suppress_selection_handler = True
             if selected:
                 if not self._multi:
-                    # Deselect previously selected items in both UI and model.
-                    for prev_it in list(self._selected_items):
+                    self._selection_model.unselect_all()
+                    for prev in list(self._selected_items):
                         try:
-                            prev_it.setSelected(False)
+                            prev.setSelected(False)
                         except Exception:
                             pass
-                    try:
-                        for r in list(self._listbox.get_selected_rows() or []):
-                            self._listbox.unselect_row(r)
-                    except Exception:
-                        pass
-                self._listbox.select_row(row)
-            else:
-                try:
-                    self._listbox.unselect_row(row)
-                except Exception:
-                    pass
-            # Manually sync _selected_items: the handler is suppressed so it won't fire.
-            if selected:
+                    self._selected_items = []
+                self._selection_model.select_item(pos, False)
+                item.setSelected(True)
                 if not self._multi:
                     self._selected_items = [item]
                 elif item not in self._selected_items:
                     self._selected_items.append(item)
             else:
-                self._selected_items = [i for i in self._selected_items if i is not item]
+                self._selection_model.unselect_item(pos)
+                try:
+                    self._selected_items.remove(item)
+                except ValueError:
+                    pass
+        except Exception as exc:
+            self._logger.debug("selectItem failed: %s", exc)
         finally:
-            self._suppress_selection_handler = False
-            self._schedule_hscroll_restore(saved_h)
+            self._suppress_selection = False
 
     def deleteAllItems(self):
-        """Delete all items from the table."""
+        """Clear all items from the table."""
         try:
             super().deleteAllItems()
         except Exception:
             self._items = []
-        # Always clear local state regardless of what the base class did.
         self._selected_items = []
-        self._old_selected_items = []
         self._changed_item = None
-        self._clear_rows()
+        self._item_to_pos.clear()
+        if self._store is not None:
+            self._suppress_selection = True
+            try:
+                self._store.remove_all()
+            except Exception as exc:
+                self._logger.debug("deleteAllItems: remove_all failed: %s", exc)
+            finally:
+                self._suppress_selection = False
 
     def changedItem(self):
-        """Get the item that was most recently changed."""
-        return getattr(self, "_changed_item", None)
+        """Return the most recently changed item (last checkbox toggle)."""
+        return self._changed_item
 
-    def _set_backend_enabled(self, enabled):
-        """Enable/disable the GTK table at runtime."""
+    # ------------------------------------------------------------------
+    # YWidget overrides
+    # ------------------------------------------------------------------
+
+    def _set_backend_enabled(self, enabled: bool):
+        """Propagate enabled/disabled state."""
         try:
-            if getattr(self, "_backend_widget", None) is not None and hasattr(self._backend_widget, "set_sensitive"):
+            if self._backend_widget is not None:
                 self._backend_widget.set_sensitive(bool(enabled))
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_listbox", None) is not None and hasattr(self._listbox, "set_sensitive"):
-                self._listbox.set_sensitive(bool(enabled))
         except Exception:
             pass
 
     def setVisible(self, visible: bool = True):
-        """Set widget visibility."""
         super().setVisible(visible)
         try:
-            if getattr(self, "_backend_widget", None) is not None and hasattr(self._backend_widget, "set_visible"):
+            if self._backend_widget is not None:
                 self._backend_widget.set_visible(bool(visible))
         except Exception:
             self._logger.exception("setVisible failed")
 
     def setHelpText(self, help_text: str):
-        """Set help text (tooltip) for the widget."""
         super().setHelpText(help_text)
         try:
-            if getattr(self, "_backend_widget", None) is not None:
-                try:
-                    self._backend_widget.set_tooltip_text(help_text)
-                except Exception:
-                    pass
+            if self._backend_widget is not None:
+                self._backend_widget.set_tooltip_text(help_text)
         except Exception:
             self._logger.exception("setHelpText failed")
+
