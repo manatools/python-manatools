@@ -210,3 +210,14 @@ class YPanedCurses(YWidget):
         except Exception as e:
             self._logger.error("_handle_key error: %s", e, exc_info=True)
             return False
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the paned container and propagate to children."""
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass

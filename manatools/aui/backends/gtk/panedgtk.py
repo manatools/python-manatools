@@ -366,3 +366,22 @@ class YPanedGtk(YWidget):
         self._configure_paned_behavior()
         # Re-apply overall size policy
         self._apply_size_policy()
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the GtkPaned and propagate to children."""
+        try:
+            if self._backend_widget is not None:
+                try:
+                    self._backend_widget.set_sensitive(bool(enabled))
+                except Exception:
+                    self._logger.exception("_set_backend_enabled: set_sensitive failed")
+        except Exception:
+            self._logger.exception("_set_backend_enabled: failed")
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass

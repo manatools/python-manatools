@@ -192,3 +192,22 @@ class YPanedQt(YWidget):
                 self._apply_sizes_from_weights()
         except Exception as e:
             self._logger.error("addChild error: %s", e, exc_info=True)
+
+    def _set_backend_enabled(self, enabled):
+        """Enable/disable the splitter and propagate to children."""
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                try:
+                    self._backend_widget.setEnabled(bool(enabled))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for c in list(getattr(self, "_children", []) or []):
+                try:
+                    c.setEnabled(enabled)
+                except Exception:
+                    pass
+        except Exception:
+            pass
