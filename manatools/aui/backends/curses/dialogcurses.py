@@ -193,6 +193,44 @@ class YDialogCurses(YSingleChildContainerWidget):
         except Exception:
             pass
 
+    def setVisible(self, visible: bool = True):
+        """Show or hide the dialog.
+
+        ncurses has no native window-hide concept, so visibility is emulated:
+        * *hiding* (``visible=False``): the curses window is erased and the
+          terminal is refreshed immediately so the screen area is cleared.
+        * *showing* (``visible=True``): ``_last_draw_time`` is reset to zero
+          so the event loop redraws the dialog on its very next iteration.
+
+        :meth:`_draw_dialog` also checks this flag and skips all rendering
+        while the dialog is hidden.
+        """
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                if not visible:
+                    # Immediately erase the terminal area occupied by this window.
+                    try:
+                        self._backend_widget.erase()
+                        self._backend_widget.refresh()
+                        self._logger.debug(
+                            "setVisible(False): terminal area erased for <%s>",
+                            self.debugLabel())
+                    except Exception:
+                        self._logger.debug(
+                            "setVisible(False): erase/refresh failed for <%s>",
+                            self.debugLabel(), exc_info=True)
+                else:
+                    # Force an immediate redraw on the next event-loop tick.
+                    self._last_draw_time = 0
+                    self._logger.debug(
+                        "setVisible(True): redraw scheduled for <%s>",
+                        self.debugLabel())
+        except Exception:
+            self._logger.exception(
+                "setVisible(%s) failed for dialog <%s>",
+                visible, self.debugLabel())
+
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog and propagate to contained widgets."""
         try:
@@ -219,10 +257,18 @@ class YDialogCurses(YSingleChildContainerWidget):
             pass
 
     def _draw_dialog(self):
-        """Draw the entire dialog (called by event loop)"""
+        """Draw the entire dialog (called by event loop).
+
+        Skips all rendering when the dialog is hidden so that a caller can
+        use :meth:`setVisible` to suppress the ncurses output without
+        stopping the event loop.
+        """
         if not hasattr(self, '_backend_widget') or not self._backend_widget:
             return
-            
+        # Do not draw while the dialog is hidden (visibility emulation).
+        if not self._visible:
+            return
+
         try:
             height, width = self._backend_widget.getmaxyx()
             #self._logger.debug("Dialog window size: height=%d width=%d", height, width)

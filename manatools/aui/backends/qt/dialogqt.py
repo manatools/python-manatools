@@ -263,6 +263,26 @@ class YDialogQt(YSingleChildContainerWidget):
         except Exception:
             self._logger.exception("Failed to apply popup sizeHint", exc_info=True)
     
+    def setVisible(self, visible: bool = True):
+        """Show or hide the dialog window.
+
+        Delegates to the Qt QMainWindow show/hide machinery and keeps the
+        YWidget logical visibility flag in sync via the base-class call.
+        If the backend window has not been created yet the flag is stored
+        and will be applied the next time the window is realised.
+        """
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_qwidget", None) is not None:
+                self._qwidget.setVisible(bool(visible))
+                self._logger.debug(
+                    "setVisible(%s) applied to QMainWindow <%s>",
+                    visible, self.debugLabel())
+        except Exception:
+            self._logger.exception(
+                "setVisible(%s) failed for dialog <%s>",
+                visible, self.debugLabel())
+
     def _set_backend_enabled(self, enabled):
         """Enable/disable the dialog window and propagate to logical child widgets."""
         try:
