@@ -21,7 +21,7 @@ class YUI:
     def _detect_backend(cls):
         """Detect the best available backend"""
         # Check environment variable first
-        backend_env = os.environ.get('YUI_BACKEND', '').lower()
+        backend_env = os.environ.get('MUI_BACKEND', '').lower()
         if backend_env == 'qt':
             return Backend.QT
         elif backend_env == 'gtk':

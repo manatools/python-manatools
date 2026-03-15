@@ -40,7 +40,7 @@ import manatools.aui.yui_common as yui
 
 def test_richtext_example(backend_name=None):
     if backend_name:
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
 
     # Ensure fresh YUI detection
     YUI._instance = None

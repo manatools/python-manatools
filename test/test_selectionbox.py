@@ -33,7 +33,7 @@ def test_selectionbox(backend_name=None):
     """Test Selection Box widget specifically"""
     if backend_name:
         print(f"Setting backend to: {backend_name}")
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
     else:
         print("Using auto-detection")
     

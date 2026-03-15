@@ -123,7 +123,7 @@ class TestDialog(basedialog.BaseDialog):
 
 if __name__ == '__main__':        
   if len(sys.argv) > 1:
-    os.environ['YUI_BACKEND'] = sys.argv[1]
+    os.environ['MUI_BACKEND'] = sys.argv[1]
 
   td = TestDialog()
   td.run()

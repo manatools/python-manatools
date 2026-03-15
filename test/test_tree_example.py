@@ -73,7 +73,7 @@ def build_letter_tree(tree_widget):
 
 def test_tree_example(backend_name=None):
     if backend_name:
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
 
     # Ensure fresh YUI detection
     YUI._instance = None

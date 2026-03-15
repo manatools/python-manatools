@@ -69,7 +69,7 @@ def build_right_multi_table(factory, table_widget):
 
 def test_table_example(backend_name=None):
     if backend_name:
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
 
     # Ensure fresh YUI detection
     YUI._instance = None

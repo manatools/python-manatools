@@ -12,11 +12,11 @@ from manatools.aui.yui import YUI, YUI_ui
 
 ## 1. Backend Selection and Initialization
 
-The backend is selected at startup by reading the `YUI_BACKEND` environment variable. Accepted values are `gtk`, `qt` and `ncurses` (case-insensitive). When the variable is not set, backends are probed in this order: Qt → GTK → NCurses.
+The backend is selected at startup by reading the `MUI_BACKEND` environment variable. Accepted values are `gtk`, `qt` and `ncurses` (case-insensitive). When the variable is not set, backends are probed in this order: Qt → GTK → NCurses.
 
 ```python
 import os
-os.environ["YUI_BACKEND"] = "gtk"   # force GTK backend
+os.environ["MUI_BACKEND"] = "gtk"   # force GTK backend
 
 from manatools.aui.yui import YUI, YUI_ui
 ```

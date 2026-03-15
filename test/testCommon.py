@@ -200,7 +200,7 @@ if __name__ == '__main__':
   # Allow selecting backend via argv: e.g. `python3 test/testCommon.py gtk`
   if len(sys.argv) > 1:
     backend = sys.argv[1].lower()
-    os.environ['YUI_BACKEND'] = backend
+    os.environ['MUI_BACKEND'] = backend
 
   gettext.install('manatools', localedir='/usr/share/locale', names=('ngettext',))
 

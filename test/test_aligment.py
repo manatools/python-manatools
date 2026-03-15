@@ -33,7 +33,7 @@ except Exception as _e:
 def test_Alignment(backend_name=None):
     if backend_name:
         print(f"Setting backend to: {backend_name}")
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
     else:
         print("Using auto-detection")
     

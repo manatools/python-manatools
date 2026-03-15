@@ -42,7 +42,7 @@ def make_long_text(lines=12):
 
 def test_label_wrap_example(backend_name=None):
     if backend_name:
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
 
     # Ensure fresh YUI detection
     YUI._instance = None

@@ -30,7 +30,7 @@ except Exception as _e:
 
 def test_intfield(backend_name=None):
     if backend_name:
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
         logging.getLogger().info("Set backend to %s", backend_name)
     else:
         root_logger.info("Using auto-detection")

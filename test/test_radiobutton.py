@@ -11,7 +11,7 @@ def test_radiobutton(backend_name=None):
     """Test dialog with 3 radio buttons, a label showing selection, and OK button"""
     if backend_name:
         print(f"Setting backend to: {backend_name}")
-        os.environ['YUI_BACKEND'] = backend_name
+        os.environ['MUI_BACKEND'] = backend_name
     else:
         print("Using auto-detection")
 
