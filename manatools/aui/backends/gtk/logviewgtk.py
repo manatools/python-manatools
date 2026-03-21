@@ -10,7 +10,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.aui.backends.gtk
 '''
 import logging
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib
 from ...yui_common import *
 
 
@@ -188,6 +188,12 @@ class YLogViewGtk(YWidget):
         * **normal order** — end = newest line.
         * **reverse order** — end = oldest line (geometrical mirror of
           HEAD+normal).
+
+        The scroll is deferred via ``GLib.idle_add`` so that it runs *after*
+        the GTK text-layout engine has recalculated line metrics for the new
+        content.  Calling ``scroll_to_iter`` synchronously inside
+        ``buffer.set_text()`` is unreliable because the view may not have
+        redrawn at that point.
         """
         try:
             if getattr(self, "_buffer", None) is not None:
@@ -197,15 +203,27 @@ class YLogViewGtk(YWidget):
                     else "\n".join(self._lines)
                 )
                 self._buffer.set_text(text)
-                if scroll_end and getattr(self, "_view", None) is not None:
-                    try:
-                        iter_ = self._buffer.get_end_iter()
-                        self._view.scroll_to_iter(iter_, 0.0, False, 0.0, 1.0)
-                    except Exception:
-                        self._logger.debug(
-                            "_update_display: scroll_to_iter failed", exc_info=True)
+                if scroll_end:
+                    # Schedule the scroll for the next idle cycle so GTK has
+                    # time to compute the new text layout before we try to
+                    # position the scrolled window.
+                    GLib.idle_add(self._scroll_to_end_idle)
         except Exception:
             self._logger.exception("update_display failed")
+
+    def _scroll_to_end_idle(self) -> bool:
+        """Idle callback: scroll the TextView to its end iter.
+
+        Returns ``False`` so GLib does not repeat the call.
+        """
+        try:
+            if getattr(self, "_buffer", None) is not None and \
+                    getattr(self, "_view", None) is not None:
+                iter_ = self._buffer.get_end_iter()
+                self._view.scroll_to_iter(iter_, 0.0, False, 0.0, 1.0)
+        except Exception:
+            self._logger.debug("_scroll_to_end_idle failed", exc_info=True)
+        return False  # do not repeat
 
     def _create_backend_widget(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -250,7 +268,11 @@ class YLogViewGtk(YWidget):
         sw.set_child(tv)
         box.append(sw)
         self._backend_widget = box
-        self._update_display()
+        # Respect the focus policy: if lines were already added before the
+        # backend widget was built (the common case when appendLines is called
+        # on a freshly-created widget before the dialog is shown), we must
+        # re-play the initial scroll so TAIL views start at the bottom.
+        self._update_display(scroll_end=(self._focus == YLogViewFocus.TAIL))
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
