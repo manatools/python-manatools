@@ -236,17 +236,20 @@ class YDialogQt(YSingleChildContainerWidget):
     def _apply_initial_size(self):
         """Apply initial size policy based on dialog type and content hints.
 
-        - Main dialogs: keep a generous default size.
-        - Popup dialogs: size to content/minimum hints from the layout tree.
+        Main dialogs: do NOT force an arbitrary size.  The central-widget layout
+        uses SetMinimumSize, so Qt will automatically enforce the minimum size
+        demanded by all child widgets (including the YAlignmentQt created by
+        createMinSize).  Calling resize() with a hard-coded value smaller than
+        the content minimum would just produce a clipped window at startup.
+
+        Popup dialogs: size to content via adjustSize() + sizeHint().
         """
         if getattr(self, "_qwidget", None) is None:
             return
 
         if self._dialog_type == YDialogType.YMainDialog:
-            try:
-                self._qwidget.resize(600, 400)
-            except Exception:
-                self._logger.exception("Failed to set default main-dialog size", exc_info=True)
+            # Nothing to do: SetMinimumSize constraint on the layout automatically
+            # sizes the window to at least the layout's minimumSizeHint().
             return
 
         # Popup: derive initial size from content to better match GTK behavior.

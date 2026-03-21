@@ -136,7 +136,22 @@ class YInputFieldQt(YWidget):
 
         desired_chars = 20
         try:
-            qlabel_h = self._qlbl.sizeHint().height() if hasattr(self, '_qlbl') and self._qlbl is not None else 0
+            # Only include the label height when the label is actually visible.
+            # A hidden QLabel still has a positive sizeHint().height() (= font
+            # line height ≈ 16–18 px), so blindly adding qlabel_h would make the
+            # container ~44 px tall instead of ~26 px, causing the HBox search
+            # bar row to be too tall and other widgets (comboboxes, checkbox) to
+            # appear misaligned within that oversized row.
+            label_visible = (
+                hasattr(self, '_qlbl')
+                and self._qlbl is not None
+                and self._qlbl.isVisible()
+            )
+            qlabel_h = (
+                self._qlbl.sizeHint().height()
+                if label_visible
+                else 0
+            )
         except Exception:
             qlabel_h = 0
 
