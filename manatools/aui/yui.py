@@ -125,7 +125,7 @@ def YUI_ensureUICreated():
 from .yui_common import (
     # Enums
     YUIDimension, YAlignmentType, YDialogType, YDialogColorMode,
-    YEventType, YEventReason, YCheckBoxState, YButtonRole,
+    YEventType, YEventReason, YCheckBoxState, YButtonRole, YLogViewFocus,
     # Base classes
     YWidget, YSingleChildContainerWidget, YSelectionWidget,
     YSimpleInputField, YItem, YTreeItem, YTableHeader, YTableItem, YTableCell,
@@ -143,7 +143,7 @@ from .yui_common import (
 __all__ = [
     'YUI', 'YUI_ui', 'YUI_widgetFactory', 'YUI_app', 'YUI_application', 'YUI_yApp',
     'YUIDimension', 'YAlignmentType', 'YDialogType', 'YDialogColorMode',
-    'YEventType', 'YEventReason', 'YCheckBoxState', 'YButtonRole',
+    'YEventType', 'YEventReason', 'YCheckBoxState', 'YButtonRole', 'YLogViewFocus',
     'YWidget', 'YSingleChildContainerWidget', 'YSelectionWidget', 
     'YSimpleInputField', 'YItem', 'YTreeItem', 'YTableHeader', 'YTableItem', 'YTableCell',
     'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YTimeoutEvent', 'YCancelEvent',

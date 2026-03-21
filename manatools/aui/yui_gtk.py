@@ -896,14 +896,20 @@ class YWidgetFactoryGtk:
         """Create a DateField widget (GTK backend)."""
         return YDateFieldGtk(parent, label)
 
-    def createLogView(self, parent, label, visibleLines, storedLines=0):
-        """Create a LogView widget (GTK backend)."""
-        from .backends.gtk import YLogViewGtk
-        try:
-            return YLogViewGtk(parent, label, visibleLines, storedLines)
-        except Exception as e:
-            logging.getLogger(__name__).exception("Failed to create YLogViewGtk: %s", e)
-            raise
+    def createLogView(self, parent, label, visibleLines, storedLines=0,
+                      focus=YLogViewFocus.HEAD, reverse=False):
+        """Create a LogView widget (GTK backend).
+
+        Parameters
+        ----------
+        focus : YLogViewFocus, optional
+            ``HEAD`` (default) keeps the viewport at the top;
+            ``TAIL`` follows the last line on every append.
+        reverse : bool
+            When ``True`` new lines are prepended so the display is newest-first.
+        """
+        return YLogViewGtk(parent, label, visibleLines, storedLines,
+                               focus=focus, reverse=reverse)
 
     def createTimeField(self, parent, label):
         """Create a TimeField widget (GTK backend)."""

@@ -475,14 +475,20 @@ class YWidgetFactoryQt:
         """Create a DateField widget (Qt backend)."""
         return YDateFieldQt(parent, label)
 
-    def createLogView(self, parent, label, visibleLines, storedLines=0):
-        """Create a LogView widget (Qt backend)."""
-        from .backends.qt import YLogViewQt
-        try:
-            return YLogViewQt(parent, label, visibleLines, storedLines)
-        except Exception as e:
-            logging.getLogger(__name__).exception("Failed to create YLogViewQt: %s", e)
-            raise
+    def createLogView(self, parent, label, visibleLines, storedLines=0,
+                      focus=YLogViewFocus.HEAD, reverse=False):
+        """Create a LogView widget (Qt backend).
+
+        Parameters
+        ----------
+        focus : YLogViewFocus, optional
+            ``HEAD`` (default) keeps the viewport at the top;
+            ``TAIL`` follows the last line on every append.
+        reverse : bool
+            When ``True`` new lines are prepended so the display is newest-first.
+        """
+        return YLogViewQt(parent, label, visibleLines, storedLines,
+                              focus=focus, reverse=reverse)
 
     def createTimeField(self, parent, label):
         """Create a TimeField widget (Qt backend)."""

@@ -55,6 +55,24 @@ class YButtonRole(Enum):
     YCancelButton = 2
     YHelpButton = 3
 
+class YLogViewFocus(Enum):
+    """Scroll-focus policy for YLogView widgets.
+
+    HEAD
+        The viewport is anchored to the first (oldest) line.  New lines
+        appended at the bottom do **not** move the viewport.  This is the
+        default behaviour used e.g. for debug consoles where the user
+        wants to read from the beginning.
+
+    TAIL
+        The viewport follows the last (newest) line.  Every call to
+        :meth:`appendLines` scrolls the view to the bottom so the freshly
+        added content is always visible.  Typical use-case: live
+        transaction/download progress logs.
+    """
+    HEAD = 0   # anchor at first line (default)
+    TAIL = 1   # follow last line on every append
+
 # Exceptions
 class YUIException(Exception):
     pass

@@ -16,10 +16,37 @@ from ...yui_common import *
 
 class YLogViewCurses(YWidget):
     """ncurses backend for YLogView: renders a scrollable output-only log area.
-    - Stores lines with optional retention limit (storedLines==0 means unlimited).
-    - Stretchable horizontally and vertically.
+
+    Parameters
+    ----------
+    parent : YWidget, optional
+        Parent widget in the AUI hierarchy.
+    label : str
+        Optional caption drawn above the text area.
+    visibleLines : int
+        Minimum number of text rows shown (used as a hint by the layout).
+    storedLines : int
+        Maximum number of lines retained in memory (0 = unlimited).
+    focus : YLogViewFocus
+        Scroll-focus policy:
+
+        * ``YLogViewFocus.HEAD`` *(default)* — the scroll offset stays
+          where it is when new lines arrive; the user starts at the top.
+        * ``YLogViewFocus.TAIL`` — the scroll offset is set to the last
+          line on every :meth:`appendLines` call, so the newest content
+          is always visible.
+    reverse : bool
+        When ``True`` the display order is **newest-first**: the line most
+        recently appended appears at the *top* of the widget and older
+        lines are pushed downward.  ``False`` (default) keeps the natural
+        insertion order (oldest at top, newest at bottom).
+
+        In *reverse* mode the scroll offset is *not* auto-adjusted on
+        append because the newest line is already at position 0.
     """
-    def __init__(self, parent=None, label: str = "", visibleLines: int = 10, storedLines: int = 0):
+    def __init__(self, parent=None, label: str = "", visibleLines: int = 10,
+                 storedLines: int = 0, focus: 'YLogViewFocus' = None,
+                 reverse: bool = False):
         super().__init__(parent)
         self._logger = logging.getLogger(f"manatools.aui.ncurses.{self.__class__.__name__}")
         self._label = label or ""
@@ -27,6 +54,12 @@ class YLogViewCurses(YWidget):
         self._max_lines = max(0, int(storedLines or 0))
         self._lines = []
         self._backend_widget = self
+        if focus is None:
+            focus = YLogViewFocus.HEAD
+        self._focus = focus
+        self._reverse = bool(reverse)
+        self._logger.debug(
+            "YLogViewCurses init: focus=%s reverse=%s", self._focus, self._reverse)
         # focus + scrolling state
         self._can_focus = True
         self._focused = False
@@ -75,14 +108,61 @@ class YLogViewCurses(YWidget):
         return self._lines[-1] if self._lines else ""
 
     def appendLines(self, text: str):
+        """Append one or more lines to the log.
+
+        ``self._lines`` is **always** kept in chronological order (oldest at
+        index 0, newest at index ``-1``).  The *reverse* flag only controls
+        which physical array index maps to each display row inside
+        :meth:`_draw`; it never changes the storage order.
+
+        Automatic scrolling:
+
+        * ``TAIL`` → advance ``_scroll_y`` so that the **bottom** of the
+          display is in view (newest line in normal mode, oldest in reverse).
+        * ``HEAD`` → no change to ``_scroll_y``.
+        """
         try:
             if text is None:
                 return
-            for ln in str(text).splitlines():
-                self._lines.append(ln)
+            new_lines = str(text).splitlines()
+            self._lines.extend(new_lines)
             self._trim_if_needed()
+            if self._focus == YLogViewFocus.TAIL:
+                # Set scroll to show the last display row.  _draw will clamp.
+                self._scroll_y = max(0, len(self._lines) - self._visible)
+                self._logger.debug(
+                    "appendLines(TAIL): appended %d line(s), scroll_y=%d",
+                    len(new_lines), self._scroll_y)
+            else:
+                self._logger.debug(
+                    "appendLines(HEAD): appended %d line(s), scroll_y unchanged",
+                    len(new_lines))
         except Exception:
             self._logger.exception("appendLines failed")
+
+    def focus(self) -> 'YLogViewFocus':
+        """Return the current scroll-focus policy."""
+        return self._focus
+
+    def setFocus(self, focus: 'YLogViewFocus'):
+        """Change the scroll-focus policy at runtime."""
+        self._focus = focus
+        self._logger.debug("setFocus: %s", focus)
+
+    def reverse(self) -> bool:
+        """Return whether newest-first display order is active."""
+        return self._reverse
+
+    def setReverse(self, reverse: bool):
+        """Toggle newest-first display order.
+
+        Only the *display* direction is changed; ``self._lines`` is always
+        kept in chronological order and is never mutated here.  The scroll
+        offset is reset to 0 so the top of the new view is shown.
+        """
+        self._reverse = bool(reverse)
+        self._logger.debug("setReverse: %s", self._reverse)
+        self._scroll_y = 0
 
     def clearText(self):
         self._lines = []
@@ -151,7 +231,13 @@ class YLogViewCurses(YWidget):
 
             # draw visible lines with horizontal scroll
             for i in range(content_h):
-                idx = self._scroll_y + i
+                # In reverse mode the top display row maps to the newest line
+                # (_lines[-1]) and the bottom row to the oldest (_lines[0]).
+                # _scroll_y always counts from the "top of the virtual display".
+                if self._reverse:
+                    idx = total_lines - 1 - (self._scroll_y + i)
+                else:
+                    idx = self._scroll_y + i
                 s = self._lines[idx] if 0 <= idx < total_lines else ""
                 try:
                     window.addstr(line + i, x, (s[self._scroll_x:self._scroll_x + content_w]).ljust(content_w))
