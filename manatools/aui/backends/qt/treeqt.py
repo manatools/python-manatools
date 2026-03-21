@@ -555,6 +555,14 @@ class YTreeQt(YSelectionWidget):
             pass
         return None
 
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setVisible(bool(visible))
+        except Exception:
+            self._logger.exception("setVisible failed")
+
     def _set_backend_enabled(self, enabled):
         """Enable/disable the tree widget and propagate to logical items/widgets."""
         try:

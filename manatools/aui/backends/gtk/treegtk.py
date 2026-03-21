@@ -959,6 +959,14 @@ class YTreeGtk(YSelectionWidget):
         self._immediate = on
         self.setNotify(on)
 
+    def setVisible(self, visible=True):
+        super().setVisible(visible)
+        try:
+            if self._backend_widget is not None:
+                self._backend_widget.set_visible(bool(visible))
+        except Exception:
+            self._logger.exception("setVisible failed")
+
     def _set_backend_enabled(self, enabled):
         try:
             if self._backend_widget is not None:
