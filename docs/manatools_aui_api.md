@@ -126,6 +126,21 @@ class YButtonRole(Enum):
     YHelpButton   = 3
 ```
 
+### YLogViewFocus
+
+Controls the automatic-scroll policy of a `YLogView` widget.
+
+```python
+class YLogViewFocus(Enum):
+    HEAD = 0   # anchor at first line — no auto-scroll on append (default)
+    TAIL = 1   # follow last line  — scroll to newest on every append
+```
+
+| Value | Behaviour |
+|---|---|
+| `HEAD` | The viewport stays where it is when `appendLines()` is called. The user must scroll manually to see new content. |
+| `TAIL` | After every `appendLines()` call the widget automatically scrolls to the **end of the rendered text**. In **normal order** (oldest-at-top) the end is the newest line; in **reverse order** (newest-at-top) the end is the oldest line. The same scroll is applied when the widget is first shown if lines were added before the dialog was displayed. |
+
 ---
 
 ## 3. Exception Classes
@@ -665,10 +680,81 @@ w.value()     -> str
 ### 8.15 LogView
 
 ```python
-factory.createLogView(parent, label: str, visibleLines: int, storedLines: int = 0) -> YWidget
+factory.createLogView(
+    parent,
+    label: str,
+    visibleLines: int,
+    storedLines: int = 0,
+    focus: YLogViewFocus = YLogViewFocus.HEAD,
+    reverse: bool = False,
+) -> YWidget
 ```
 
-A scrollable, append-only text log area. `storedLines` is a hint for the ring-buffer depth (0 = unlimited on most backends).
+A scrollable, append-only text log area.
+
+| Parameter | Description |
+|---|---|
+| `label` | Optional caption drawn above the text area. |
+| `visibleLines` | Minimum number of text rows shown. |
+| `storedLines` | Ring-buffer depth: the widget retains at most this many lines (0 = unlimited). |
+| `focus` | Scroll-focus policy (see `YLogViewFocus`). `HEAD` (default) keeps the viewport pinned; `TAIL` auto-scrolls to the **end of the rendered text** on every `appendLines()` and also when the widget first becomes visible (if lines were pre-loaded before the dialog was shown). |
+| `reverse` | Display order. `False` (default) = oldest line at the top, newest at the bottom. `True` = newest line at the top, oldest at the bottom. The internal buffer is **always** stored in chronological order; `reverse` only changes the rendering direction. |
+
+#### Methods
+
+```python
+lv.appendLines(text: str)          # append one or more newline-separated lines
+lv.clearText()                     # remove all lines
+lv.logText()        -> str         # all retained lines joined with '\n'
+lv.setLogText(text: str)           # replace entire content
+lv.lastLine()       -> str         # last line in retained buffer
+lv.lines()          -> int         # number of retained lines
+lv.label()          -> str
+lv.setLabel(label: str)
+lv.visibleLines()   -> int
+lv.setVisibleLines(n: int)
+lv.maxLines()       -> int
+lv.setMaxLines(n: int)
+
+# Focus and display-order accessors (runtime changeable)
+lv.focus()          -> YLogViewFocus
+lv.setFocus(f: YLogViewFocus)      # change scroll policy without clearing
+lv.reverse()        -> bool
+lv.setReverse(r: bool)             # flip display order; internal buffer unchanged
+```
+
+#### Usage examples
+
+```python
+from manatools.aui.yui import YLogViewFocus
+
+# --- TAIL mode: transaction log that always shows the latest message ---
+# appendLines() scrolls to the bottom (newest line in normal order).
+# Also works correctly if lines are pre-loaded before the dialog is shown.
+tx_log = factory.createLogView(
+    vbox, "Transaction log", visibleLines=20, storedLines=2000,
+    focus=YLogViewFocus.TAIL)
+tx_log.appendLines("Resolving dependencies...")   # viewport scrolls to bottom
+
+# --- TAIL + reverse mode: journal-style, newest at top, auto-scroll to bottom ---
+# Display order: newest first (top). TAIL scrolls to the END of the rendered text,
+# which in reverse order is the OLDEST line (bottom of the widget).
+# This is the geometrical opposite of HEAD+normal: both show the oldest line
+# in the viewport, but in reverse order the newest line is still visible at top.
+journal = factory.createLogView(
+    vbox, "Recent events", visibleLines=10, storedLines=500,
+    focus=YLogViewFocus.TAIL, reverse=True)
+journal.appendLines("Service started")   # viewport scrolls to bottom (oldest line)
+
+# --- HEAD mode (default): progress trace, user scrolls manually ---
+trace = factory.createLogView(vbox, "Trace", 8)
+trace.appendLines("Build started\nCompiling foo.c\nCompiling bar.c")
+# viewport stays at line 1 even after 100 more appends
+
+# --- Runtime policy change ---
+trace.setFocus(YLogViewFocus.TAIL)  # start following new lines
+trace.setReverse(True)              # flip to newest-first; existing lines reversed
+```
 
 ### 8.16 Frame
 
