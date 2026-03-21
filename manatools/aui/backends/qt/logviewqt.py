@@ -243,7 +243,11 @@ class YLogViewQt(YWidget):
         lay.addWidget(txt)
         self._text = txt
         self._apply_preferred_height()
-        self._update_display()
+        # Respect the focus policy: if lines were already added before the
+        # backend widget was built (the common case when appendLines is called
+        # on a freshly-created widget before the dialog is shown), we must
+        # re-play the initial scroll so TAIL views start at the bottom.
+        self._update_display(scroll_end=(self._focus == YLogViewFocus.TAIL))
         self._backend_widget = container
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
