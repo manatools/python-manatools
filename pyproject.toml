@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "python-manatools"
+version = "0.99.0"
+description = "Framework to build ManaTools applications"
+license = "LGPL-2.1-or-later"
+readme = "README.md"
+homepage = "https://github.com/manatools/python-manatools"
+repository = "https://github.com/manatools/python-manatools"
+
+authors = [
+   "Angelo Naselli <anaselli@linux.it>",
+]
+maintainers = [
+   "Angelo Naselli <anaselli@linux.it>",
+   "Neal Gompa <neal@gompa.dev>",
+]
+
+packages = [
+   { include = "manatools"},
+]
+
+include = [
+   { path = "NEWS", format = "sdist" },
+]
+
+classifiers = [
+   # classifier: http://pypi.python.org/pypi?%3Aaction=list_classifiers
+   "Development Status :: 3 - Alpha",
+   "Intended Audience :: Developers",
+   "Operating System :: POSIX :: Linux",
+   "Topic :: System :: Operating System",
+]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/manatools/python-manatools/issues"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+dbus-python = "*"
+python-gettext = "*"
+PyYAML = "*"
+
+# Optional dependencies for gui backend extras
+PySide6 = { version = ">=6.5", optional = true }
+PyCairo = { version = "*", optional = true }
+PyGObject = { version = ">=3.42", optional = true }
+
+[tool.poetry.extras]
+qt = [ "PySide6" ]
+gtk = [ "PyCairo", "PyGObject" ]
+
+[build-system]
+requires = ["poetry-core>=1.2.0"]
+build-backend = "poetry.core.masonry.api"

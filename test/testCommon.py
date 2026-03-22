@@ -21,7 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import manatools.ui.basedialog as basedialog
 import manatools.ui.common as common
-import manatools.version as manatools
 from manatools.aui import yui
 # allow running from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -63,7 +62,7 @@ class TestDialog(basedialog.BaseDialog):
     self._about_dialog_size = (320, 240)
     self._about_metadata = {
       'setApplicationName': "Test Dialog",
-      'setVersion': manatools.__project_version__,
+      'setVersion': '0.0.0',
       'setAuthors': 'Angelo Naselli &lt;anaselli@linux.it&gt; <br/> Author 2 <br/> Author 3 <br/> Author 4 <br/> Author 5',
       'setDescription': "Manatools Test Dialog example",
       'setLicense': 'GPLv2',

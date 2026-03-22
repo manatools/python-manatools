@@ -9,6 +9,7 @@ See the AUI API documentation for details: [manatools AUI API](docs/manatools_au
 ## REQUIREMENTS
 
 ### Python >= 3.6
+### Poetry >= 1.2.0
 
 ### Core dependencies (always required)
 * **dbus-python** — D-Bus bindings used by `manatools.services`
@@ -38,6 +39,6 @@ pip install python-manatools
 Or from sources:
 
 ```
-python setup.py install
+poetry install
 ```
 
