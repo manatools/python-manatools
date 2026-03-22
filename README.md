@@ -8,16 +8,36 @@ See the AUI API documentation for details: [manatools AUI API](docs/manatools_au
 
 ## REQUIREMENTS
 
-### Python
-* Python 3
+### Python >= 3.6
 
-### D-Bus
-* dbus-python
+### Core dependencies (always required)
+* **dbus-python** — D-Bus bindings used by `manatools.services`
+* **PyYAML** — YAML configuration file support (`manatools.config`)
+* **python-gettext** — internationalisation helpers
 
-### UI backends (at least one)
-* GTK4: PyGObject (`gi`)
-* Qt6: PySide6
-* ncurses: Python curses module (usually in the stdlib)
+### UI backends (at least one required)
+
+#### GTK 4 backend
+* **PyGObject >= 3.42** (`gi`) — Python GObject introspection bindings
+* **GTK 4** — the GTK 4 toolkit libraries (`gtk4`)
+* **GdkPixbuf 2** — image loading for icons (`gdk-pixbuf2`)
+* **pycairo** — Cairo drawing context used by GTK widgets (`python3-cairo`)
+
+#### Qt backend
+* **PySide6 >= 6.5.0** — Qt 6 Python bindings
+
+#### ncurses backend
+* **curses** — included in the Python standard library (no extra install needed)
 
 ## INSTALLATION
+
+```
+pip install python-manatools
+```
+
+Or from sources:
+
+```
 python setup.py install
+```
+
