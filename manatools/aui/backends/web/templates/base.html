@@ -33,6 +33,15 @@
         </div>
     </main>
 
+    <!-- Busy overlay — shown via WebSocket "busy" message from Python backend -->
+    <div id="mana-busy-overlay"
+         hidden
+         role="status"
+         aria-label="Loading, please wait…">
+        <div class="spinner-border text-light" aria-hidden="true"></div>
+        <span class="visually-hidden">Loading…</span>
+    </div>
+
     <!-- Bootstrap JS bundle (Popper included, no jQuery, no CDN) -->
     <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 
