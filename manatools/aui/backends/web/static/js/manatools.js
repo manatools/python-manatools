@@ -216,10 +216,17 @@
     }
 
     function attachEventListenersToElement(root) {
-        const on = (sel, evt, fn) => root.querySelectorAll(sel).forEach(el => {
-            el.removeEventListener(evt, fn);
-            el.addEventListener(evt, fn);
-        });
+        // Include root itself when it matches the selector (e.g. when a button
+        // or input is the element that was just replaced in the DOM — it is not
+        // a descendant of itself, so querySelectorAll alone would miss it).
+        const on = (sel, evt, fn) => {
+            const elements = Array.from(root.querySelectorAll(sel));
+            if (root.matches && root.matches(sel)) elements.unshift(root);
+            elements.forEach(el => {
+                el.removeEventListener(evt, fn);
+                el.addEventListener(evt, fn);
+            });
+        };
 
         on('.mana-ypushbutton', 'click', handleButtonClick);
 
