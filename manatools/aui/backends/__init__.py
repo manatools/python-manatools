@@ -12,7 +12,7 @@ from types import ModuleType
 _logger = logging.getLogger("manatools.aui.backends")
 
 # advertised subpackages (may be absent if not installed)
-__all__ = ["gtk", "qt", "ncurses"]
+__all__ = ["gtk", "qt", "ncurses", "web"]
 
 def __getattr__(name: str) -> ModuleType:
     """
