@@ -427,6 +427,8 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(content)))
             self.end_headers()
             self.wfile.write(content)
+        except (BrokenPipeError, ConnectionResetError):
+            logger.debug("Client disconnected while serving static file %s", filename)
         except Exception as e:
             logger.exception("Error serving static file %s: %s", filename, e)
             self.send_error(500, str(e))
@@ -460,6 +462,8 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "public, max-age=3600")
             self.end_headers()
             self.wfile.write(content)
+        except (BrokenPipeError, ConnectionResetError):
+            logger.debug("Client disconnected while serving icon %s", icon_name)
         except Exception as e:
             logger.exception("Error serving icon %s: %s", icon_name, e)
             self.send_error(500, str(e))
