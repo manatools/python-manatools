@@ -1,0 +1,851 @@
+/**
+ * ManaTools Web Backend CSS
+ * Author: Matteo Pasotti <xquiet@coriolite.com>
+ * License: LGPLv2+
+ * Modern, clean styling for ManaTools applications rendered in a browser.
+ */
+
+/* ============================================
+   CSS Variables / Theme
+   ============================================ */
+:root {
+    --mana-bg-primary: #f5f5f5;
+    --mana-bg-secondary: #ffffff;
+    --mana-bg-hover: #e8e8e8;
+    --mana-bg-active: #d0d0d0;
+    
+    --mana-text-primary: #212121;
+    --mana-text-secondary: #666666;
+    --mana-text-disabled: #999999;
+    
+    --mana-border-color: #cccccc;
+    --mana-border-focus: #0066cc;
+    
+    --mana-accent: #0066cc;
+    --mana-accent-hover: #0055aa;
+    --mana-accent-light: #e6f0ff;
+    
+    --mana-success: #28a745;
+    --mana-warning: #ffc107;
+    --mana-danger: #dc3545;
+    --mana-info: #17a2b8;
+    
+    --mana-spacing-xs: 4px;
+    --mana-spacing-sm: 8px;
+    --mana-spacing-md: 16px;
+    --mana-spacing-lg: 24px;
+    --mana-spacing-xl: 32px;
+    
+    --mana-radius: 4px;
+    --mana-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --mana-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+    
+    --mana-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mana-font-size: 14px;
+    --mana-line-height: 1.5;
+}
+
+/* ============================================
+   Reset & Base
+   ============================================ */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--mana-font-family);
+    font-size: var(--mana-font-size);
+    line-height: var(--mana-line-height);
+    color: var(--mana-text-primary);
+    background-color: var(--mana-bg-primary);
+}
+
+#mana-app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================
+   Dialog
+   ============================================ */
+.mana-ydialog {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background: var(--mana-bg-secondary);
+}
+
+.mana-dialog-main {
+    flex: 1;
+}
+
+.mana-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mana-popup-container {
+    background: var(--mana-bg-secondary);
+    border-radius: var(--mana-radius);
+    box-shadow: var(--mana-shadow-lg);
+    min-width: 300px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+    padding: var(--mana-spacing-md);
+}
+
+.mana-dialog-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 300px;
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: var(--mana-radius);
+    box-shadow: var(--mana-shadow-lg);
+    overflow: auto;
+}
+
+.mana-dialog-header {
+    padding: var(--mana-spacing-sm) var(--mana-spacing-md);
+    background: var(--mana-accent);
+    color: white;
+}
+
+.mana-dialog-title {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+.mana-dialog-content {
+    padding: var(--mana-spacing-md);
+    flex: 1;
+}
+
+.mana-dialog-info .mana-dialog-header {
+    background: var(--mana-info);
+}
+
+.mana-dialog-warn .mana-dialog-header {
+    background: var(--mana-warning);
+    color: var(--mana-text-primary);
+}
+
+/* ============================================
+   Layout Containers
+   ============================================ */
+.mana-yvbox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-sm);
+    min-height: 0;
+    min-width: 0;
+}
+
+.mana-yhbox {
+    display: flex;
+    flex-direction: row;
+    gap: var(--mana-spacing-sm);
+    align-items: center;
+    min-height: 0;
+    min-width: 0;
+}
+
+.mana-yalignment {
+    display: flex;
+}
+
+.mana-yspacing {
+    display: block;
+}
+
+.mana-hspacing {
+    height: 1px;
+}
+
+.mana-vspacing {
+    width: 1px;
+}
+
+/* ============================================
+   Labels & Text
+   ============================================ */
+.mana-ylabel {
+    display: inline;
+    color: var(--mana-text-primary);
+}
+
+.mana-ylabel.mana-heading {
+    display: block;
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: var(--mana-spacing-sm) 0;
+    color: var(--mana-text-primary);
+}
+
+.mana-ylabel.mana-output {
+    font-family: monospace;
+    background: var(--mana-bg-primary);
+    padding: var(--mana-spacing-xs) var(--mana-spacing-sm);
+    border-radius: var(--mana-radius);
+}
+
+.mana-ylabel u {
+    text-decoration: underline;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+.mana-ypushbutton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--mana-spacing-xs);
+    padding: var(--mana-spacing-sm) var(--mana-spacing-md);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    background: var(--mana-bg-secondary);
+    color: var(--mana-text-primary);
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mana-ypushbutton:hover:not(:disabled) {
+    background: var(--mana-bg-hover);
+    border-color: var(--mana-accent);
+}
+
+.mana-ypushbutton:active:not(:disabled) {
+    background: var(--mana-bg-active);
+}
+
+.mana-ypushbutton:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--mana-accent-light);
+    border-color: var(--mana-border-focus);
+}
+
+.mana-ypushbutton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.mana-ypushbutton.mana-default {
+    background: var(--mana-accent);
+    border-color: var(--mana-accent);
+    color: white;
+}
+
+.mana-ypushbutton.mana-default:hover:not(:disabled) {
+    background: var(--mana-accent-hover);
+}
+
+.mana-ypushbutton.mana-icon-only {
+    padding: var(--mana-spacing-sm);
+}
+
+.mana-button-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* ============================================
+   Input Fields
+   ============================================ */
+.mana-yinputfield-container,
+.mana-intfield-container,
+.mana-datefield-container,
+.mana-timefield-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-yinputfield,
+.mana-yintfield,
+.mana-ydatefield,
+.mana-ytimefield {
+    padding: var(--mana-spacing-sm);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--mana-bg-secondary);
+    transition: border-color 0.15s ease;
+}
+
+.mana-yinputfield:focus,
+.mana-yintfield:focus,
+.mana-ydatefield:focus,
+.mana-ytimefield:focus {
+    outline: none;
+    border-color: var(--mana-border-focus);
+    box-shadow: 0 0 0 2px var(--mana-accent-light);
+}
+
+.mana-yinputfield:disabled,
+.mana-yintfield:disabled {
+    background: var(--mana-bg-primary);
+    color: var(--mana-text-disabled);
+}
+
+.mana-inputfield-label,
+.mana-intfield-label,
+.mana-datefield-label,
+.mana-timefield-label {
+    font-weight: 500;
+    color: var(--mana-text-secondary);
+}
+
+/* ============================================
+   Checkboxes & Radio Buttons
+   ============================================ */
+.mana-checkbox-wrapper,
+.mana-radiobutton-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--mana-spacing-sm);
+    cursor: pointer;
+}
+
+.mana-ycheckbox,
+.mana-yradiobutton {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--mana-accent);
+}
+
+/* ============================================
+   ComboBox & SelectionBox
+   ============================================ */
+.mana-combobox-container,
+.mana-selectionbox-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-ycombobox,
+.mana-yselectionbox {
+    padding: var(--mana-spacing-sm);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    font-family: inherit;
+    font-size: inherit;
+    background: var(--mana-bg-secondary);
+}
+
+.mana-ycombobox:focus,
+.mana-yselectionbox:focus {
+    outline: none;
+    border-color: var(--mana-border-focus);
+    box-shadow: 0 0 0 2px var(--mana-accent-light);
+}
+
+.mana-combobox-label,
+.mana-selectionbox-label {
+    font-weight: 500;
+    color: var(--mana-text-secondary);
+}
+
+/* ============================================
+   Frame
+   ============================================ */
+.mana-yframe {
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    padding: var(--mana-spacing-md);
+    margin: var(--mana-spacing-sm) 0;
+}
+
+.mana-frame-legend {
+    padding: 0 var(--mana-spacing-sm);
+    font-weight: 500;
+    color: var(--mana-text-secondary);
+}
+
+.mana-frame-content {
+    padding-top: var(--mana-spacing-sm);
+}
+
+/* CheckBox Frame */
+.mana-ycheckboxframe {
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    padding: var(--mana-spacing-md);
+}
+
+.mana-checkboxframe-legend {
+    display: flex;
+    align-items: center;
+    gap: var(--mana-spacing-sm);
+    padding: 0 var(--mana-spacing-sm);
+}
+
+.mana-checkboxframe-content.mana-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ============================================
+   Progress Bar
+   ============================================ */
+.mana-progressbar-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-yprogressbar {
+    width: 100%;
+    height: 20px;
+    border-radius: var(--mana-radius);
+    overflow: hidden;
+}
+
+.mana-yprogressbar::-webkit-progress-bar {
+    background: var(--mana-bg-primary);
+}
+
+.mana-yprogressbar::-webkit-progress-value {
+    background: var(--mana-accent);
+}
+
+.mana-yprogressbar::-moz-progress-bar {
+    background: var(--mana-accent);
+}
+
+.mana-progressbar-text {
+    font-size: 0.9em;
+    color: var(--mana-text-secondary);
+    text-align: center;
+}
+
+/* ============================================
+   Slider
+   ============================================ */
+.mana-slider-container {
+    display: flex;
+    align-items: center;
+    gap: var(--mana-spacing-sm);
+}
+
+.mana-yslider {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    accent-color: var(--mana-accent);
+}
+
+.mana-slider-value {
+    min-width: 40px;
+    text-align: right;
+    color: var(--mana-text-secondary);
+}
+
+/* ============================================
+   MultiLine Edit
+   ============================================ */
+.mana-multilineedit-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-ymultilineedit {
+    padding: var(--mana-spacing-sm);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    font-family: inherit;
+    font-size: inherit;
+    min-height: 100px;
+    resize: vertical;
+}
+
+.mana-ymultilineedit:focus {
+    outline: none;
+    border-color: var(--mana-border-focus);
+    box-shadow: 0 0 0 2px var(--mana-accent-light);
+}
+
+/* ============================================
+   Table
+   ============================================ */
+.mana-ytable {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--mana-border-color);
+}
+
+.mana-ytable th,
+.mana-ytable td {
+    padding: var(--mana-spacing-sm);
+    text-align: left;
+    border-bottom: 1px solid var(--mana-border-color);
+}
+
+.mana-ytable th {
+    background: var(--mana-bg-primary);
+    font-weight: 600;
+}
+
+.mana-ytable tr:hover {
+    background: var(--mana-bg-hover);
+}
+
+.mana-ytable tr.selected {
+    background: var(--mana-accent-light);
+}
+
+/* ============================================
+   Tree
+   ============================================ */
+.mana-tree-container {
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    overflow: auto;
+    max-height: 300px;
+}
+
+.mana-ytree {
+    padding: var(--mana-spacing-sm);
+}
+
+.mana-tree-item {
+    padding: var(--mana-spacing-xs) var(--mana-spacing-sm);
+    cursor: pointer;
+    border-radius: var(--mana-radius);
+}
+
+.mana-tree-item:hover {
+    background: var(--mana-bg-hover);
+}
+
+.mana-tree-item.selected {
+    background: var(--mana-accent-light);
+}
+
+.mana-tree-children {
+    margin-left: var(--mana-spacing-md);
+}
+
+/* ============================================
+   RichText
+   ============================================ */
+.mana-yrichtext {
+    padding: var(--mana-spacing-md);
+    background: var(--mana-bg-secondary);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    overflow: auto;
+}
+
+/* ============================================
+   Menu Bar
+   ============================================ */
+.mana-ymenubar {
+    display: flex;
+    gap: var(--mana-spacing-xs);
+    padding: var(--mana-spacing-xs) var(--mana-spacing-sm);
+    background: var(--mana-bg-primary);
+    border-bottom: 1px solid var(--mana-border-color);
+}
+
+.mana-menu {
+    position: relative;
+}
+
+.mana-menu-label {
+    padding: var(--mana-spacing-xs) var(--mana-spacing-sm);
+    cursor: pointer;
+    border-radius: var(--mana-radius);
+    user-select: none;
+}
+
+.mana-menu-label:hover,
+.mana-menu.open .mana-menu-label {
+    background: var(--mana-bg-hover);
+}
+
+.mana-submenu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 180px;
+    background: var(--mana-bg-secondary);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    box-shadow: var(--mana-shadow);
+    z-index: 1000;
+    /* small top padding bridges the gap so mouse doesn't exit on the way down */
+    padding-top: 2px;
+}
+
+/* JS toggles .open — no CSS :hover so the menu doesn't close when
+   the cursor briefly crosses the gap between label and submenu */
+.mana-menu.open > .mana-submenu {
+    display: block;
+}
+
+.mana-menu-item {
+    padding: var(--mana-spacing-sm) var(--mana-spacing-md);
+    cursor: pointer;
+}
+
+.mana-menu-item:hover {
+    background: var(--mana-bg-hover);
+}
+
+.mana-menu-item.disabled {
+    color: var(--mana-text-disabled);
+    cursor: not-allowed;
+}
+
+.mana-menu-separator {
+    margin: var(--mana-spacing-xs) 0;
+    border: none;
+    border-top: 1px solid var(--mana-border-color);
+}
+
+/* ============================================
+   Tabs (DumbTab)
+   ============================================ */
+.mana-ydumbtab {
+    display: flex;
+    flex-direction: column;
+}
+
+.mana-tab-bar {
+    display: flex;
+    gap: var(--mana-spacing-xs);
+    border-bottom: 1px solid var(--mana-border-color);
+    padding: 0 var(--mana-spacing-sm);
+}
+
+.mana-tab {
+    padding: var(--mana-spacing-sm) var(--mana-spacing-md);
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+    font-size: inherit;
+}
+
+.mana-tab:hover {
+    background: var(--mana-bg-hover);
+}
+
+.mana-tab.selected {
+    border-bottom-color: var(--mana-accent);
+    color: var(--mana-accent);
+}
+
+.mana-tab-content {
+    padding: var(--mana-spacing-md);
+}
+
+/* ============================================
+   Log View
+   ============================================ */
+.mana-logview-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-ylogview {
+    background: var(--mana-bg-primary);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+}
+
+.mana-logview-content {
+    margin: 0;
+    padding: var(--mana-spacing-sm);
+    font-family: monospace;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ============================================
+   Paned
+   ============================================ */
+.mana-ypaned {
+    display: flex;
+    gap: 0;
+}
+
+.mana-paned-section {
+    overflow: auto;
+}
+
+.mana-paned-divider {
+    background: var(--mana-border-color);
+    cursor: col-resize;
+}
+
+.mana-paned-horizontal .mana-paned-divider {
+    width: 4px;
+    cursor: col-resize;
+}
+
+.mana-paned-vertical .mana-paned-divider {
+    height: 4px;
+    cursor: row-resize;
+}
+
+.mana-paned-divider:hover {
+    background: var(--mana-accent);
+}
+
+/* ============================================
+   Image
+   ============================================ */
+.mana-yimage {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ============================================
+   Utilities
+   ============================================ */
+
+/* Only visually disable real form controls, never layout containers.
+   Applying opacity to a div with disabled="" would grey out ALL children
+   including fully-enabled widgets inside a temporarily-disabled HBox. */
+button[disabled],
+input[disabled],
+select[disabled],
+textarea[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+}
+
+[style*="display: none"] {
+    display: none !important;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+    outline: 2px solid var(--mana-accent);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   Layout height chain (fixes paned collapse)
+   ============================================ */
+
+/* The full-height chain: html → body → #mana-app → dialog → content → paned */
+html, body {
+    height: 100%;
+}
+
+#mana-app {
+    height: 100%;
+}
+
+.mana-dialog-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.mana-dialog-content {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* VBox / HBox inside dialog content should participate in flex growth */
+.mana-dialog-content > .mana-yvbox,
+.mana-dialog-content > .mana-yhbox,
+.mana-dialog-content > .mana-yalignment {
+    flex: 1;
+    min-height: 0;
+}
+
+/* VBox / HBox nested inside an alignment container should also stretch */
+.mana-yalignment > .mana-yvbox,
+.mana-yalignment > .mana-yhbox {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+/* VBox that contains a paned should stretch to fill — uses :has() (supported in all modern browsers) */
+.mana-yvbox:has(> .mana-ypaned) {
+    flex: 1;
+}
+
+/* VBox/HBox inside a paned section should fill the section */
+.mana-paned-section > .mana-yvbox,
+.mana-paned-section > .mana-yhbox,
+.mana-paned-section > .mana-yalignment {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+}
+
+/* Paned sections must constrain height so children don't overflow */
+.mana-ypaned {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.mana-paned-section {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+}
+
+.mana-paned-vertical {
+    flex-direction: column;
+}
+
+.mana-paned-horizontal {
+    flex-direction: row;
+}
+
+/* Tree and table inside paned sections should fill available space */
+.mana-tree-container {
+    height: 100%;
+    max-height: none;
+    overflow: auto;
+}
+
+.mana-ytable {
+    display: block;
+    overflow: auto;
+    max-height: 100%;
+}
+
+/* YAlignment with stretch should grow */
+.mana-yalignment {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
