@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified YUI implementation that automatically selects the best available backend.
-Priority: Qt > GTK > NCurses
+Priority: Qt > GTK > NCurses > Web (Web requires explicit selection)
 """
 
 import os
@@ -12,6 +12,7 @@ class Backend(Enum):
     QT = "qt"
     GTK = "gtk" 
     NCURSES = "ncurses"
+    WEB = "web"
 
 class YUI:
     _instance = None
@@ -67,6 +68,16 @@ class YUI:
             return Backend.GTK
         if backend_env == 'ncurses':
             return Backend.NCURSES
+        if backend_env == 'web':
+            return Backend.WEB
+
+        # Auto-detect based on available imports
+        # Require PySide6 (Qt6)
+        try:
+            import PySide6.QtWidgets
+            return Backend.QT
+        except ImportError:
+            pass
 
         # ── 2. Desktop session present ─────────────────────────────────────
         xdg = os.environ.get('XDG_CURRENT_DESKTOP', '')
@@ -117,14 +128,22 @@ class YUI:
         # ── 3. No desktop → headless / TTY → NCurses ──────────────────────
         if _try_ncurses():
             return Backend.NCURSES
+<<<<<<< HEAD
         raise RuntimeError(
             "No UI backend available: running headless but curses is not installed."
         )
+=======
+        except ImportError:
+            pass
+            
+        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), curses or set MUI_BACKEND=web")
+>>>>>>> 087ea1d (Add web backend support to the selector)
     
     @classmethod
     def ui(cls):
         if cls._instance is None:
             cls._backend = cls._detect_backend()
+<<<<<<< HEAD
             import logging as _log
             _log.getLogger(__name__).info("Selected UI backend: %s", cls._backend)
 
@@ -134,6 +153,19 @@ class YUI:
                 Backend.NCURSES: ('.yui_curses', 'YUICurses'),
             }
             if cls._backend not in _backend_map:
+=======
+            print(f"Detected backend: {cls._backend}")
+            
+            if cls._backend == Backend.QT:
+                from .yui_qt import YUIQt as YUIImpl
+            elif cls._backend == Backend.GTK:
+                from .yui_gtk import YUIGtk as YUIImpl
+            elif cls._backend == Backend.NCURSES:
+                from .yui_curses import YUICurses as YUIImpl
+            elif cls._backend == Backend.WEB:
+                from .yui_web import YUIWeb as YUIImpl
+            else:
+>>>>>>> 087ea1d (Add web backend support to the selector)
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
 
             module_path, class_name = _backend_map[cls._backend]
