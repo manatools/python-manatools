@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified YUI implementation that automatically selects the best available backend.
-Priority: Qt > GTK > NCurses
+Priority: Qt > GTK > NCurses > Web (Web requires explicit selection)
 """
 
 import os
@@ -12,6 +12,7 @@ class Backend(Enum):
     QT = "qt"
     GTK = "gtk" 
     NCURSES = "ncurses"
+    WEB = "web"
 
 class YUI:
     _instance = None
@@ -28,6 +29,8 @@ class YUI:
             return Backend.GTK
         elif backend_env == 'ncurses':
             return Backend.NCURSES
+        elif backend_env == 'web':
+            return Backend.WEB
         
         # Auto-detect based on available imports
         # Require PySide6 (Qt6)
@@ -52,7 +55,7 @@ class YUI:
         except ImportError:
             pass
             
-        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), or curses.")
+        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), curses or set MUI_BACKEND=web")
     
     @classmethod
     def ui(cls):
@@ -66,6 +69,8 @@ class YUI:
                 from .yui_gtk import YUIGtk as YUIImpl
             elif cls._backend == Backend.NCURSES:
                 from .yui_curses import YUICurses as YUIImpl
+            elif cls._backend == Backend.WEB:
+                from .yui_web import YUIWeb as YUIImpl
             else:
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
                 
