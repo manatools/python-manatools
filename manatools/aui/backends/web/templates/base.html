@@ -1,0 +1,42 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+
+    <!-- Bootstrap 5.3 – served locally, no CDN dependency -->
+    <link rel="stylesheet" href="/static/vendor/bootstrap/bootstrap.min.css">
+
+    <!-- Application overrides (loaded after Bootstrap so specificity wins) -->
+    <link rel="stylesheet" href="/static/css/manatools.css">
+</head>
+<body>
+
+    <!-- ── Top bar ─────────────────────────────────────────────────────── -->
+    <nav class="navbar navbar-dark bg-dark px-3 py-2">
+        <span class="navbar-brand mb-0 h1 fs-5">{{ app_name }}</span>
+
+        <!-- Connection status badge (updated by manatools.js) -->
+        <span id="mana-conn-badge"
+              class="badge text-bg-secondary ms-auto"
+              title="WebSocket connection status"
+              aria-live="polite">
+            connecting…
+        </span>
+    </nav>
+
+    <!-- ── Main content ────────────────────────────────────────────────── -->
+    <main class="container-fluid py-3">
+        <div id="mana-app">
+            {{ dialog_html }}
+        </div>
+    </main>
+
+    <!-- Bootstrap JS bundle (Popper included, no jQuery, no CDN) -->
+    <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+
+    <!-- ── Application event layer (fetch + WebSocket, no jQuery) ──────── -->
+    <script src="/static/js/manatools.js"></script>
+</body>
+</html>
