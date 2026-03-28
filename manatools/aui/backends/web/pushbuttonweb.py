@@ -92,14 +92,22 @@ class YPushButtonWeb(YWidget):
         
         # Build button content
         content = ""
-        
-        # Add icon if present
+
+        # Render icon as an <img> fetched from the /icon/ endpoint.
+        # onerror hides the image silently when the icon is not found on the
+        # server, so the button still shows its text label as fallback.
         if self._icon_name:
-            content += f'<span class="mana-button-icon" data-icon="{escape_html(self._icon_name)}"></span>'
-        
-        # Add label (unless icon-only)
-        if not self._icon_only:
+            safe_name = escape_html(self._icon_name)
+            content += (
+                f'<img class="mana-button-icon" src="/icon/{safe_name}"'
+                f' alt="{safe_name}"'
+                f' onerror="this.style.display=\'none\'">'
+            )
+
+        # Always render the label text: it acts as a fallback when the icon
+        # cannot be resolved, and improves accessibility in all cases.
+        if self._label:
             label_html = format_label_with_shortcut(self._label)
             content += f'<span class="mana-button-label">{label_html}</span>'
-        
+
         return f'<button {attrs}>{content}</button>'

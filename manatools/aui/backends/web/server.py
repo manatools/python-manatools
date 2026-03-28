@@ -15,6 +15,8 @@ import socketserver
 import threading
 import json
 import os
+import re
+import glob as _glob
 import logging
 import hashlib
 import base64
@@ -237,6 +239,69 @@ class PageBuilder:
 
 
 # ---------------------------------------------------------------------------
+# XDG icon lookup
+# ---------------------------------------------------------------------------
+
+_ICON_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
+
+_ICON_SEARCH_DIRS = [
+    "/usr/share/icons/hicolor",
+    "/usr/share/icons/breeze",
+    "/usr/share/icons/Adwaita",
+    "/usr/share/icons/breeze-dark",
+    "/usr/local/share/icons/hicolor",
+]
+
+_ICON_SIZES = ["22x22", "24x24", "22", "24", "scalable", "16x16", "32x32", "48x48"]
+_ICON_CATEGORIES = ["actions", "apps", "emblems", "status", "places", "mimetypes"]
+_ICON_EXTENSIONS = [(".svg", "image/svg+xml"), (".png", "image/png")]
+
+
+def _find_icon_file(icon_name: str) -> Optional[tuple]:
+    """Return (filepath, mimetype) for a named XDG icon, or None if not found.
+
+    Searches standard system icon theme directories for the given icon name.
+    The icon_name must contain only [a-zA-Z0-9_-] characters (validated by caller).
+    Prefers SVG (scalable) over PNG; prefers 22px over other sizes.
+    """
+    # Structured search: known roots × sizes × categories
+    for root in _ICON_SEARCH_DIRS:
+        if not os.path.isdir(root):
+            continue
+        for size in _ICON_SIZES:
+            for category in _ICON_CATEGORIES:
+                for ext, mime in _ICON_EXTENSIONS:
+                    path = os.path.join(root, size, category, icon_name + ext)
+                    if os.path.isfile(path):
+                        return path, mime
+                # Also try "scalable" subfolder under size (some themes)
+                for ext, mime in _ICON_EXTENSIONS:
+                    path = os.path.join(root, "scalable", category, icon_name + ext)
+                    if os.path.isfile(path):
+                        return path, mime
+
+    # Broader glob over all installed icon themes
+    for root in ["/usr/share/icons", "/usr/local/share/icons",
+                 os.path.expanduser("~/.local/share/icons")]:
+        if not os.path.isdir(root):
+            continue
+        for ext, mime in _ICON_EXTENSIONS:
+            matches = _glob.glob(
+                os.path.join(root, "**", icon_name + ext), recursive=True
+            )
+            if matches:
+                return matches[0], mime
+
+    # Fallback: /usr/share/pixmaps
+    for ext, mime in _ICON_EXTENSIONS:
+        path = f"/usr/share/pixmaps/{icon_name}{ext}"
+        if os.path.isfile(path):
+            return path, mime
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Request handler
 # ---------------------------------------------------------------------------
 
@@ -270,6 +335,8 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_websocket()
         elif path.startswith("/static/"):
             self._serve_static(path[len("/static/"):])
+        elif path.startswith("/icon/"):
+            self._serve_icon(path[len("/icon/"):])
         elif path == "/events":
             self._serve_sse()
         else:
@@ -362,6 +429,39 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(content)
         except Exception as e:
             logger.exception("Error serving static file %s: %s", filename, e)
+            self.send_error(500, str(e))
+
+    # ------------------------------------------------------------------
+    # Icon serving
+    # ------------------------------------------------------------------
+
+    def _serve_icon(self, icon_name: str):
+        """Serve a system icon by its XDG icon name.
+
+        Only names matching [a-zA-Z0-9_-] are accepted.  The file is looked up
+        via :func:`_find_icon_file` and served directly from disk.
+        """
+        if not _ICON_NAME_RE.match(icon_name):
+            self.send_error(400, "Invalid icon name")
+            return
+
+        result = _find_icon_file(icon_name)
+        if result is None:
+            self.send_error(404, "Icon not found")
+            return
+
+        filepath, mime = result
+        try:
+            with open(filepath, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            logger.exception("Error serving icon %s: %s", icon_name, e)
             self.send_error(500, str(e))
 
     # ------------------------------------------------------------------
