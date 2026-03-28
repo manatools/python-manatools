@@ -469,6 +469,21 @@ class YDialogWeb(YSingleChildContainerWidget):
             self._pending_updates[widget_id] = timer
             timer.start()
 
+    def _flush_all_pending_updates(self):
+        """Cancel all coalesce timers and broadcast every queued widget update immediately.
+
+        Called by normalCursor() so that the busy overlay is only hidden after
+        all pending DOM updates have already been sent to the browser.
+        """
+        with self._pending_lock:
+            pending = list(self._pending_updates.items())
+            self._pending_updates.clear()
+
+        for _widget_id, timer in pending:
+            timer.cancel()
+            if timer.args:
+                self._flush_update(timer.args[0])
+
     def _flush_update(self, widget):
         """Actually broadcast the update for a widget (called by the timer).
  

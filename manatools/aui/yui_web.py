@@ -149,6 +149,10 @@ class YApplicationWeb:
             from .backends.web.dialogweb import YDialogWeb
             root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
             if root:
+                if not state:
+                    # Flush all queued widget updates before hiding the overlay
+                    # so the browser receives and applies them first.
+                    root._flush_all_pending_updates()
                 root._broadcast({"type": "busy", "state": state})
         except Exception:
             pass
