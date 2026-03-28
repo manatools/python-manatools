@@ -82,6 +82,23 @@ body {
     flex: 1;
 }
 
+/* === Busy overlay === */
+#mana-busy-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 2000;
+    cursor: wait;
+}
+
+/* Prevent interaction with everything beneath the overlay */
+#mana-busy-overlay ~ * {
+    pointer-events: none;
+}
+
 .mana-popup-overlay {
     position: fixed;
     inset: 0;

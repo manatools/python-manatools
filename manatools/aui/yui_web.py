@@ -137,12 +137,21 @@ class YApplicationWeb:
         return True
 
     def busyCursor(self):
-        """No-op for web backend (could send busy indicator to browser)."""
-        pass
+        """Show a full-screen busy overlay in the browser."""
+        self._broadcast_busy(True)
 
     def normalCursor(self):
-        """No-op for web backend."""
-        pass
+        """Hide the busy overlay in the browser."""
+        self._broadcast_busy(False)
+
+    def _broadcast_busy(self, state: bool):
+        try:
+            from .backends.web.dialogweb import YDialogWeb
+            root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
+            if root:
+                root._broadcast({"type": "busy", "state": state})
+        except Exception:
+            pass
 
     def askForExistingDirectory(self, startDir: str, headline: str):
         """Not supported in web backend - returns empty string."""

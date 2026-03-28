@@ -135,9 +135,18 @@
             case 'hide_modal':
                 hideModal(message.dialog_id);
                 break;
+            case 'busy':
+                setBusy(message.state);
+                break;
             default:
                 console.log('Unknown message type:', message.type);
         }
+    }
+
+    function setBusy(state) {
+        const overlay = document.getElementById('mana-busy-overlay');
+        if (!overlay) return;
+        overlay.hidden = !state;
     }
 
     function showModal(dialogId, html) {
