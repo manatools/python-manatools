@@ -206,7 +206,10 @@ class YWidgetFactoryWeb:
 
     def createIconButton(self, parent, iconName, fallbackTextLabel):
         from .backends.web import YPushButtonWeb
-        return YPushButtonWeb(parent, label=fallbackTextLabel, icon_name=iconName, icon_only=True)
+        # icon_only=False: always render the text label alongside the icon.
+        # The label acts as a visible fallback when the icon file cannot be
+        # found on the server, which is the common case on web-only deployments.
+        return YPushButtonWeb(parent, label=fallbackTextLabel, icon_name=iconName, icon_only=False)
 
     def createInputField(self, parent, label, password_mode=False):
         from .backends.web import YInputFieldWeb
