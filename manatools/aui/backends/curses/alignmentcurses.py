@@ -16,7 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
-from .commoncurses import pixels_to_chars
+from .commoncurses import pixels_to_chars, _curses_recursive_min_width
 
 # Module-level logger for curses alignment backend
 _mod_logger = logging.getLogger("manatools.aui.curses.alignment.module")
@@ -89,15 +89,8 @@ class YAlignmentCurses(YSingleChildContainerWidget):
             pass
 
     def _child_min_width(self, child, max_width):
-        # Heuristic minimal width similar to YHBoxCurses TODO: verify with widget information instead of hardcoded classes
         try:
-            cls = child.widgetClass() if hasattr(child, "widgetClass") else ""
-            if cls in ("YLabel", "YPushButton", "YCheckBox"):
-                text = getattr(child, "_text", None)
-                if text is None:
-                    text = getattr(child, "_label", "")
-                pad = 4 if cls == "YPushButton" else 0
-                return min(max_width, max(1, len(str(text)) + pad))
+            return min(max_width, max(1, _curses_recursive_min_width(child)))
         except Exception:
             pass
         return max(1, min(10, max_width))
