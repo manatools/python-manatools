@@ -267,9 +267,10 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
         try:
             child = self.child()
             if child is not None:
-                child.setEnabled(bool(enabled))
+                # When re-enabling the parent, restore child's own _enabled state.
+                child._set_backend_enabled(bool(enabled) and child._enabled)
         except Exception as exc:
-            self._logger.debug("_set_backend_enabled: child.setEnabled failed: %s", exc)
+            self._logger.debug("_set_backend_enabled: child._set_backend_enabled failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Property interface (used by generic dialog property accessors)

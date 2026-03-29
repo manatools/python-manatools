@@ -107,7 +107,9 @@ class YHBoxQt(YWidget):
         try:
             for c in list(getattr(self, "_children", []) or []):
                 try:
-                    c.setEnabled(enabled)
+                    # When re-enabling the parent, restore each child's own
+                    # explicit _enabled state instead of forcing True.
+                    c._set_backend_enabled(enabled and c._enabled)
                 except Exception:
                     pass
         except Exception:

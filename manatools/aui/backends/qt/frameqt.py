@@ -260,7 +260,8 @@ class YFrameQt(YSingleChildContainerWidget):
             child = self.child()
             if child is not None:
                 try:
-                    child.setEnabled(enabled)
+                    # When re-enabling the parent, restore child's own _enabled state.
+                    child._set_backend_enabled(enabled and child._enabled)
                 except Exception:
                     pass
         except Exception:
