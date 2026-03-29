@@ -251,7 +251,9 @@
         on('.mana-yslider', 'input', handleSliderInput);
         on('.mana-yslider', 'change', handleSliderChange);
 
-        on('.mana-ytable tbody tr', 'click', handleTableRowClick);
+        on('.mana-ytable .mana-table-inner tbody tr', 'click', handleTableRowClick);
+
+        initAllTables(root);
         on('.mana-tree-item', 'click', handleTreeItemClick);
         on('.mana-tab', 'click', handleTabClick);
         on('.mana-menu-item', 'click', handleMenuItemClick);
@@ -335,10 +337,12 @@
 
     function handleTableRowClick(event) {
         const row = event.currentTarget;
-        const table = row.closest('.mana-ytable');
+        const tableEl = row.closest('.mana-ytable');
+        // Use the absolute position among ALL tbody children (including hidden rows)
+        // so the index matches the server-side _rows[] list regardless of pagination.
         const rowIndex = Array.from(row.parentElement.children).indexOf(row);
         row.classList.toggle('selected');
-        sendEvent({ type: 'event', widget_id: getWidgetId(table), reason: 'SelectionChanged', data: { selectedIndex: rowIndex } });
+        sendEvent({ type: 'event', widget_id: getWidgetId(tableEl), reason: 'SelectionChanged', data: { selectedIndex: rowIndex } });
     }
 
     function handleTreeItemClick(event) {
@@ -460,6 +464,146 @@
         if (event.key === 'Escape') {
             sendEvent({ type: 'close', data: {} });
         }
+    }
+
+    // ============================================
+    // Table pagination
+    // ============================================
+
+    function initAllTables(root) {
+        const elements = Array.from((root || document).querySelectorAll('.mana-ytable'));
+        if (root && root.matches && root.matches('.mana-ytable')) elements.unshift(root);
+        elements.forEach(initManaTable);
+    }
+
+    function initManaTable(tableEl) {
+        // Preserve page/filter state when the element is re-initialised after a
+        // DOM replacement so the user's position is not lost on minor updates.
+        const prev = tableEl._manaTable || {};
+        tableEl._manaTable = {
+            page:     prev.page     || 0,
+            pageSize: prev.pageSize || 10,
+            filter:   prev.filter   || '',
+        };
+
+        const pageSizeEl = tableEl.querySelector('.mana-table-pagesize');
+        const searchEl   = tableEl.querySelector('.mana-table-search');
+
+        if (pageSizeEl) {
+            // Restore previous page-size selection in the <select>
+            pageSizeEl.value = String(tableEl._manaTable.pageSize);
+            pageSizeEl.addEventListener('change', function () {
+                tableEl._manaTable.pageSize = parseInt(this.value, 10);
+                tableEl._manaTable.page = 0;
+                renderManaTable(tableEl);
+            });
+        }
+
+        if (searchEl) {
+            searchEl.value = tableEl._manaTable.filter;
+            searchEl.addEventListener('input', function () {
+                tableEl._manaTable.filter = this.value.toLowerCase();
+                tableEl._manaTable.page = 0;
+                renderManaTable(tableEl);
+            });
+        }
+
+        renderManaTable(tableEl);
+    }
+
+    function renderManaTable(tableEl) {
+        const state  = tableEl._manaTable;
+        const tbody  = tableEl.querySelector('.mana-table-inner tbody');
+        if (!tbody) return;
+
+        const allRows  = Array.from(tbody.querySelectorAll('tr'));
+        const filtered = state.filter
+            ? allRows.filter(r => r.textContent.toLowerCase().includes(state.filter))
+            : allRows;
+
+        const total     = filtered.length;
+        const pageSize  = (state.pageSize === -1) ? total : state.pageSize;
+        const totalPages = (pageSize > 0) ? Math.ceil(total / pageSize) : 1;
+
+        // Clamp current page
+        if (state.page >= totalPages) state.page = Math.max(0, totalPages - 1);
+
+        const start = state.page * (pageSize === -1 ? 0 : pageSize);
+        const end   = (pageSize === -1) ? total : Math.min(start + pageSize, total);
+
+        // Show only the rows belonging to the current page; hide the rest.
+        // All rows stay in the DOM so absolute rowIndex remains correct.
+        const visibleSet = new Set(filtered.slice(start, end));
+        allRows.forEach(r => { r.style.display = visibleSet.has(r) ? '' : 'none'; });
+
+        // Info text
+        const infoEl = tableEl.querySelector('.mana-table-info');
+        if (infoEl) {
+            if (total === 0) {
+                infoEl.textContent = state.filter ? 'No matching entries' : 'No entries';
+            } else {
+                const s = start + 1, e = Math.min(end, total);
+                infoEl.textContent = state.filter
+                    ? `Showing ${s}\u2013${e} of ${total} filtered entries`
+                    : `Showing ${s}\u2013${e} of ${total} entries`;
+            }
+        }
+
+        // Pagination controls
+        const paginationEl = tableEl.querySelector('.mana-table-pagination');
+        if (!paginationEl) return;
+        paginationEl.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        function makeLi(label, page, disabled, active) {
+            const li  = document.createElement('li');
+            li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+            const btn = document.createElement('button');
+            btn.className   = 'page-link';
+            btn.innerHTML   = label;
+            btn.setAttribute('aria-label', label.replace(/&[^;]+;/g, ''));
+            if (!disabled) {
+                btn.addEventListener('click', function () {
+                    state.page = page;
+                    renderManaTable(tableEl);
+                });
+            }
+            li.appendChild(btn);
+            return li;
+        }
+
+        paginationEl.appendChild(
+            makeLi('&laquo;', state.page - 1, state.page === 0, false)
+        );
+
+        tablePageNumbers(state.page, totalPages).forEach(function (p) {
+            if (p === '…') {
+                const li = document.createElement('li');
+                li.className = 'page-item disabled';
+                li.innerHTML = '<span class="page-link">\u2026</span>';
+                paginationEl.appendChild(li);
+            } else {
+                paginationEl.appendChild(makeLi(String(p + 1), p, false, p === state.page));
+            }
+        });
+
+        paginationEl.appendChild(
+            makeLi('&raquo;', state.page + 1, state.page >= totalPages - 1, false)
+        );
+    }
+
+    function tablePageNumbers(current, total) {
+        if (total <= 7) {
+            return Array.from({ length: total }, function (_, i) { return i; });
+        }
+        if (current <= 3) {
+            return [0, 1, 2, 3, 4, '…', total - 1];
+        }
+        if (current >= total - 4) {
+            return [0, '…', total - 5, total - 4, total - 3, total - 2, total - 1];
+        }
+        return [0, '…', current - 1, current, current + 1, '…', total - 1];
     }
 
     // ============================================
