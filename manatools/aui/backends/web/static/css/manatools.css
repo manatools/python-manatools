@@ -173,6 +173,7 @@ body {
 .mana-yhbox {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: var(--mana-spacing-sm);
     align-items: center;
     min-height: 0;
@@ -898,6 +899,7 @@ html, body {
     min-height: 0;
     min-width: 0;
     overflow: auto;
+    padding: 0.5rem; /* BS p-2 — inner breathing room on both desktop and mobile */
 }
 
 .mana-paned-vertical {
@@ -955,10 +957,17 @@ html, body {
         max-height: 90vh;
     }
 
-    /* Divider between panes becomes horizontal */
+    /* Divider between stacked panes: thin rule with generous vertical margin */
     .mana-ypaned.mana-paned-horizontal > .mana-paned-divider {
         width: 100%;
-        height: 4px;
+        height: 2px;
+        margin: 1rem 0;
+        cursor: default;
+    }
+
+    /* Extra top padding on the second section so the two widgets breathe */
+    .mana-ypaned.mana-paned-horizontal > .mana-paned-section + .mana-paned-divider + .mana-paned-section {
+        padding-top: 0.75rem;
     }
 }
 
