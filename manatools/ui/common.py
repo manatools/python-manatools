@@ -741,10 +741,17 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 use_tabbed = False
             else:
                 try:
-                    tabs_box = factory.createVBox(vbox)
-                    tab_widget = factory.createDumbTab(tabs_box)
+                    # YDumbTab requires its page content to be its single child widget.
+                    # The tab labels are items; the ReplacePoint holding the content
+                    # must be a child of the DumbTab itself, not a sibling in a VBox.
+                    tab_widget = factory.createDumbTab(vbox)
                     tab_widget.setNotify(True)
-                    content_holder = factory.createReplacePoint(tabs_box)
+                    try:
+                        tab_widget.setStretchable(YUIDimension.YD_HORIZ, True)
+                        tab_widget.setStretchable(YUIDimension.YD_VERT, True)
+                    except Exception:
+                        pass
+                    content_holder = factory.createReplacePoint(tab_widget)
                     tab_text_widget = _add_richtext(content_holder, "")
                     try:
                         content_holder.showChild()
