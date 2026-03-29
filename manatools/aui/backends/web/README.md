@@ -10,19 +10,19 @@ This package adds a new `web` backend to python-manatools, allowing any ManaTool
 
 ### Running with Web Backend
 
-Set the `YUI_BACKEND` environment variable to `web`:
+Set the `MUI_BACKEND` environment variable to `web`:
 
 ```bash
 # Linux/macOS
-export YUI_BACKEND=web
+export MUI_BACKEND=web
 python your_app.py
 
 # Windows (Command Prompt)
-set YUI_BACKEND=web
+set MUI_BACKEND=web
 python your_app.py
 
 # Windows (PowerShell)
-$env:YUI_BACKEND="web"
+$env:MUI_BACKEND="web"
 python your_app.py
 ```
 
