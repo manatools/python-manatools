@@ -332,6 +332,8 @@ class YDialogWeb(YSingleChildContainerWidget):
 
         if msg_type == "event":
             self._handle_widget_event(data)
+        elif msg_type == "link_activated":
+            self._handle_link_activation(data)
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
@@ -433,6 +435,23 @@ class YDialogWeb(YSingleChildContainerWidget):
         widget = self._widget_registry.get(widget_id)
         event = YKeyEvent(key, widget)
         self._post_event(event)
+
+    def _handle_link_activation(self, data: dict):
+        """Handle a link click inside a YRichText widget.
+
+        Mirrors Qt/GTK behaviour: prevent navigation, store the URL in the
+        widget, and post a YMenuEvent if the widget has notify() enabled.
+        """
+        widget_id = data.get("widget_id", "")
+        url = data.get("url", "")
+        widget = self._widget_registry.get(widget_id)
+        if widget is None:
+            logger.warning("link_activated: widget not found: %s", widget_id)
+            return
+        if hasattr(widget, '_last_url'):
+            widget._last_url = url
+        if hasattr(widget, 'notify') and widget.notify():
+            self._post_event(YMenuEvent(item=None, id=url))
 
     def _build_widget_registry(self):
         """Build a mapping of widget IDs to widget objects."""

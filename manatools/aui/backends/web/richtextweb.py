@@ -8,6 +8,7 @@ class YRichTextWeb(YWidget):
         super().__init__(parent)
         self._text = text
         self._plain_text_mode = plainTextMode
+        self._last_url: str = ""
     
     def widgetClass(self):
         return "YRichText"
@@ -21,6 +22,9 @@ class YRichTextWeb(YWidget):
     
     def setValue(self, text: str):
         self.setText(text)
+
+    def lastActivatedUrl(self) -> str:
+        return self._last_url
     
     def _notify_update(self):
         dialog = self.findDialog()

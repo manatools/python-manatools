@@ -252,6 +252,7 @@
         on('.mana-yslider', 'change', handleSliderChange);
 
         on('.mana-ytable .mana-table-inner tbody tr', 'click', handleTableRowClick);
+        on('.mana-yrichtext a', 'click', handleRichTextLinkClick);
 
         initAllTables(root);
         on('.mana-tree-item', 'click', handleTreeItemClick);
@@ -343,6 +344,15 @@
         const rowIndex = Array.from(row.parentElement.children).indexOf(row);
         row.classList.toggle('selected');
         sendEvent({ type: 'event', widget_id: getWidgetId(tableEl), reason: 'SelectionChanged', data: { selectedIndex: rowIndex } });
+    }
+
+    function handleRichTextLinkClick(event) {
+        event.preventDefault();
+        const anchor = event.currentTarget;
+        const url = anchor.getAttribute('href') || '';
+        const richTextEl = anchor.closest('.mana-yrichtext');
+        if (!richTextEl) return;
+        sendEvent({ type: 'link_activated', widget_id: getWidgetId(richTextEl), url: url });
     }
 
     function handleTreeItemClick(event) {
