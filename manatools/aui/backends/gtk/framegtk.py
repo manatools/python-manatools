@@ -69,8 +69,12 @@ class YFrameGtk(YSingleChildContainerWidget):
         """
         Report stretchability in a dimension.
 
-        The frame is stretchable when its child is stretchable or has a layout weight.
+        The frame is stretchable when:
+        - setStretchable(dim, True) was explicitly called on the frame, OR
+        - its child is stretchable or carries a layout weight in that dimension.
         """
+        if super().stretchable(dim):
+            return True
         try:
             child = self.child()
             if child is None:
@@ -128,9 +132,16 @@ class YFrameGtk(YSingleChildContainerWidget):
                 except Exception:
                     pass
 
-            # Ensure expansion hints propagate from child
+            # Ensure expansion hints propagate to child.
+            # A child fills the frame in a given dimension when the frame itself
+            # is stretchable in that dimension (via explicit setStretchable) OR
+            # when the child directly requests expansion.  Using only the child's
+            # flag is wrong: containers like YReplacePoint do not call
+            # setStretchable yet always intend to fill their allocated space.
             try:
-                if child.stretchable(YUIDimension.YD_VERT):
+                v_stretch = self._stretchable_vert or child.stretchable(YUIDimension.YD_VERT) or bool(child.weight(YUIDimension.YD_VERT))
+                h_stretch = self._stretchable_horiz or child.stretchable(YUIDimension.YD_HORIZ) or bool(child.weight(YUIDimension.YD_HORIZ))
+                if v_stretch:
                     if hasattr(cw, "set_vexpand"):
                         cw.set_vexpand(True)
                     if hasattr(cw, "set_valign"):
@@ -140,7 +151,7 @@ class YFrameGtk(YSingleChildContainerWidget):
                         cw.set_vexpand(False)
                     if hasattr(cw, "set_valign"):
                         cw.set_valign(Gtk.Align.START)
-                if child.stretchable(YUIDimension.YD_HORIZ):
+                if h_stretch:
                     if hasattr(cw, "set_hexpand"):
                         cw.set_hexpand(True)
                     if hasattr(cw, "set_halign"):
