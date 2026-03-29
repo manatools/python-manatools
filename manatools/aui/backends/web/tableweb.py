@@ -9,10 +9,10 @@ class YTableWeb(YSelectionWidget):
         self._header = header or YTableHeader()
         self._multi_selection = multiSelection
         self._rows = []
-    
+
     def widgetClass(self):
         return "YTable"
-    
+
     def addItem(self, item, notify=True):
         if isinstance(item, YTableItem):
             self._rows.append(item)
@@ -34,7 +34,7 @@ class YTableWeb(YSelectionWidget):
         return self._selected_items[-1] if self._selected_items else None
 
     def _handle_selection_change(self, index: int, value: str = None):
-        """Handle row selection from browser click (index = DOM row position)."""
+        """Handle row selection from browser click (index = absolute position in _rows[])."""
         if 0 <= index < len(self._rows):
             row = self._rows[index]
             if not self._multi_selection:
@@ -72,22 +72,62 @@ class YTableWeb(YSelectionWidget):
             dialog._schedule_update(self)
 
     def render(self) -> str:
-        # Header
-        header_html = "<thead><tr>"
+        # Outer wrapper carries the widget identity (id, data-widget-class, visible).
+        # enabled=True: <div> cannot carry the HTML disabled attribute; the enabled
+        # state is propagated to the inner form controls manually below.
+        attrs = widget_attrs(self.id(), "YTable", True, self._visible)
+        disabled_attr = ' disabled' if not self._enabled else ''
+
+        # Controls bar: "Show N entries" selector + search input
+        controls = (
+            '<div class="mana-table-controls">'
+            '<label class="mana-table-length-label">'
+            'Show\u00a0'
+            f'<select class="form-select form-select-sm mana-table-pagesize"{disabled_attr}>'
+            '<option value="10">10</option>'
+            '<option value="25">25</option>'
+            '<option value="50">50</option>'
+            '<option value="100">100</option>'
+            '<option value="-1">All</option>'
+            '</select>'
+            '\u00a0entries'
+            '</label>'
+            f'<input type="search" class="form-control form-control-sm mana-table-search"'
+            f' placeholder="Search\u2026" aria-label="Search"{disabled_attr}>'
+            '</div>'
+        )
+
+        # Inner <table> — Bootstrap styled; intentionally has no widget id
+        thead = '<thead><tr>'
         for i in range(self._header.columns()):
-            header_html += f'<th>{escape_html(self._header.header(i))}</th>'
-        header_html += "</tr></thead>"
-        
-        # Body
-        body_html = "<tbody>"
+            thead += f'<th scope="col">{escape_html(self._header.header(i))}</th>'
+        thead += '</tr></thead>'
+
+        tbody = '<tbody>'
         for row in self._rows:
-            selected = "selected" if row in self._selected_items else ""
-            body_html += f'<tr class="{selected}">'
+            sel_class = ' selected' if row in self._selected_items else ''
+            tbody += f'<tr class="mana-table-row{sel_class}">'
             for i in range(row.cellCount()):
                 cell = row.cell(i)
-                body_html += f'<td>{escape_html(cell.label()) if cell else ""}</td>'
-            body_html += "</tr>"
-        body_html += "</tbody>"
-        
-        attrs = widget_attrs(self.id(), "YTable", self._enabled, self._visible)
-        return f'<table {attrs}>{header_html}{body_html}</table>'
+                tbody += f'<td>{escape_html(cell.label()) if cell else ""}</td>'
+            tbody += '</tr>'
+        tbody += '</tbody>'
+
+        scroll = (
+            '<div class="mana-table-scroll">'
+            '<table class="table table-sm table-hover mana-table-inner">'
+            f'{thead}{tbody}'
+            '</table>'
+            '</div>'
+        )
+
+        footer = (
+            '<div class="mana-table-footer">'
+            '<span class="mana-table-info"></span>'
+            '<nav aria-label="Table navigation">'
+            '<ul class="pagination pagination-sm mb-0 mana-table-pagination"></ul>'
+            '</nav>'
+            '</div>'
+        )
+
+        return f'<div {attrs}>{controls}{scroll}{footer}</div>'
