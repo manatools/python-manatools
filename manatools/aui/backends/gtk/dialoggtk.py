@@ -373,6 +373,21 @@ class YDialogGtk(YSingleChildContainerWidget):
         #except Exception:
         #    pass
 
+        # If the dialog's direct child is a MinSize alignment container, use its
+        # _min_width_px/_min_height_px as the initial default window size.  This
+        # prevents GTK from choosing the "natural" window size (which for widgets
+        # with hexpand=True equals the screen width) while still allowing the
+        # user to resize the window after it is shown.
+        try:
+            ch = self.child()
+            if ch is not None:
+                mw = getattr(ch, "_min_width_px", 0)
+                mh = getattr(ch, "_min_height_px", 0)
+                if mw and mh and int(mw) > 0 and int(mh) > 0:
+                    self._window.set_default_size(int(mw), int(mh))
+        except Exception:
+            pass
+
         # Content container with margins (window.set_child used in Gtk4)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         content.set_margin_start(10)
