@@ -83,6 +83,12 @@ body {
 }
 
 /* === Busy overlay === */
+/*
+ * position:fixed + inset:0 + z-index:2000 places the overlay above every
+ * other element.  The default pointer-events:auto on the overlay itself is
+ * sufficient to absorb all clicks while it is visible — no sibling rule is
+ * needed and would in fact break modals appended after the overlay in <body>.
+ */
 #mana-busy-overlay {
     position: fixed;
     inset: 0;
@@ -92,11 +98,6 @@ body {
     background: rgba(0, 0, 0, 0.45);
     z-index: 2000;
     cursor: wait;
-}
-
-/* Prevent interaction with everything beneath the overlay */
-#mana-busy-overlay ~ * {
-    pointer-events: none;
 }
 
 .mana-popup-overlay {
