@@ -887,6 +887,7 @@ html, body {
 
 /* Paned sections must constrain height so children don't overflow */
 .mana-ypaned {
+    display: flex;
     flex: 1;
     min-height: 0;
     overflow: hidden;
@@ -907,17 +908,58 @@ html, body {
     flex-direction: row;
 }
 
-/* Tree and table inside paned sections should fill available space */
-.mana-tree-container {
-    height: 100%;
-    max-height: none;
-    overflow: auto;
-}
-
-/* Inside a paned section the table wrapper must participate in the flex stretch */
+/* Inside a paned section the table/tree wrapper must participate in flex stretch */
 .mana-paned-section .mana-ytable {
     flex: 1;
     min-height: 0;
+}
+
+/* ============================================
+   Responsive — mobile (≤ 767 px)
+   ============================================ */
+@media (max-width: 767px) {
+    /* Break out of the viewport-height chain so the page scrolls naturally */
+    html, body, #mana-app, .mana-dialog-main, .mana-dialog-content {
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+    }
+
+    /* Stack horizontal panes vertically: tree above table */
+    .mana-ypaned.mana-paned-horizontal {
+        flex-direction: column;
+        overflow: visible;
+    }
+
+    /* Each pane takes full width and sizes to its content */
+    .mana-ypaned.mana-paned-horizontal > .mana-paned-section {
+        flex: 0 0 auto;
+        min-height: 0;
+        overflow: visible;
+    }
+
+    /* Give paginated widgets a reasonable max-height on mobile */
+    .mana-ypaned.mana-paned-horizontal > .mana-paned-section .mana-ytable {
+        flex: none;
+        max-height: 45vh;
+    }
+
+    .mana-ypaned.mana-paned-horizontal > .mana-paned-section .mana-table-scroll {
+        max-height: calc(45vh - 6rem); /* subtract controls + footer height */
+    }
+
+    /* Popup dialogs: full-width on small screens */
+    .mana-dialog-popup {
+        min-width: 0;
+        width: 95vw;
+        max-height: 90vh;
+    }
+
+    /* Divider between panes becomes horizontal */
+    .mana-ypaned.mana-paned-horizontal > .mana-paned-divider {
+        width: 100%;
+        height: 4px;
+    }
 }
 
 /* YAlignment with stretch should grow */

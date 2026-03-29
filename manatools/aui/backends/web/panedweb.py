@@ -15,19 +15,13 @@ class YPanedWeb(YWidget):
         return self._dimension in (YUIDimension.YD_HORIZ, YUIDimension.Horizontal)
     
     def render(self) -> str:
-        direction = "row" if self.isHorizontal() else "column"
         extra_classes = "mana-paned-horizontal" if self.isHorizontal() else "mana-paned-vertical"
-        
-        extra_attrs = {
-            "style": f"display: flex; flex-direction: {direction};",
-        }
-        
-        attrs = widget_attrs(self.id(), "YPaned", True, self._visible, extra_classes, extra_attrs)
-        
+        attrs = widget_attrs(self.id(), "YPaned", True, self._visible, extra_classes)
+
         children_html = ""
         for i, child in enumerate(self._children):
-            children_html += f'<div class="mana-paned-section" style="flex: 1;">{child.render()}</div>'
+            children_html += f'<div class="mana-paned-section">{child.render()}</div>'
             if i < len(self._children) - 1:
                 children_html += '<div class="mana-paned-divider"></div>'
-        
+
         return f'<div {attrs}>{children_html}</div>'
