@@ -531,7 +531,14 @@ class YDialogWeb(YSingleChildContainerWidget):
         must not be duplicated on every value change, like YProgressBar) can
         return a precise (selector, html) pair targeting only their dynamic
         inner element.
- 
+
+        ``render_update()`` may return either a 2-tuple ``(target, html)``
+        (action defaults to ``"replace"``) or a 3-tuple
+        ``(target, html, action)`` where *action* may be ``"replace"`` or
+        ``"html"``.  The ``"html"`` action sets ``innerHTML`` on the target
+        element without removing and re-inserting it, keeping its DOM position
+        stable.
+
         Falls back to the original behaviour for all other widgets:
         targets ``[data-container-for="<id>"]`` first so that widgets that
         wrap themselves in a container div (e.g. ComboBox with a label) are
@@ -541,15 +548,21 @@ class YDialogWeb(YSingleChildContainerWidget):
             self._pending_updates.pop(widget.id(), None)
         try:
             if hasattr(widget, 'render_update'):
-                target, html = widget.render_update()
+                result = widget.render_update()
+                if len(result) == 3:
+                    target, html, action = result
+                else:
+                    target, html = result
+                    action = "replace"
             else:
                 html = widget.render()
                 target = f'[data-container-for="{widget.id()}"], #{widget.id()}'
- 
+                action = "replace"
+
             self._broadcast({
                 "type": "update",
                 "updates": [{
-                    "action": "replace",
+                    "action": action,
                     "target": target,
                     "html": html,
                 }]
