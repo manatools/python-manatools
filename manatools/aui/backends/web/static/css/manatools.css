@@ -800,6 +800,18 @@ body {
     background: var(--mana-accent);
 }
 
+/* Collapse a paned section whose direct-child widget is hidden, and hide
+   the adjacent divider so the remaining section expands to fill the paned. */
+.mana-paned-section:has(> [style*="display: none"]) {
+    display: none;
+}
+.mana-paned-section:has(> [style*="display: none"]) + .mana-paned-divider {
+    display: none;
+}
+.mana-paned-divider:has(+ .mana-paned-section > [style*="display: none"]) {
+    display: none;
+}
+
 /* ============================================
    Image
    ============================================ */
