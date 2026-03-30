@@ -31,6 +31,16 @@ class YRichTextWeb(YWidget):
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
     
+    def render_update(self) -> tuple:
+        """Return (target, html, action) for partial DOM updates.
+
+        Uses action="html" to replace only innerHTML of the outer div,
+        leaving the div itself in the DOM.  This prevents any re-insertion
+        that would cause the widget to shift position in the layout.
+        """
+        content = escape_html(self._text) if self._plain_text_mode else self._text
+        return f'#{self.id()}', content, 'html'
+
     def render(self) -> str:
         attrs = widget_attrs(self.id(), "YRichText", self._enabled, self._visible)
         content = escape_html(self._text) if self._plain_text_mode else self._text
