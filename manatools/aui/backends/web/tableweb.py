@@ -1,5 +1,6 @@
 """Web backend Table implementation."""
-from ...yui_common import YSelectionWidget, YTableHeader, YTableItem
+from ...yui_common import (YSelectionWidget, YTableHeader, YTableItem,
+                            YAlignmentType, YWidgetEvent, YEventReason)
 from .commonweb import widget_attrs, escape_html
 
 class YTableWeb(YSelectionWidget):
@@ -9,6 +10,7 @@ class YTableWeb(YSelectionWidget):
         self._header = header or YTableHeader()
         self._multi_selection = multiSelection
         self._rows = []
+        self._changed_item = None
 
     def widgetClass(self):
         return "YTable"
@@ -30,13 +32,14 @@ class YTableWeb(YSelectionWidget):
         self._notify_update()
 
     def changedItem(self):
-        """Return the last row that was selected/changed, or None."""
-        return self._selected_items[-1] if self._selected_items else None
+        """Return the last row that was changed (checkbox toggle or selection), or None."""
+        return self._changed_item
 
     def _handle_selection_change(self, index: int, value: str = None):
         """Handle row selection from browser click (index = absolute position in _rows[])."""
         if 0 <= index < len(self._rows):
             row = self._rows[index]
+            self._changed_item = row
             if not self._multi_selection:
                 self._selected_items = [row]
             else:
@@ -44,6 +47,27 @@ class YTableWeb(YSelectionWidget):
                     self._selected_items.remove(row)
                 else:
                     self._selected_items.append(row)
+
+    def _handle_checkbox_change(self, row_index: int, col_index: int, checked: bool):
+        """Handle a checkbox cell toggle from the browser.
+
+        Mirrors Qt setData(CheckStateRole): updates the cell model, tracks
+        _changed_item, and posts YWidgetEvent(ValueChanged) if notify() is set.
+        """
+        if not (0 <= row_index < len(self._rows)):
+            return
+        row = self._rows[row_index]
+        try:
+            cell = row.cell(col_index)
+        except Exception:
+            cell = None
+        if cell is None:
+            return
+        cell.setChecked(checked)
+        self._changed_item = row
+        dlg = self.findDialog()
+        if dlg is not None and self.notify():
+            dlg._post_event(YWidgetEvent(self, YEventReason.ValueChanged))
 
     def selectItem(self, item, selected=True):
         if selected:
@@ -70,6 +94,18 @@ class YTableWeb(YSelectionWidget):
         dialog = self.findDialog()
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
+
+    def _column_align_style(self, col: int) -> str:
+        """Return an inline style attribute string for column alignment, or ''."""
+        try:
+            align = self._header.alignment(col)
+        except Exception:
+            return ""
+        if align == YAlignmentType.YAlignCenter:
+            return ' style="text-align:center"'
+        if align == YAlignmentType.YAlignEnd:
+            return ' style="text-align:right"'
+        return ""
 
     def render(self) -> str:
         # Outer wrapper carries the widget identity (id, data-widget-class, visible).
@@ -100,16 +136,24 @@ class YTableWeb(YSelectionWidget):
         # Inner <table> — Bootstrap styled; intentionally has no widget id
         thead = '<thead><tr>'
         for i in range(self._header.columns()):
-            thead += f'<th scope="col">{escape_html(self._header.header(i))}</th>'
+            align_style = self._column_align_style(i)
+            thead += f'<th scope="col"{align_style}>{escape_html(self._header.header(i))}</th>'
         thead += '</tr></thead>'
 
         tbody = '<tbody>'
-        for row in self._rows:
+        for row_idx, row in enumerate(self._rows):
             sel_class = ' selected' if row in self._selected_items else ''
             tbody += f'<tr class="mana-table-row{sel_class}">'
             for i in range(row.cellCount()):
                 cell = row.cell(i)
-                tbody += f'<td>{escape_html(cell.label()) if cell else ""}</td>'
+                align_style = self._column_align_style(i)
+                if self._header.isCheckboxColumn(i):
+                    checked_attr = ' checked' if (cell and cell.checked()) else ''
+                    content = (f'<input type="checkbox" class="form-check-input mana-table-checkbox"'
+                               f' data-row="{row_idx}" data-col="{i}"{checked_attr}>')
+                else:
+                    content = escape_html(cell.label()) if cell else ""
+                tbody += f'<td{align_style}>{content}</td>'
             tbody += '</tr>'
         tbody += '</tbody>'
 

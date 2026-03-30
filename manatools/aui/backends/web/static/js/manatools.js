@@ -252,6 +252,7 @@
         on('.mana-yslider', 'change', handleSliderChange);
 
         on('.mana-ytable .mana-table-inner tbody tr', 'click', handleTableRowClick);
+        on('.mana-ytable .mana-table-inner tbody td input[type="checkbox"]', 'change', handleTableCellCheckboxChange);
         on('.mana-yrichtext a', 'click', handleRichTextLinkClick);
 
         initAllTables(root);
@@ -337,6 +338,8 @@
     }
 
     function handleTableRowClick(event) {
+        // Checkbox cells have their own handler — skip row-selection for them.
+        if (event.target.matches('input[type="checkbox"]')) return;
         const row = event.currentTarget;
         const tableEl = row.closest('.mana-ytable');
         // Use the absolute position among ALL tbody children (including hidden rows)
@@ -344,6 +347,18 @@
         const rowIndex = Array.from(row.parentElement.children).indexOf(row);
         row.classList.toggle('selected');
         sendEvent({ type: 'event', widget_id: getWidgetId(tableEl), reason: 'SelectionChanged', data: { selectedIndex: rowIndex } });
+    }
+
+    function handleTableCellCheckboxChange(event) {
+        const cb = event.currentTarget;
+        const td = cb.closest('td');
+        const tr = cb.closest('tr');
+        const tableEl = cb.closest('.mana-ytable');
+        if (!tr || !tableEl) return;
+        const rowIndex = Array.from(tr.parentElement.children).indexOf(tr);
+        const colIndex = td ? td.cellIndex : parseInt(cb.dataset.col || '0', 10);
+        sendEvent({ type: 'table_checkbox', widget_id: getWidgetId(tableEl),
+                    row: rowIndex, col: colIndex, checked: cb.checked });
     }
 
     function handleRichTextLinkClick(event) {
