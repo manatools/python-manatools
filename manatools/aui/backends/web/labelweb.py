@@ -51,6 +51,13 @@ class YLabelWeb(YWidget):
         """yui API: return whether event notification is enabled."""
         return getattr(self, '_notify', False)
 
+    def autoWrap(self) -> bool:
+        return getattr(self, '_auto_wrap', True)
+
+    def setAutoWrap(self, on: bool = True):
+        self._auto_wrap = bool(on)
+        self._notify_update()
+
     def isHeading(self) -> bool:
         return self._is_heading
 
@@ -78,6 +85,8 @@ class YLabelWeb(YWidget):
         elif self._is_output_field:
             extra_classes = "mana-output"
 
+        if not getattr(self, '_auto_wrap', True):
+            extra_classes = (extra_classes + " mana-nowrap").strip()
         attrs = widget_attrs(
             self.id(),
             "YLabel",
