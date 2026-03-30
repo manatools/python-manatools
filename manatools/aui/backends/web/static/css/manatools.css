@@ -581,6 +581,10 @@ body {
     background: var(--mana-accent-light);
 }
 
+.mana-table-inner tr.mana-table-loading td {
+    pointer-events: none;
+}
+
 /* Footer: info text + pagination nav */
 .mana-table-footer {
     display: flex;
