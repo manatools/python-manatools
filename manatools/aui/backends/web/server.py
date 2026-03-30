@@ -368,11 +368,17 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, "No dialog available")
             return
         try:
+            from .commonweb import set_initial_render
             title = self._resolve_title()
+            set_initial_render(True)
+            try:
+                dialog_html = self.dialog.render()
+            finally:
+                set_initial_render(False)
             html = PageBuilder.build(
                 title=title,
                 app_name=title,
-                dialog_html=self.dialog.render(),
+                dialog_html=dialog_html,
             )
             encoded = html.encode("utf-8")
             self.send_response(200)
