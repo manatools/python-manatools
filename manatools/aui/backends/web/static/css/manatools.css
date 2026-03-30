@@ -224,6 +224,10 @@ body {
     text-decoration: underline;
 }
 
+.mana-nowrap {
+    white-space: nowrap;
+}
+
 /* ============================================
    Buttons
    ============================================ */
