@@ -1,7 +1,7 @@
 """Web backend Table implementation."""
 from ...yui_common import (YSelectionWidget, YTableHeader, YTableItem,
                             YAlignmentType, YWidgetEvent, YEventReason)
-from .commonweb import widget_attrs, escape_html
+from .commonweb import widget_attrs, escape_html, is_initial_render
 
 class YTableWeb(YSelectionWidget):
     """Table view widget."""
@@ -107,6 +107,30 @@ class YTableWeb(YSelectionWidget):
             return ' style="text-align:right"'
         return ""
 
+    def _render_rows_html(self) -> str:
+        """Return the inner HTML of <tbody>: all <tr> rows, no wrapping tag.
+
+        Called both from render() (full path) and by the dialog when pushing
+        deferred row content via WebSocket after the browser connects.
+        """
+        rows = []
+        for row_idx, row in enumerate(self._rows):
+            sel_class = ' selected' if row in self._selected_items else ''
+            cells = ''
+            for i in range(row.cellCount()):
+                cell = row.cell(i)
+                align_style = self._column_align_style(i)
+                if self._header.isCheckboxColumn(i):
+                    checked_attr = ' checked' if (cell and cell.checked()) else ''
+                    cells += (f'<td{align_style}>'
+                              f'<input type="checkbox" class="form-check-input mana-table-checkbox"'
+                              f' data-row="{row_idx}" data-col="{i}"{checked_attr}>'
+                              f'</td>')
+                else:
+                    cells += f'<td{align_style}>{escape_html(cell.label()) if cell else ""}</td>'
+            rows.append(f'<tr class="mana-table-row{sel_class}">{cells}</tr>')
+        return ''.join(rows)
+
     def render(self) -> str:
         # Outer wrapper carries the widget identity (id, data-widget-class, visible).
         # enabled=True: <div> cannot carry the HTML disabled attribute; the enabled
@@ -114,20 +138,9 @@ class YTableWeb(YSelectionWidget):
         attrs = widget_attrs(self.id(), "YTable", True, self._visible)
         disabled_attr = ' disabled' if not self._enabled else ''
 
-        # Controls bar: "Show N entries" selector + search input
+        # Controls bar: search input only (page-size selector omitted by default)
         controls = (
             '<div class="mana-table-controls">'
-            '<label class="mana-table-length-label">'
-            'Show\u00a0'
-            f'<select class="form-select form-select-sm mana-table-pagesize"{disabled_attr}>'
-            '<option value="10">10</option>'
-            '<option value="25">25</option>'
-            '<option value="50">50</option>'
-            '<option value="100">100</option>'
-            '<option value="-1">All</option>'
-            '</select>'
-            '\u00a0entries'
-            '</label>'
             f'<input type="search" class="form-control form-control-sm mana-table-search"'
             f' placeholder="Search\u2026" aria-label="Search"{disabled_attr}>'
             '</div>'
@@ -140,22 +153,22 @@ class YTableWeb(YSelectionWidget):
             thead += f'<th scope="col"{align_style}>{escape_html(self._header.header(i))}</th>'
         thead += '</tr></thead>'
 
-        tbody = '<tbody>'
-        for row_idx, row in enumerate(self._rows):
-            sel_class = ' selected' if row in self._selected_items else ''
-            tbody += f'<tr class="mana-table-row{sel_class}">'
-            for i in range(row.cellCount()):
-                cell = row.cell(i)
-                align_style = self._column_align_style(i)
-                if self._header.isCheckboxColumn(i):
-                    checked_attr = ' checked' if (cell and cell.checked()) else ''
-                    content = (f'<input type="checkbox" class="form-check-input mana-table-checkbox"'
-                               f' data-row="{row_idx}" data-col="{i}"{checked_attr}>')
-                else:
-                    content = escape_html(cell.label()) if cell else ""
-                tbody += f'<td{align_style}>{content}</td>'
-            tbody += '</tr>'
-        tbody += '</tbody>'
+        # On the initial HTTP render, emit a loading skeleton so the browser
+        # can paint the page quickly.  The real rows are pushed via WebSocket
+        # as soon as the connection is established (see dialogweb._push_deferred_tables).
+        if is_initial_render() and self._rows:
+            col_count = max(self._header.columns(), 1)
+            tbody = (
+                f'<tbody>'
+                f'<tr class="mana-table-loading">'
+                f'<td colspan="{col_count}" class="text-center text-muted py-3">'
+                f'<span class="spinner-border spinner-border-sm me-2" role="status">'
+                f'</span>Loading\u2026'
+                f'</td></tr>'
+                f'</tbody>'
+            )
+        else:
+            tbody = f'<tbody>{self._render_rows_html()}</tbody>'
 
         scroll = (
             '<div class="mana-table-scroll">'
