@@ -632,6 +632,8 @@ body {
     border: 1px solid var(--mana-border-color);
     border-radius: var(--mana-radius);
     overflow: auto;
+    min-width: 0;       /* allow shrinking below intrinsic width in flex row */
+    box-sizing: border-box; /* padding stays within bounds */
 }
 
 /* ============================================
@@ -780,6 +782,7 @@ body {
 .mana-paned-divider {
     background: var(--mana-border-color);
     cursor: col-resize;
+    flex-shrink: 0; /* never compress the divider bar */
 }
 
 .mana-paned-horizontal .mana-paned-divider {
@@ -790,6 +793,7 @@ body {
 .mana-paned-vertical .mana-paned-divider {
     height: 4px;
     cursor: row-resize;
+    margin: 0.25rem 0; /* breathing room above/below the horizontal rule */
 }
 
 .mana-paned-divider:hover {
