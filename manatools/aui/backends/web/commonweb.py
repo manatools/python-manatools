@@ -9,7 +9,29 @@ License: LGPLv2+
 
 import html
 import re
+import threading
 from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Initial-render context flag
+# ---------------------------------------------------------------------------
+
+_render_context = threading.local()
+
+
+def set_initial_render(flag: bool):
+    """Mark the current thread as performing an initial HTTP page render.
+
+    When True, widgets that support deferred loading (e.g. YTable) emit a
+    lightweight skeleton placeholder instead of their full content.  The real
+    content is pushed to the browser via WebSocket once the connection opens.
+    """
+    _render_context.initial = flag
+
+
+def is_initial_render() -> bool:
+    """Return True if the current thread is performing an initial HTTP page render."""
+    return getattr(_render_context, 'initial', False)
 
 def escape_html(text: str) -> str:
     """Escape HTML special characters."""
