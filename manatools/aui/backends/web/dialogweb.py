@@ -336,6 +336,8 @@ class YDialogWeb(YSingleChildContainerWidget):
             self._handle_table_checkbox(data)
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
+        elif msg_type == "ready":
+            self._push_deferred_tables()
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
@@ -472,6 +474,25 @@ class YDialogWeb(YSingleChildContainerWidget):
             widget._last_url = url
         if hasattr(widget, 'notify') and widget.notify():
             self._post_event(YMenuEvent(item=None, id=url))
+
+    def _push_deferred_tables(self):
+        """Push table row content to all connected clients.
+
+        Called when the browser sends a ``ready`` message (WS open).  Tables
+        were rendered as loading skeletons in the initial HTTP response; this
+        replaces each skeleton tbody with the real rows so the page becomes
+        fully usable without a full reload.
+        """
+        updates = []
+        for widget_id, widget in self._widget_registry.items():
+            if hasattr(widget, '_render_rows_html'):
+                updates.append({
+                    "action": "rows",
+                    "target": f"#{widget_id}",
+                    "html": widget._render_rows_html(),
+                })
+        if updates:
+            self._broadcast({"type": "update", "updates": updates})
 
     def _build_widget_registry(self):
         """Build a mapping of widget IDs to widget objects."""
