@@ -332,6 +332,8 @@ class YDialogWeb(YSingleChildContainerWidget):
 
         if msg_type == "event":
             self._handle_widget_event(data)
+        elif msg_type == "table_checkbox":
+            self._handle_table_checkbox(data)
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
         elif msg_type == "close":
@@ -435,6 +437,24 @@ class YDialogWeb(YSingleChildContainerWidget):
         widget = self._widget_registry.get(widget_id)
         event = YKeyEvent(key, widget)
         self._post_event(event)
+
+    def _handle_table_checkbox(self, data: dict):
+        """Handle a checkbox-cell toggle inside a YTable.
+
+        Mirrors Qt setData(CheckStateRole): routes to the widget's
+        _handle_checkbox_change so it can update the cell model and fire events.
+        """
+        widget_id = data.get("widget_id", "")
+        widget = self._widget_registry.get(widget_id)
+        if widget is None:
+            logger.warning("table_checkbox: widget not found: %s", widget_id)
+            return
+        if hasattr(widget, '_handle_checkbox_change'):
+            widget._handle_checkbox_change(
+                int(data.get("row", 0)),
+                int(data.get("col", 0)),
+                bool(data.get("checked", False)),
+            )
 
     def _handle_link_activation(self, data: dict):
         """Handle a link click inside a YRichText widget.
