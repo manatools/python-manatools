@@ -62,6 +62,8 @@
                 console.log('WebSocket connected');
                 wsReconnectAttempts = 0;
                 setBadge('connected');
+                // Signal server to push deferred content (e.g. table rows).
+                sendEvent({ type: 'ready' });
             };
 
             ws.onmessage = function (event) {
@@ -208,6 +210,14 @@
                     target.innerHTML = update.html;
                     attachEventListenersToElement(target);
                     break;
+                case 'rows': {
+                    // Deferred table row injection: replace the skeleton tbody with
+                    // real data rows, then re-initialise pagination/search.
+                    const tbody = target.querySelector('.mana-table-inner tbody');
+                    if (tbody) tbody.innerHTML = update.html;
+                    attachEventListenersToElement(target);
+                    break;
+                }
                 case 'text':
                     target.textContent = update.text;
                     break;
