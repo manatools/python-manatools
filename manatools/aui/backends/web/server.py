@@ -41,6 +41,14 @@ class WebSocketHandler:
 
     GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+    # Maximum accepted incoming frame payload (16 MB).  Frames larger than
+    # this are rejected immediately so a rogue client cannot exhaust memory.
+    MAX_FRAME_SIZE = 16 * 1024 * 1024
+
+    # Hostnames / addresses considered local.  Only WebSocket upgrades and
+    # /event POST requests whose Origin matches one of these are accepted.
+    _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
     def __init__(
         self,
         request,
@@ -55,10 +63,42 @@ class WebSocketHandler:
         self._closed = False
         self._lock = threading.Lock()
 
+    # ------------------------------------------------------------------
+    # Origin validation (shared by WS handshake and /event POST)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _is_local_origin(cls, origin: Optional[str]) -> bool:
+        """Return True if *origin* is absent or points to localhost.
+
+        An absent Origin header is allowed so that curl / direct browser
+        address-bar requests work.  A ``null`` origin (file://) is also
+        accepted.  Any other origin whose host is not in _LOCAL_HOSTS is
+        rejected to prevent DNS-rebinding and CSRF attacks.
+        """
+        if origin is None or origin == "null":
+            return True
+        try:
+            parsed = urlparse(origin)
+            # urlparse stores host without port in .hostname
+            return parsed.hostname in cls._LOCAL_HOSTS
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------
+    # Handshake
+    # ------------------------------------------------------------------
+
     @classmethod
     def handshake(cls, request_handler) -> Optional["WebSocketHandler"]:
         """Perform WebSocket handshake. Returns WebSocketHandler on success."""
         try:
+            origin = request_handler.headers.get("Origin")
+            if not cls._is_local_origin(origin):
+                request_handler.send_error(403, "Forbidden: non-local origin")
+                logger.warning("WebSocket upgrade rejected for origin: %s", origin)
+                return None
+
             key = request_handler.headers.get("Sec-WebSocket-Key")
             if not key:
                 return None
@@ -86,12 +126,34 @@ class WebSocketHandler:
             logger.exception("WebSocket handshake failed: %s", e)
             return None
 
+    # ------------------------------------------------------------------
+    # Frame I/O
+    # ------------------------------------------------------------------
+
+    def _recv_exact(self, n: int) -> bytes:
+        """Read exactly *n* bytes from the socket.
+
+        Unlike a bare ``recv(n)`` call, this loops until all bytes arrive or
+        the connection is closed, preventing silent truncation on slow or
+        fragmented TCP streams.
+
+        Raises ``ConnectionError`` if the peer closes the connection before
+        *n* bytes are delivered.
+        """
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = self.request.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError(
+                    f"Connection closed after {len(buf)} of {n} bytes"
+                )
+            buf.extend(chunk)
+        return bytes(buf)
+
     def receive_frame(self) -> Optional[str]:
         """Receive a WebSocket frame and return the text payload."""
         try:
-            header = self.request.recv(2)
-            if len(header) < 2:
-                return None
+            header = self._recv_exact(2)
 
             fin = (header[0] >> 7) & 1
             opcode = header[0] & 0x0F
@@ -110,14 +172,20 @@ class WebSocketHandler:
                 return self.receive_frame()
 
             if payload_len == 126:
-                ext = self.request.recv(2)
-                payload_len = struct.unpack(">H", ext)[0]
+                payload_len = struct.unpack(">H", self._recv_exact(2))[0]
             elif payload_len == 127:
-                ext = self.request.recv(8)
-                payload_len = struct.unpack(">Q", ext)[0]
+                payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
 
-            mask_key = self.request.recv(4) if masked else b""
-            payload = self.request.recv(payload_len)
+            if payload_len > self.MAX_FRAME_SIZE:
+                self._closed = True
+                logger.warning(
+                    "WebSocket frame too large (%d bytes); closing connection",
+                    payload_len,
+                )
+                return None
+
+            mask_key = self._recv_exact(4) if masked else b""
+            payload = self._recv_exact(payload_len)
 
             if masked:
                 payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
@@ -511,7 +579,13 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
         # The WebSocket session is over.  Disable wfile so that
         # handle_one_request()'s cleanup path cannot write to the socket.
         try:
-            self.wfile = open(os.devnull, "wb")
+            devnull = open(os.devnull, "wb")
+            old_wfile = self.wfile
+            self.wfile = devnull
+            try:
+                old_wfile.close()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -520,6 +594,11 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def _handle_event_post(self):
+        origin = self.headers.get("Origin")
+        if not WebSocketHandler._is_local_origin(origin):
+            self.send_error(403, "Forbidden: non-local origin")
+            logger.warning("/event POST rejected for origin: %s", origin)
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(length).decode("utf-8"))
