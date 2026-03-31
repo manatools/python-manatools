@@ -35,6 +35,7 @@ class YInputFieldCurses(YWidget):
         self._cursor_pos = 0
         self._focused = False
         self._can_focus = True
+        self._input_max_length = -1
         # one row for field + optional label row on top
         self._height = 2 if self._label else 1
         self._x = 0
@@ -51,17 +52,16 @@ class YInputFieldCurses(YWidget):
     
     def value(self):
         return self._value
-    
-    def setValue(self, text):
-        self._value = text
-        self._cursor_pos = len(text)
-    
+
     def label(self):
         return self._label
-    
-    def setLabel(self, label):
-        self._label = label
-        self._height = 2 if self._label else 1
+
+    def setValue(self, text):
+        s = text if text is not None else ""
+        if not self._password_mode and getattr(self, '_input_max_length', -1) >= 0:
+            s = s[:self._input_max_length]
+        self._value = s
+        self._cursor_pos = len(self._value)
     
     def _create_backend_widget(self):
         try:
@@ -72,6 +72,19 @@ class YInputFieldCurses(YWidget):
                 self._logger.error("_create_backend_widget error: %s", e, exc_info=True)
             except Exception:
                 _mod_logger.error("_create_backend_widget error: %s", e, exc_info=True)
+
+    def setLabel(self, label):
+        self._label = label
+        self._height = 2 if self._label else 1
+
+    def inputMaxLength(self):
+        return int(getattr(self, '_input_max_length', -1))
+
+    def setInputMaxLength(self, numberOfChars):
+        try:
+            self._input_max_length = int(numberOfChars)
+        except Exception:
+            self._input_max_length = -1
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the input field: affect focusability and focused state."""
@@ -185,6 +198,10 @@ class YInputFieldCurses(YWidget):
         elif key == curses.KEY_END:
             self._cursor_pos = len(self._value)
         elif 32 <= key <= 126:  # Printable characters
+            # enforce max length (ignored in password mode)
+            if not self._password_mode and getattr(self, '_input_max_length', -1) >= 0:
+                if len(self._value) >= self._input_max_length:
+                    return True  # at limit, silently ignore
             self._value = self._value[:self._cursor_pos] + chr(key) + self._value[self._cursor_pos:]
             self._cursor_pos += 1
             # Post ValueChanged immediately

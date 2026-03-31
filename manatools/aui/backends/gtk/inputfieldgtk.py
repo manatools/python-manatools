@@ -27,6 +27,7 @@ class YInputFieldGtk(YWidget):
         self._label = label
         self._value = ""
         self._password_mode = password_mode
+        self._input_max_length = -1
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -35,11 +36,32 @@ class YInputFieldGtk(YWidget):
     def value(self):
         return self._value
     
+    def inputMaxLength(self):
+        return int(getattr(self, '_input_max_length', -1))
+
+    def setInputMaxLength(self, numberOfChars):
+        try:
+            self._input_max_length = int(numberOfChars)
+        except Exception:
+            self._input_max_length = -1
+        if self._password_mode:
+            return
+        try:
+            if getattr(self, '_entry_widget', None) is not None:
+                # Gtk.Entry.set_max_length: 0 = no limit
+                max_len = self._input_max_length if self._input_max_length >= 0 else 0
+                self._entry_widget.set_max_length(max_len)
+        except Exception:
+            pass
+
     def setValue(self, text):
-        self._value = text
+        s = text if text is not None else ""
+        if not self._password_mode and getattr(self, '_input_max_length', -1) >= 0:
+            s = s[:self._input_max_length]
+        self._value = s
         if hasattr(self, '_entry_widget') and self._entry_widget:
             try:
-                self._entry_widget.set_text(text)
+                self._entry_widget.set_text(self._value)
             except Exception:
                 pass
     
@@ -76,6 +98,12 @@ class YInputFieldGtk(YWidget):
             entry.connect("changed", self._on_changed)
         except Exception:
             pass
+
+        if not self._password_mode and self._input_max_length >= 0:
+            try:
+                entry.set_max_length(self._input_max_length)
+            except Exception:
+                pass
 
         try:
             vbox.append(entry)

@@ -19,6 +19,7 @@ class YInputFieldQt(YWidget):
         self._label = label
         self._value = ""
         self._password_mode = password_mode
+        self._input_max_length = -1
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
     
     def widgetClass(self):
@@ -27,10 +28,40 @@ class YInputFieldQt(YWidget):
     def value(self):
         return self._value
     
+    def inputMaxLength(self):
+        return int(getattr(self, '_input_max_length', -1))
+
+    def setInputMaxLength(self, numberOfChars):
+        try:
+            self._input_max_length = int(numberOfChars)
+        except Exception:
+            self._input_max_length = -1
+        if self._password_mode:
+            return
+        try:
+            if getattr(self, '_entry_widget', None) is not None:
+                max_len = self._input_max_length if self._input_max_length >= 0 else 2147483647
+                self._entry_widget.setMaxLength(max_len)
+                if self._input_max_length >= 0:
+                    current = self._entry_widget.text()
+                    if len(current) > self._input_max_length:
+                        try:
+                            self._entry_widget.blockSignals(True)
+                            self._entry_widget.setText(current[:self._input_max_length])
+                            self._entry_widget.blockSignals(False)
+                            self._value = self._entry_widget.text()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
     def setValue(self, text):
-        self._value = text
+        s = text if text is not None else ""
+        if not self._password_mode and getattr(self, '_input_max_length', -1) >= 0:
+            s = s[:self._input_max_length]
+        self._value = s
         if hasattr(self, '_entry_widget') and self._entry_widget:
-            self._entry_widget.setText(text)
+            self._entry_widget.setText(self._value)
     
     def label(self):
         return self._label
@@ -51,6 +82,8 @@ class YInputFieldQt(YWidget):
 
         entry.setText(self._value)
         entry.textChanged.connect(self._on_text_changed)
+        if not self._password_mode and self._input_max_length >= 0:
+            entry.setMaxLength(self._input_max_length)
         layout.addWidget(entry)
 
         self._backend_widget = container
