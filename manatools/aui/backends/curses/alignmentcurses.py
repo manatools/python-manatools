@@ -16,7 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
-from .commoncurses import pixels_to_chars, _curses_recursive_min_width
+from .commoncurses import pixels_to_chars, _curses_recursive_min_width, _curses_recursive_min_height
 
 # Module-level logger for curses alignment backend
 _mod_logger = logging.getLogger("manatools.aui.curses.alignment.module")
@@ -156,6 +156,14 @@ class YAlignmentCurses(YSingleChildContainerWidget):
                 if getattr(self, '_min_height_px', 0) and self._min_height_px > 0:
                     min_h = pixels_to_chars(int(self._min_height_px), YUIDimension.YD_VERT)
                     ch_height = max(ch_height, min_h)
+            except Exception:
+                pass
+            # Safety net: never give the child less rows than its recursive content minimum.
+            # This prevents tiny minHeight pixel values (e.g. 7px → 0 curses rows) from
+            # collapsing VBox/HBox children to a single row and hiding buttons/combos.
+            try:
+                rec_min_h = _curses_recursive_min_height(self.child())
+                ch_height = max(ch_height, rec_min_h)
             except Exception:
                 pass
             # give the computed width to the child (at least 1 char)
