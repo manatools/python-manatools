@@ -155,41 +155,57 @@ class YInputFieldQt(YWidget):
         """Apply independent horizontal/vertical stretch policies for single-line input."""
         if not hasattr(self, '_backend_widget') or self._backend_widget is None:
             return
+        if not hasattr(self, '_entry_widget') or self._entry_widget is None:
+            return
 
         horiz = bool(self.stretchable(YUIDimension.YD_HORIZ))
         vert = bool(self.stretchable(YUIDimension.YD_VERT))
 
-        # Compute approximate metrics
+        # Width: derived from font char width
         try:
-            fm = self._entry_widget.fontMetrics() if hasattr(self, '_entry_widget') else None
-            char_w = fm.horizontalAdvance('M') if fm is not None else 8
-            line_h = fm.lineSpacing() if fm is not None else 18
+            char_w = self._entry_widget.fontMetrics().horizontalAdvance('M')
+            if char_w <= 0:
+                char_w = 8
         except Exception:
-            char_w, line_h = 8, 18
+            char_w = 8
 
         desired_chars = 20
-        try:
-            # Only include the label height when the label is actually visible.
-            # A hidden QLabel still has a positive sizeHint().height() (= font
-            # line height ≈ 16–18 px), so blindly adding qlabel_h would make the
-            # container ~44 px tall instead of ~26 px, causing the HBox search
-            # bar row to be too tall and other widgets (comboboxes, checkbox) to
-            # appear misaligned within that oversized row.
-            label_visible = (
-                hasattr(self, '_qlbl')
-                and self._qlbl is not None
-                and self._qlbl.isVisible()
-            )
-            qlabel_h = (
-                self._qlbl.sizeHint().height()
-                if label_visible
-                else 0
-            )
-        except Exception:
-            qlabel_h = 0
-
         w_px = int(char_w * desired_chars) + 12
-        h_px = int(line_h) + qlabel_h + 8
+
+        # Height: use actual widget sizeHints so that border/padding of QLineEdit
+        # and the real layout spacing are accounted for.
+        # BUG FIXED: the old formula used fm.lineSpacing() (font metric only, ~17px)
+        # instead of entry.sizeHint().height() (~28px with borders), and used
+        # self._qlbl.isVisible() which returns False before the dialog is shown,
+        # causing the container to be set too short and the cursor to appear at
+        # the bottom of a squished entry box.
+        try:
+            entry_h = self._entry_widget.sizeHint().height()
+            if entry_h <= 0:
+                entry_h = 28
+        except Exception:
+            entry_h = 28
+
+        # Use _label string (not isVisible) to determine if label row is present.
+        # isVisible() returns False on a not-yet-shown widget even when no hide()
+        # was called, producing qlabel_h=0 and a 25px container that clips the entry.
+        has_label = bool(getattr(self, '_label', ''))
+        try:
+            if has_label:
+                label_h = self._qlbl.sizeHint().height()
+                if label_h <= 0:
+                    label_h = 16
+                try:
+                    lay_spacing = self._backend_widget.layout().spacing()
+                    if lay_spacing < 0:
+                        lay_spacing = 6
+                except Exception:
+                    lay_spacing = 6
+                h_px = label_h + lay_spacing + entry_h
+            else:
+                h_px = entry_h
+        except Exception:
+            h_px = entry_h
 
         # Policy per axis
         try:
