@@ -91,6 +91,7 @@ class YDialogWeb(YSingleChildContainerWidget):
     """
 
     _open_dialogs: List["YDialogWeb"] = []
+    _open_dialogs_lock: threading.RLock = threading.RLock()
 
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
         super().__init__()
@@ -107,7 +108,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         self._pending_updates: dict = {}  # widget_id -> threading.Timer
         self._pending_lock = threading.Lock()
 
-        YDialogWeb._open_dialogs.append(self)
+        with YDialogWeb._open_dialogs_lock:
+            YDialogWeb._open_dialogs.append(self)
         logger.debug("YDialogWeb created: %s", self.debugLabel())
 
     def widgetClass(self):
@@ -116,8 +118,9 @@ class YDialogWeb(YSingleChildContainerWidget):
     @staticmethod
     def currentDialog(doThrow=True) -> Optional["YDialogWeb"]:
         """Return the topmost open dialog, or raise if none."""
-        if YDialogWeb._open_dialogs:
-            return YDialogWeb._open_dialogs[-1]
+        with YDialogWeb._open_dialogs_lock:
+            if YDialogWeb._open_dialogs:
+                return YDialogWeb._open_dialogs[-1]
         if doThrow:
             raise YUINoDialogException("No dialog is currently open")
         return None
@@ -129,7 +132,8 @@ class YDialogWeb(YSingleChildContainerWidget):
 
     def isTopmostDialog(self) -> bool:
         """Return whether this dialog is the topmost."""
-        return YDialogWeb._open_dialogs[-1] == self if YDialogWeb._open_dialogs else False
+        with YDialogWeb._open_dialogs_lock:
+            return YDialogWeb._open_dialogs[-1] == self if YDialogWeb._open_dialogs else False
 
     def render_modal_html(self) -> str:
         """Render dialog content as a modal overlay fragment (no full page)."""
@@ -154,7 +158,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         # Popup dialogs share the root dialog's server; they are rendered as
         # modal overlays pushed via the existing WebSocket connection.
         if self._dialog_type != YDialogType.YMainDialog:
-            root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
+            with YDialogWeb._open_dialogs_lock:
+                root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
             if root is not None:
                 self._is_open = True
                 self._broadcast({
@@ -219,8 +224,9 @@ class YDialogWeb(YSingleChildContainerWidget):
             except Exception:
                 pass
             self._is_open = False
-            if self in YDialogWeb._open_dialogs:
-                YDialogWeb._open_dialogs.remove(self)
+            with YDialogWeb._open_dialogs_lock:
+                if self in YDialogWeb._open_dialogs:
+                    YDialogWeb._open_dialogs.remove(self)
             return True
 
         # Main dialog: notify browsers, close connections, stop server.
@@ -246,31 +252,39 @@ class YDialogWeb(YSingleChildContainerWidget):
 
         self._is_open = False
 
-        if self in YDialogWeb._open_dialogs:
-            YDialogWeb._open_dialogs.remove(self)
+        with YDialogWeb._open_dialogs_lock:
+            if self in YDialogWeb._open_dialogs:
+                YDialogWeb._open_dialogs.remove(self)
 
         return True
 
     @classmethod
     def deleteTopmostDialog(cls, doThrow=True) -> bool:
         """Delete the topmost dialog."""
-        if cls._open_dialogs:
-            return cls._open_dialogs[-1].destroy(doThrow)
-        return False
+        with cls._open_dialogs_lock:
+            if not cls._open_dialogs:
+                return False
+            dialog = cls._open_dialogs[-1]
+        return dialog.destroy(doThrow)
 
     @classmethod
     def deleteAllDialogs(cls, doThrow=True) -> bool:
         """Delete all open dialogs."""
         ok = True
-        while cls._open_dialogs:
+        while True:
+            with cls._open_dialogs_lock:
+                if not cls._open_dialogs:
+                    break
+                dialog = cls._open_dialogs[-1]
             try:
-                cls._open_dialogs[-1].destroy(doThrow)
+                dialog.destroy(doThrow)
             except Exception:
                 ok = False
-                try:
-                    cls._open_dialogs.pop()
-                except Exception:
-                    break
+                with cls._open_dialogs_lock:
+                    try:
+                        cls._open_dialogs.remove(dialog)
+                    except ValueError:
+                        break
         return ok
 
     def setDefaultButton(self, button) -> bool:
@@ -314,7 +328,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         """
         if self._server is None:
             # Popup: route through the root dialog's connections.
-            root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
+            with YDialogWeb._open_dialogs_lock:
+                root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
             if root:
                 root._broadcast(message)
             return
