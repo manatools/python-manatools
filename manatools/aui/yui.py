@@ -19,40 +19,107 @@ class YUI:
     
     @classmethod
     def _detect_backend(cls):
-        """Detect the best available backend"""
-        # Check environment variable first
+        """Detect the best available backend.
+
+        Priority:
+        1. MUI_BACKEND environment variable (user override).
+        2. XDG_CURRENT_DESKTOP present → desktop session:
+           - Known GTK desktops  → try GTK4, warn + try Qt if unavailable.
+           - Everything else     → try Qt, warn + try GTK4 if unavailable.
+           In both cases NCurses is the last resort for graphical sessions.
+        3. No desktop session → NCurses only.
+
+        A RuntimeError is raised only when every candidate backend is missing.
+        Import probes are deferred: only the library actually needed is probed.
+        """
+        import logging
+        _log = logging.getLogger(__name__)
+
+        # ── helpers ────────────────────────────────────────────────────────
+        def _try_gtk():
+            try:
+                import gi
+                gi.require_version('Gtk', '4.0')
+                from gi.repository import Gtk  # noqa: F401
+                return True
+            except (ImportError, ValueError):
+                return False
+
+        def _try_qt():
+            try:
+                import PySide6.QtWidgets  # noqa: F401
+                return True
+            except ImportError:
+                return False
+
+        def _try_ncurses():
+            try:
+                import curses  # noqa: F401
+                return True
+            except ImportError:
+                return False
+
+        # ── 1. Explicit user override — no probing needed ──────────────────
         backend_env = os.environ.get('MUI_BACKEND', '').lower()
         if backend_env == 'qt':
             return Backend.QT
-        elif backend_env == 'gtk':
+        if backend_env == 'gtk':
             return Backend.GTK
-        elif backend_env == 'ncurses':
+        if backend_env == 'ncurses':
             return Backend.NCURSES
-        
-        # Auto-detect based on available imports
-        # Require PySide6 (Qt6)
-        try:
-            import PySide6.QtWidgets
-            return Backend.QT
-        except ImportError:
-            pass
 
-        # GTK: require GTK4
-        try:
-            import gi
-            gi.require_version('Gtk', '4.0')
-            from gi.repository import Gtk
-            return Backend.GTK
-        except (ImportError, ValueError):
-            pass
-            
-        try:
-            import curses
+        # ── 2. Desktop session present ─────────────────────────────────────
+        xdg = os.environ.get('XDG_CURRENT_DESKTOP', '')
+        if xdg:
+            # XDG spec allows colon-separated stacking (e.g. "ubuntu:GNOME")
+            desktops = {d.strip().upper() for d in xdg.split(':')}
+            _GTK_DESKTOPS = {
+                'GNOME', 'XFCE', 'MATE', 'LXDE', 'CINNAMON',
+                'PANTHEON', 'UNITY', 'ENLIGHTENMENT', 'SUGAR',
+            }
+
+            if desktops & _GTK_DESKTOPS:
+                # GTK-preferred desktop
+                if _try_gtk():
+                    return Backend.GTK
+                matched = ', '.join(sorted(desktops & _GTK_DESKTOPS))
+                _log.warning(
+                    "GTK desktop detected (%s) but GTK4 (python-gobject/gi) "
+                    "is not available — trying Qt as fallback.", matched
+                )
+                if _try_qt():
+                    return Backend.QT
+                _log.warning(
+                    "PySide6 (Qt) not available either — falling back to NCurses."
+                )
+            else:
+                # Qt-preferred desktop
+                if _try_qt():
+                    return Backend.QT
+                desktop_names = ', '.join(sorted(desktops))
+                _log.warning(
+                    "Qt desktop detected (%s) but PySide6 is not available "
+                    "— trying GTK4 as fallback.", desktop_names
+                )
+                if _try_gtk():
+                    return Backend.GTK
+                _log.warning(
+                    "GTK4 not available either — falling back to NCurses."
+                )
+
+            # Last resort even for graphical sessions
+            if _try_ncurses():
+                return Backend.NCURSES
+            raise RuntimeError(
+                "No UI backend available: Qt, GTK4, and NCurses are all missing."
+            )
+
+        # ── 3. No desktop → headless / TTY → NCurses ──────────────────────
+        if _try_ncurses():
             return Backend.NCURSES
-        except ImportError:
-            pass
-            
-        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), or curses.")
+        raise RuntimeError(
+            "No UI backend available: running headless but curses is not installed."
+        )
     
     @classmethod
     def ui(cls):
