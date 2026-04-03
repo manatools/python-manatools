@@ -14,6 +14,7 @@
     // WebSocket connection
     let ws = null;
     let wsReconnectAttempts = 0;
+    let wsShutdown = false;          // set on clean app exit; suppresses reconnect
     const MAX_RECONNECT_ATTEMPTS = 10;
     const RECONNECT_DELAY = 1000;
 
@@ -88,6 +89,7 @@
     }
 
     function attemptReconnect() {
+        if (wsShutdown) return;
         if (wsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             wsReconnectAttempts++;
             setBadge('reconnecting');
@@ -140,6 +142,9 @@
             case 'busy':
                 setBusy(message.state);
                 break;
+            case 'shutdown':
+                showShutdown(message.reason || 'The application has closed.');
+                break;
             default:
                 console.log('Unknown message type:', message.type);
         }
@@ -149,6 +154,18 @@
         const overlay = document.getElementById('mana-busy-overlay');
         if (!overlay) return;
         overlay.hidden = !state;
+    }
+
+    function showShutdown(reason) {
+        wsShutdown = true;
+        setBadge('disconnected');
+        // Hide busy overlay in case it was up when the app exited.
+        setBusy(false);
+        const overlay = document.getElementById('mana-shutdown-overlay');
+        if (!overlay) return;
+        const msg = overlay.querySelector('.mana-shutdown-msg');
+        if (msg) msg.textContent = reason;
+        overlay.hidden = false;
     }
 
     function showModal(dialogId, html) {
