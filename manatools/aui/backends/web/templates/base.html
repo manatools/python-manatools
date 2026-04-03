@@ -42,6 +42,17 @@
         <span class="visually-hidden">Loading…</span>
     </div>
 
+    <!-- Shutdown overlay — shown when the application exits; non-dismissable -->
+    <div id="mana-shutdown-overlay" hidden role="alertdialog" aria-modal="true"
+         aria-labelledby="mana-shutdown-title">
+        <div class="mana-shutdown-box">
+            <span class="mana-shutdown-icon" aria-hidden="true">&#x25A0;</span>
+            <p id="mana-shutdown-title" class="mana-shutdown-msg"></p>
+            <button class="btn btn-sm btn-outline-light mt-2"
+                    onclick="window.location.reload()">Reload</button>
+        </div>
+    </div>
+
     <!-- Bootstrap JS bundle (Popper included, no jQuery, no CDN) -->
     <script src="/static/vendor/bootstrap/bootstrap.bundle.min.js"></script>
 
