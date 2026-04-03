@@ -100,6 +100,44 @@ body {
     cursor: wait;
 }
 
+/* === Shutdown overlay === */
+/*
+ * Shown when the Python application exits cleanly (shutdown WS message).
+ * Sits above everything (z-index 2100), is never hidden by the user, and
+ * offers only a Reload button so the user knows the session has ended.
+ */
+#mana-shutdown-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 2100;
+}
+
+.mana-shutdown-box {
+    background: var(--bs-dark, #212529);
+    color: var(--bs-light, #f8f9fa);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.5rem;
+    padding: 2rem 2.5rem;
+    text-align: center;
+    max-width: 26rem;
+}
+
+.mana-shutdown-icon {
+    font-size: 2rem;
+    color: var(--bs-danger, #dc3545);
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+.mana-shutdown-msg {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+}
+
 .mana-popup-overlay {
     position: fixed;
     inset: 0;
