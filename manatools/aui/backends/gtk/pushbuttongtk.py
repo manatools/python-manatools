@@ -71,11 +71,32 @@ class YPushButtonGtk(YWidget):
     
     def label(self):
         return self._label
-    
+
+    def __icon_available(self):
+        """Return True if self._icon_name resolves to an available icon."""
+        if not self._icon_name:
+            return False
+        # For file paths check existence directly (no widget needed).
+        if os.path.isabs(self._icon_name) or os.path.sep in self._icon_name or os.path.exists(self._icon_name):
+            return os.path.exists(self._icon_name) or os.path.exists(self._icon_name + '.png')
+        # For theme icon names use IconTheme.has_icon (no Gtk.Image widget allocation).
+        try:
+            display = Gdk.Display.get_default()
+            if display:
+                theme = Gtk.IconTheme.get_for_display(display)
+                base_name = os.path.splitext(self._icon_name)[0] if '.' in self._icon_name else self._icon_name
+                return bool(theme.has_icon(base_name))
+        except Exception:
+            pass
+        return False
+
     def setLabel(self, label):
         self._label = _convert_mnemonic_to_gtk(label)
         if self._backend_widget:
             try:
+                # icon_only=True with icon available: text must stay hidden.
+                if self._icon_only and self.__icon_available():
+                    return
                 self._backend_widget.set_label(self._label)
             except Exception:
                 pass
@@ -125,22 +146,33 @@ class YPushButtonGtk(YWidget):
         return (minimum_size, natural_size, -1, -1)
     
     def _create_backend_widget(self):
+        # Resolve icon once; used in both branches to avoid double look-up.
+        ico_img = _resolve_icon(self._icon_name) if self._icon_name else None
+        icon_present = ico_img is not None
         if self._icon_only:
-            self._logger.info(f"Creating icon-only button '{self._label}'")
+            self._logger.info("Creating icon-only button '%s'", self._label)
+            # icon_only=True + icon available → pure icon button.
+            # icon_only=True + icon unavailable → show label as graceful fallback.
             self._backend_widget = _YPushButtonMeasure(self)
             self._backend_widget.set_use_underline(True)
-            if self._icon_name:
-                self._backend_widget.set_icon_name(self._icon_name)
+            if icon_present:
+                try:
+                    self._backend_widget.set_child(ico_img)
+                    self._backend_widget.add_css_class("image-button")
+                except Exception:
+                    pass
+            else:
+                if self._icon_name:
+                    self._logger.warning("Icon resolution failed for '%s', falling back to label", self._icon_name)
+                self._backend_widget.set_label(self._label)
         else:
-            self._logger.info(f"Creating button with icon and label '{self._label}'")
+            self._logger.info("Creating button with icon and label '%s'", self._label)
             try:
                 self._backend_widget = _YPushButtonMeasure(self, label=self._label)
                 self._backend_widget.set_use_underline(True)
                 hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-                if self._icon_name:
-                    img = _resolve_icon(self._icon_name)
-                    if img is not None:
-                        hb.append(img)
+                if icon_present:
+                    hb.append(ico_img)
                 lbl = Gtk.Label(label=self._label, use_underline=True)
                 # center contents inside the box so button label appears centered
                 try:
@@ -219,7 +251,28 @@ class YPushButtonGtk(YWidget):
             if getattr(self, "_backend_widget", None) is None:
                 return
             if self._icon_only:
-                self._backend_widget.set_icon_name(icon_name)
+                img = None
+                try:
+                    img = _resolve_icon(icon_name)
+                except Exception:
+                    img = None
+                if img is not None:
+                    try:
+                        self._backend_widget.set_child(img)
+                        self._backend_widget.add_css_class("image-button")
+                    except Exception:
+                        pass
+                else:
+                    # icon not available: fall back to showing the label.
+                    self._logger.warning("Icon resolution failed for '%s', falling back to label", icon_name)
+                    try:
+                        self._backend_widget.remove_css_class("image-button")
+                    except Exception:
+                        pass
+                    try:
+                        self._backend_widget.set_label(self._label)
+                    except Exception:
+                        pass
                 return
             # not icon_only: try to set icon + label
             img = None

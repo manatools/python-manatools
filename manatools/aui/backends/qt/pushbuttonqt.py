@@ -35,8 +35,11 @@ class YPushButtonQt(YWidget):
     
     def setLabel(self, label):
         self._label = label
-        if self._backend_widget and self._icon_only is False:
-            self._backend_widget.setText(label)
+        if self._backend_widget:
+            # Update text when not icon-only, OR when icon-only but no icon is available
+            # (graceful fallback: the label is the only thing visible).
+            if not self._icon_only or not self.__icon_available():
+                self._backend_widget.setText(label)
 
     def setDefault(self, default: bool):
         """Mark/unmark this push button as the dialog default."""
@@ -46,8 +49,20 @@ class YPushButtonQt(YWidget):
         """Return True if this button is currently the default."""
         return bool(getattr(self, "_is_default", False))
     
+    def __icon_available(self):
+        if getattr(self, "_icon_name", None):
+            ico = _resolve_icon(self._icon_name)
+            return ico is not None and not ico.isNull()
+        return False
+
     def _create_backend_widget(self):
-        if self._icon_only:
+        # Resolve icon once; avoid double call via __icon_available
+        ico = _resolve_icon(self._icon_name) if getattr(self, "_icon_name", None) else None
+        icon_present = ico is not None and not ico.isNull()
+
+        # icon_only=True with icon: show no text so only the icon is visible.
+        # icon_only=True without icon: graceful fallback — show _label instead.
+        if self._icon_only and icon_present:
             self._backend_widget = QtWidgets.QPushButton()
         else:
             self._backend_widget = QtWidgets.QPushButton(self._label)
@@ -57,15 +72,12 @@ class YPushButtonQt(YWidget):
             self._backend_widget.show()
         else:
             self._backend_widget.hide()
-        # apply icon if previously set
+        # apply icon
         try:
-            if getattr(self, "_icon_name", None):
-                ico = _resolve_icon(self._icon_name)
-                if ico is not None and not ico.isNull():
-                    try:
-                        self._backend_widget.setIcon(ico)
-                    except Exception:
-                        pass
+            if icon_present:
+                self._backend_widget.setIcon(ico)
+            elif self._icon_name:
+                self._logger.warning("Icon resolution failed for '%s'", self._icon_name)
         except Exception:
             pass
         # Set size policy to prevent unwanted expansion
@@ -127,16 +139,16 @@ class YPushButtonQt(YWidget):
                 return
             ico = _resolve_icon(icon_name)
             if ico is not None and not ico.isNull():
-                try:
-                    self._backend_widget.setIcon(ico)
-                    return
-                except Exception:
-                    pass
-            # Clear icon if resolution failed
-            try:
+                self._backend_widget.setIcon(ico)
+                # icon_only=True and icon now available: hide the label text.
+                if self._icon_only:
+                    self._backend_widget.setText("")
+            else:
+                self._logger.warning("Icon resolution failed for '%s'", self._icon_name)
                 self._backend_widget.setIcon(QtGui.QIcon())
-            except Exception:
-                pass
+                # icon_only=True but icon unavailable: fall back to showing the label.
+                if self._icon_only:
+                    self._backend_widget.setText(self._label)
         except Exception:
             try:
                 self._logger.exception("setIcon failed")
