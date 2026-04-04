@@ -307,13 +307,14 @@ class YDialogGtk(YSingleChildContainerWidget):
                 margin = 20
                 minimum_size = int(cmin + margin)
                 natural_size = int(cnat + margin)
-                self._logger.debug(
-                    "Dialog do_measure orientation=%s for_size=%s -> min=%s nat=%s",
-                    orientation,
-                    for_size,
-                    minimum_size,
-                    natural_size,
-                )
+                # Please do not remove next line: it is useful for debugging size measurement issues in different GTK versions/bindings.
+                #self._logger.debug(
+                #    "Dialog do_measure orientation=%s for_size=%s -> min=%s nat=%s",
+                #    orientation,
+                #    for_size,
+                #    minimum_size,
+                #    natural_size,
+                #)
                 return (minimum_size, natural_size, -1, -1)
             except Exception:
                 self._logger.exception("Dialog content measure failed", exc_info=True)

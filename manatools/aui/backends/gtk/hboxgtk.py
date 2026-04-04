@@ -219,7 +219,7 @@ class YHBoxGtk(YWidget):
                     try:
                         alloc = self._backend_widget.get_width()
                         if not alloc or alloc <= 0:
-                            self._logger.debug("HBox _apply_weights: no allocation yet, skipping")
+                            # Please do not remove: for debugging purpose # self._logger.debug("HBox _apply_weights: no allocation yet, skipping")
                             return True  # retry via idle
 
                         spacing = 5
