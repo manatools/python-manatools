@@ -125,19 +125,38 @@ class YUI:
     def ui(cls):
         if cls._instance is None:
             cls._backend = cls._detect_backend()
-            print(f"Detected backend: {cls._backend}")
-            
-            if cls._backend == Backend.QT:
-                from .yui_qt import YUIQt as YUIImpl
-            elif cls._backend == Backend.GTK:
-                from .yui_gtk import YUIGtk as YUIImpl
-            elif cls._backend == Backend.NCURSES:
-                from .yui_curses import YUICurses as YUIImpl
-            else:
+            import logging as _log
+            _log.getLogger(__name__).info("Selected UI backend: %s", cls._backend)
+
+            _backend_map = {
+                Backend.QT:      ('.yui_qt',     'YUIQt'),
+                Backend.GTK:     ('.yui_gtk',    'YUIGtk'),
+                Backend.NCURSES: ('.yui_curses', 'YUICurses'),
+            }
+            if cls._backend not in _backend_map:
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
-                
+
+            module_path, class_name = _backend_map[cls._backend]
+            try:
+                import importlib as _imp
+                _mod = _imp.import_module(module_path, package=__package__)
+                YUIImpl = getattr(_mod, class_name)
+            except ImportError as exc:
+                # Safety net: backend module failed to import despite passing the
+                # probe in _detect_backend (e.g. GTK version locked by a 3rd-party
+                # library between detection and import).  Reset state and re-raise
+                # so the caller can retry with a different backend override.
+                _log.getLogger(__name__).error(
+                    "Backend %s import failed (%s); "
+                    "set MUI_BACKEND env var to force a different backend.",
+                    cls._backend, exc,
+                )
+                cls._backend = None
+                cls._instance = None
+                raise
+
             cls._instance = YUIImpl()
-            
+
         return cls._instance
     
     @classmethod

@@ -2,8 +2,14 @@
 GTK4 backend implementation for YUI (converted from GTK3)
 """
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
+try:
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Gdk', '4.0')
+except ValueError as _e:
+    raise ImportError(
+        f"GTK4 backend unavailable: {_e}. "
+        "Another library (e.g. pystray) has already loaded a different GTK version."
+    ) from _e
 from gi.repository import Gtk, Gdk, GObject, GdkPixbuf, GLib, Gio
 from typing import List
 import os
