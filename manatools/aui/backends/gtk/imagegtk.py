@@ -12,44 +12,20 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import Gtk, GdkPixbuf, GObject
+from gi.repository import Gtk, GdkPixbuf, Gdk, GObject
 import logging
 import os
 from ...yui_common import *
 from .commongtk import _resolve_icon, _resolve_gicon
 
 
-class _YImageMeasure(Gtk.Image):
-    """Gtk.Image subclass delegating size measurement to YImageGtk."""
-
-    def __init__(self, owner):
-        """Initialize the measuring image widget.
-
-        Args:
-            owner: Owning YImageGtk instance.
-        """
-        super().__init__()
-        self._owner = owner
-
-    def do_measure(self, orientation, for_size):
-        """GTK4 virtual method for size measurement.
-
-        Args:
-            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
-            for_size: Size in the opposite orientation (-1 if not constrained)
-
-        Returns:
-            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
-        """
-        try:
-            return self._owner.do_measure(orientation, for_size)
-        except Exception:
-            self._owner._logger.exception("Image backend do_measure delegation failed", exc_info=True)
-            return (0, 0, -1, -1)
-
-
 class YImageGtk(YWidget):
-    """GTK4 image widget with optional autoscale and height-for-width measurement."""
+    """GTK4 image widget backed by Gtk.Picture for native scaling and SVG support.
+
+    Gtk.Picture natively implements height-for-width geometry, preserves aspect
+    ratios through ContentFit.CONTAIN, and renders SVG files at display resolution
+    via librsvg when loaded with Gdk.Texture — no manual pixbuf rescaling needed.
+    """
 
     def __init__(self, parent=None, imageFileName="", fallBackName=None):
         super().__init__(parent)
@@ -58,7 +34,6 @@ class YImageGtk(YWidget):
         self._fallback_name = fallBackName
         self._auto_scale = False
         self._zero_size = {YUIDimension.YD_HORIZ: False, YUIDimension.YD_VERT: False}
-        self._pixbuf = None
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         self._logger.debug("%s.__init__ file=%s", self.__class__.__name__, imageFileName)
 
@@ -71,51 +46,73 @@ class YImageGtk(YWidget):
     def setImage(self, imageFileName):
         try:
             self._imageFileName = imageFileName
-            if getattr(self, '_backend_widget', None) is not None:
-                # Prefer direct filesystem loading for absolute/real paths so we keep
-                # an explicit pixbuf and reliable intrinsic geometry.
-                if imageFileName and os.path.exists(imageFileName):
-                    try:
-                        self._pixbuf = GdkPixbuf.Pixbuf.new_from_file(imageFileName)
-                        self._apply_pixbuf()
-                        return
-                    except Exception:
-                        self._logger.exception("failed to load pixbuf from file path")
-
-                # Try resolving via common GTK helper (may be theme icon or file)
-                try:
-                    resolved = _resolve_icon(imageFileName, size=48)
-                    if resolved is not None:
-                        # If helper returned a Gtk.Image, attempt to set it on backend
-                        try:
-                            paintable = resolved.get_paintable() if hasattr(resolved, 'get_paintable') else None
-                            if paintable:
-                                self._backend_widget.set_from_paintable(paintable)
-                                return
-                        except Exception:
-                            pass
-                        try:
-                            pix = resolved.get_pixbuf() if hasattr(resolved, 'get_pixbuf') else None
-                            if pix:
-                                self._pixbuf = pix
-                                self._apply_pixbuf()
-                                return
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                # Fallback: try to load from file directly
-                if os.path.exists(imageFileName):
-                    try:
-                        self._pixbuf = GdkPixbuf.Pixbuf.new_from_file(imageFileName)
-                        self._apply_pixbuf()
-                    except Exception:
-                        self._logger.exception("failed to load pixbuf")
-                else:
-                    self._logger.error("setImage: file not found: %s", imageFileName)
+            if getattr(self, '_backend_widget', None) is None:
+                return
+            self._load_paintable(imageFileName)
         except Exception:
             self._logger.exception("setImage failed")
+
+    def _load_paintable(self, imageFileName):
+        """Load imageFileName into the Gtk.Picture backend widget.
+
+        Attempts in order:
+        1. Gdk.Texture.new_from_filename  (GTK >= 4.6, renders SVG natively via librsvg)
+        2. Gdk.Texture.new_from_file      (GTK >= 4.0, via Gio.File)
+        3. GdkPixbuf → Gdk.Texture        (raster fallback, SVG rasterised at declared size)
+        4. Theme icon resolution          (last resort)
+        """
+        if imageFileName and os.path.exists(imageFileName):
+            # Attempt 1: new_from_filename — SVG rendered at display resolution
+            try:
+                texture = Gdk.Texture.new_from_filename(imageFileName)
+                self._backend_widget.set_paintable(texture)
+                return
+            except AttributeError:
+                self._logger.debug(
+                    "_load_paintable: Gdk.Texture.new_from_filename not available (GTK < 4.6)"
+                )
+            except Exception:
+                self._logger.debug(
+                    "_load_paintable: Gdk.Texture.new_from_filename failed for %s", imageFileName
+                )
+
+            # Attempt 2: Gio.File variant (GTK >= 4.0)
+            try:
+                import gi.repository.Gio as Gio
+                gfile = Gio.File.new_for_path(imageFileName)
+                texture = Gdk.Texture.new_from_file(gfile)
+                self._backend_widget.set_paintable(texture)
+                return
+            except Exception:
+                self._logger.debug(
+                    "_load_paintable: Gdk.Texture.new_from_file failed for %s", imageFileName
+                )
+
+            # Attempt 3: GdkPixbuf raster
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file(imageFileName)
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                self._backend_widget.set_paintable(texture)
+                return
+            except Exception:
+                self._logger.exception(
+                    "_load_paintable: all Gdk.Texture methods failed for %s", imageFileName
+                )
+            return
+
+        # Attempt 4: theme icon name resolution
+        if imageFileName:
+            try:
+                resolved = _resolve_icon(imageFileName, size=48)
+                if resolved is not None:
+                    paintable = getattr(resolved, 'get_paintable', lambda: None)()
+                    if paintable:
+                        self._backend_widget.set_paintable(paintable)
+                        return
+            except Exception:
+                pass
+
+        self._logger.error("_load_paintable: could not load image: %s", imageFileName)
 
     def autoScale(self):
         return bool(self._auto_scale)
@@ -124,7 +121,6 @@ class YImageGtk(YWidget):
         try:
             self._auto_scale = bool(on)
             self._apply_size_policy()
-            self._apply_pixbuf()
         except Exception:
             self._logger.exception("setAutoScale failed")
 
@@ -138,200 +134,55 @@ class YImageGtk(YWidget):
         except Exception:
             pass
 
-    def _on_size_allocate(self, widget, width, height, baseline):
-        """GTK4 size-allocate signal: (widget, width: int, height: int, baseline: int)."""
-        try:
-            # Rescale whenever auto_scale is on OR when stretching on any axis.
-            should_resize = (
-                self._auto_scale
-                or self.stretchable(YUIDimension.YD_HORIZ)
-                or self.stretchable(YUIDimension.YD_VERT)
-            )
-            if should_resize and self._pixbuf is not None:
-                self._apply_pixbuf()
-        except Exception:
-            self._logger.exception("_on_size_allocate failed")
-
-    def do_measure(self, orientation, for_size):
-        """GTK4 virtual method for size measurement.
-
-        Args:
-            orientation: Gtk.Orientation (HORIZONTAL or VERTICAL)
-            for_size: Size in the opposite orientation (-1 if not constrained)
-
-        Returns:
-            tuple: (minimum_size, natural_size, minimum_baseline, natural_baseline)
-        """
-        pixbuf = getattr(self, "_pixbuf", None)
-        if pixbuf is not None:
-            try:
-                pix_w = max(1, int(pixbuf.get_width()))
-                pix_h = max(1, int(pixbuf.get_height()))
-                if orientation == Gtk.Orientation.HORIZONTAL:
-                    if for_size is not None and int(for_size) > 0:
-                        natural_size = max(1, int((int(for_size) * pix_w) / pix_h))
-                    else:
-                        natural_size = pix_w
-                    # When stretchable or auto_scale the widget must accept any size;
-                    # return minimum=0 so the container is not blocked from giving more space.
-                    if self._auto_scale or self.stretchable(YUIDimension.YD_HORIZ):
-                        minimum_size = 0
-                    else:
-                        minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_HORIZ) else natural_size
-                else:
-                    if for_size is not None and int(for_size) > 0:
-                        natural_size = max(1, int((int(for_size) * pix_h) / pix_w))
-                    else:
-                        natural_size = pix_h
-                    if self._auto_scale or self.stretchable(YUIDimension.YD_VERT):
-                        minimum_size = 0
-                    else:
-                        minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_VERT) else natural_size
-                self._logger.debug(
-                    "Image fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s (pix=%sx%s)",
-                    orientation,
-                    for_size,
-                    minimum_size,
-                    natural_size,
-                    pix_w,
-                    pix_h,
-                )
-                return (minimum_size, natural_size, -1, -1)
-            except Exception:
-                self._logger.exception("Image fallback do_measure from pixbuf failed", exc_info=True)
-
-        widget = getattr(self, "_backend_widget", None)
-        if widget is not None:
-            try:
-                minimum_size, natural_size, _minimum_baseline, _natural_baseline = Gtk.Image.do_measure(widget, orientation, for_size)
-                measured = (minimum_size, natural_size, -1, -1)
-                self._logger.debug("Image base do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
-                return measured
-            except Exception:
-                self._logger.exception("Image base do_measure failed", exc_info=True)
-
-        if orientation == Gtk.Orientation.HORIZONTAL:
-            minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_HORIZ) else 16
-            natural_size = max(minimum_size, 32)
-        else:
-            minimum_size = 0 if self.hasZeroSize(YUIDimension.YD_VERT) else 16
-            natural_size = max(minimum_size, 32)
-        self._logger.debug(
-            "Image generic fallback do_measure orientation=%s for_size=%s -> min=%s nat=%s",
-            orientation,
-            for_size,
-            minimum_size,
-            natural_size,
-        )
-        return (minimum_size, natural_size, -1, -1)
-
     def _create_backend_widget(self):
         try:
-            self._backend_widget = _YImageMeasure(self)
+            self._backend_widget = Gtk.Picture()
+            # Allow the picture to shrink below its natural pixel size so
+            # height-for-width / CONTAIN scaling works correctly.
+            self._backend_widget.set_can_shrink(True)
             if self._imageFileName:
-                # Use setImage to allow theme icon resolution via commongtk._resolve_icon
-                try:
-                    self.setImage(self._imageFileName)
-                except Exception:
-                    # Fallback: try direct filesystem load
-                    try:
-                        if os.path.exists(self._imageFileName):
-                            self._pixbuf = GdkPixbuf.Pixbuf.new_from_file(self._imageFileName)
-                    except Exception:
-                        self._logger.exception("failed to load pixbuf")
-            if getattr(self, '_pixbuf', None) is not None:
-                self._apply_pixbuf()
-            # hook allocation to rescale if autoscale is enabled
-            try:
-                self._backend_widget.connect('size-allocate', self._on_size_allocate)
-            except Exception:
-                pass
+                self._load_paintable(self._imageFileName)
             self._apply_size_policy()
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             self._logger.exception("_create_backend_widget failed")
 
     def _apply_size_policy(self):
-        try:
-            if getattr(self, '_backend_widget', None) is None:
-                return
-            try:
-                if hasattr(self._backend_widget, 'set_hexpand'):
-                    self._backend_widget.set_hexpand(self._auto_scale or self.stretchable(YUIDimension.YD_HORIZ))
-            except Exception:
-                pass
-            try:
-                if hasattr(self._backend_widget, 'set_vexpand'):
-                    self._backend_widget.set_vexpand(self._auto_scale or self.stretchable(YUIDimension.YD_VERT))
-            except Exception:
-                pass
-        except Exception:
-            self._logger.exception("_apply_size_policy failed")
+        """Propagate stretch/auto_scale flags to the Gtk.Picture widget.
 
-    def _apply_pixbuf(self):
+        Key GTK4 rules:
+        - hexpand/vexpand: request extra space from the parent layout.
+        - halign/valign FILL: the widget fills its entire allocated rectangle
+          (required so that get_width() returns the full container width).
+        - ContentFit.CONTAIN: scale image to fit while preserving aspect ratio
+          (GTK >= 4.8).  For older GTK, set_keep_aspect_ratio(True) is equivalent.
+        """
         try:
             if getattr(self, '_backend_widget', None) is None:
-                return
-            if not self._pixbuf:
-                self._backend_widget.clear()
                 return
 
             stretch_h = self.stretchable(YUIDimension.YD_HORIZ)
             stretch_v = self.stretchable(YUIDimension.YD_VERT)
-            should_resize = self._auto_scale or stretch_h or stretch_v
 
-            if should_resize:
-                # GTK4: get_width()/get_height() supersede deprecated get_allocated_*
-                try:
-                    w = self._backend_widget.get_width()
-                    h = self._backend_widget.get_height()
-                except AttributeError:
-                    # Very old GTK4 binding fallback
-                    w = self._backend_widget.get_allocated_width()
-                    h = self._backend_widget.get_allocated_height()
+            self._backend_widget.set_hexpand(stretch_h)
+            self._backend_widget.set_vexpand(stretch_v)
+            self._backend_widget.set_halign(
+                Gtk.Align.FILL if stretch_h else Gtk.Align.CENTER
+            )
+            self._backend_widget.set_valign(
+                Gtk.Align.FILL if stretch_v else Gtk.Align.CENTER
+            )
 
-                if w > 1 and h > 1:
-                    src_w = self._pixbuf.get_width()
-                    src_h = self._pixbuf.get_height()
-
-                    if self._auto_scale:
-                        # Preserve aspect ratio when auto-scaling.
-                        # Scale to fill the stretchable axis; let the other follow.
-                        if stretch_h and stretch_v:
-                            # Fit inside the allocated rectangle (letterbox)
-                            ratio = min(w / src_w, h / src_h) if src_w > 0 and src_h > 0 else 1.0
-                            target_w = max(1, int(src_w * ratio))
-                            target_h = max(1, int(src_h * ratio))
-                        elif stretch_h:
-                            # Scale to width, let height follow aspect ratio
-                            target_w = w
-                            target_h = max(1, int(w * src_h / src_w)) if src_w > 0 else src_h
-                        elif stretch_v:
-                            # Scale to height, let width follow aspect ratio
-                            target_h = h
-                            target_w = max(1, int(h * src_w / src_h)) if src_h > 0 else src_w
-                        else:
-                            # auto_scale but neither axis stretchable: fit inside
-                            ratio = min(w / src_w, h / src_h) if src_w > 0 and src_h > 0 else 1.0
-                            target_w = max(1, int(src_w * ratio))
-                            target_h = max(1, int(src_h * ratio))
-                    else:
-                        # No auto-scale: stretch each axis independently (may deform)
-                        target_w = w if stretch_h else src_w
-                        target_h = h if stretch_v else src_h
-
-                    scaled = self._pixbuf.scale_simple(
-                        max(1, target_w), max(1, target_h),
-                        GdkPixbuf.InterpType.BILINEAR,
-                    )
-                    self._backend_widget.set_from_pixbuf(scaled)
-                    return
-                # widget not yet allocated — set original pixbuf (size-allocate will rescale later)
-
-            # Not resizing (or not yet allocated): show at natural size.
-            self._backend_widget.set_from_pixbuf(self._pixbuf)
+            # Aspect-ratio-preserving content fit.
+            should_contain = self._auto_scale or stretch_h or stretch_v
+            try:
+                fit = Gtk.ContentFit.CONTAIN if should_contain else Gtk.ContentFit.SCALE_DOWN
+                self._backend_widget.set_content_fit(fit)
+            except AttributeError:
+                # GTK < 4.8: keep_aspect_ratio is the equivalent flag.
+                self._backend_widget.set_keep_aspect_ratio(should_contain)
         except Exception:
-            self._logger.exception("_apply_pixbuf failed")
+            self._logger.exception("_apply_size_policy failed")
 
     def setStretchable(self, dim, new_stretch):
         try:
