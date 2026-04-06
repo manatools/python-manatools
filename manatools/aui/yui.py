@@ -143,7 +143,7 @@ class YUI:
                 Backend.QT:      ('.yui_qt',     'YUIQt'),
                 Backend.GTK:     ('.yui_gtk',    'YUIGtk'),
                 Backend.NCURSES: ('.yui_curses', 'YUICurses'),
-                Backend.WEB: ('.yui_web0, 'YUIWeb'),
+                Backend.WEB:     ('.yui_web', 'YUIWeb'),
             }
             if cls._backend not in _backend_map:
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
