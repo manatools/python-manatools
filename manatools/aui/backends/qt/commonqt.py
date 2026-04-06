@@ -32,22 +32,30 @@ def _resolve_icon(icon_name):
         # path separator), prefer loading from disk. If it has no
         # extension, also try the same path with a .png suffix to help
         # debugging/test cases where a directory+basename is provided.
+        # Only treat as a filesystem path when the name is absolute or contains
+        # a path separator.  Bare names like "isodumper" are theme-icon names
+        # and must NOT be probed on disk — the CWD may contain a launcher
+        # script with the same name (e.g. isodumper/isodumper), which would
+        # cause QIcon to silently load a binary file instead of the theme icon.
+        is_file_path = os.path.isabs(icon_name) or os.sep in icon_name
         try:
-            if os.path.isabs(icon_name) or os.path.sep in icon_name:
+            if is_file_path:
                 if os.path.isfile(icon_name):
                     return QtGui.QIcon(icon_name)
-                # if there's no extension, try .png
+                # no extension → also try .png suffix
                 base, ext = os.path.splitext(icon_name)
                 if not ext:
                     png_candidate = icon_name + '.png'
                     if os.path.isfile(png_candidate):
                         logger.debug("Resolved icon %r to %r", icon_name, png_candidate)
                         return QtGui.QIcon(png_candidate)
-                # not found on filesystem: fall through to theme/name
+                # not found on filesystem: fall through to theme lookup
             else:
-                # non-path might still be a relative file name
-                if os.path.isfile(icon_name):
-                    logger.debug("Resolved icon %r to filesystem path", icon_name)
+                # Bare name with an explicit extension can still be a relative
+                # file reference (e.g. "logo.png" in the same directory).
+                # Bare names without an extension are always theme-icon names.
+                if "." in icon_name and os.path.isfile(icon_name):
+                    logger.debug("Resolved icon %r to relative filesystem path", icon_name)
                     return QtGui.QIcon(icon_name)
         except Exception:
             pass
