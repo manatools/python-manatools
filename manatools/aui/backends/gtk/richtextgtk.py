@@ -232,7 +232,8 @@ class YRichTextGtk(YWidget):
                     minimum_baseline = -1
                     natural_baseline = -1
                 measured = (minimum_size, natural_size, minimum_baseline, natural_baseline)
-                self._logger.debug("RichText do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
+                ## Please let next line commented useful for debugging size measurement issues without a backend widget
+                #self._logger.debug("RichText do_measure orientation=%s for_size=%s -> %s", orientation, for_size, measured)
                 return measured
             except Exception:
                 self._logger.exception("RichText base do_measure failed", exc_info=True)
