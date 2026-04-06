@@ -126,6 +126,18 @@ class YRichTextQt(YWidget):
             tb.setReadOnly(True)
         except Exception:
             pass
+        # No frame border and transparent background: follows the parent theme like a label
+        try:
+            tb.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        except Exception:
+            pass
+        try:
+            pal = tb.palette()
+            pal.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(0, 0, 0, 0))
+            tb.setPalette(pal)
+            tb.viewport().setAutoFillBackground(False)
+        except Exception:
+            pass
         # set initial content
         try:
             if self._plain:
