@@ -98,8 +98,21 @@ class YRichTextQt(YWidget):
     def lastActivatedUrl(self):
         return self._last_url
 
+    class _CompactTextBrowser(QtWidgets.QTextBrowser):
+        """QTextBrowser subclass with a compact minimumSizeHint.
+
+        QTextBrowser inherits QTextEdit's default minimumSizeHint of roughly
+        256 x 192 px, which causes popup dialogs to balloon when the caller
+        provides a small size hint via createMinSize. By overriding
+        minimumSizeHint() we allow the dialog to stay at the requested size
+        while the natural sizeHint() still guides layout when the dialog is
+        not size-constrained.
+        """
+        def minimumSizeHint(self):
+            return QtCore.QSize(0, 0)
+
     def _create_backend_widget(self):
-        tb = QtWidgets.QTextBrowser()
+        tb = self._CompactTextBrowser()
         # Prevent navigation; we only emit events on link clicks
         try:
             tb.setOpenExternalLinks(False)
