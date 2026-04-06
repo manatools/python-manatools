@@ -365,7 +365,7 @@ class YMenuBarCurses(YWidget):
             try:
                 dlg = self.findDialog()
                 if dlg is not None:
-                    dlg._last_draw_time = 0
+                    dlg.mark_dirty()
             except Exception:
                 pass
         except Exception:
@@ -414,7 +414,7 @@ class YMenuBarCurses(YWidget):
             try:
                 dlg = self.findDialog()
                 if dlg is not None:
-                    dlg._last_draw_time = 0
+                    dlg.mark_dirty()
             except Exception:
                 pass
         except Exception:

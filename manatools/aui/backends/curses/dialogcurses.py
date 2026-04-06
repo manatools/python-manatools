@@ -46,6 +46,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._focused_widget = None
         self._last_draw_time = 0
         self._draw_interval = 0.1  # seconds
+        self._needs_redraw = True   # set on any state change; cleared after each draw
         self._event_result = None
         # Debounce for resize handling (avoid flicker)
         self._resize_pending_until = 0.0
@@ -115,7 +116,16 @@ class YDialogCurses(YSingleChildContainerWidget):
     
     def isOpen(self):
         return self._is_open
-    
+
+    def mark_dirty(self):
+        """Signal that the dialog visual state has changed and needs a redraw.
+
+        Widgets and external callers should use this instead of directly
+        resetting ``_last_draw_time``; the event loop calls ``_draw_dialog()``
+        on the next iteration (subject to the rate-limiting interval).
+        """
+        self._needs_redraw = True
+
     def destroy(self, doThrow=True):
         self._clear_default_button()
         self._is_open = False
@@ -199,8 +209,8 @@ class YDialogCurses(YSingleChildContainerWidget):
         ncurses has no native window-hide concept, so visibility is emulated:
         * *hiding* (``visible=False``): the curses window is erased and the
           terminal is refreshed immediately so the screen area is cleared.
-        * *showing* (``visible=True``): ``_last_draw_time`` is reset to zero
-          so the event loop redraws the dialog on its very next iteration.
+        * *showing* (``visible=True``): ``_needs_redraw`` is set so the event
+          loop redraws the dialog on its very next iteration.
 
         :meth:`_draw_dialog` also checks this flag and skips all rendering
         while the dialog is hidden.
@@ -221,8 +231,8 @@ class YDialogCurses(YSingleChildContainerWidget):
                             "setVisible(False): erase/refresh failed for <%s>",
                             self.debugLabel(), exc_info=True)
                 else:
-                    # Force an immediate redraw on the next event-loop tick.
-                    self._last_draw_time = 0
+                    # Mark dirty so the event loop redraws on its next tick.
+                    self._needs_redraw = True
                     self._logger.debug(
                         "setVisible(True): redraw scheduled for <%s>",
                         self.debugLabel())
@@ -248,9 +258,9 @@ class YDialogCurses(YSingleChildContainerWidget):
                         self._focused_widget = None
                 except Exception:
                     pass
-            # Force a redraw so disabled/enabled visual state appears immediately
+            # Mark dirty so the disabled/enabled visual state is redrawn promptly.
             try:
-                self._last_draw_time = 0
+                self._needs_redraw = True
             except Exception:
                 pass
         except Exception:
@@ -451,8 +461,8 @@ class YDialogCurses(YSingleChildContainerWidget):
         
         self._focused_widget = focusable[new_index]
         self._focused_widget._focused = True
-        # Force redraw on focus change
-        self._last_draw_time = 0
+        # Mark dirty on focus change
+        self._needs_redraw = True
 
     def _focus_widget(self, widget):
         """Force focus on a specific widget when possible."""
@@ -484,7 +494,7 @@ class YDialogCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         try:
-            self._last_draw_time = 0
+            self._needs_redraw = True
         except Exception:
             pass
         return True
@@ -550,13 +560,18 @@ class YDialogCurses(YSingleChildContainerWidget):
                         self._last_term_size = (new_h, new_w)
                     except Exception:
                         pass
-                    # Clear pending flag and force immediate redraw
+                    # Clear pending flag and mark dirty for immediate redraw
                     self._resize_pending_until = 0.0
-                    self._last_draw_time = 0
+                    self._needs_redraw = True
 
-                # Draw at most every _draw_interval; forced redraw uses last_draw_time = 0
-                if (now - self._last_draw_time) >= self._draw_interval:
+                # Maintain redraw cadence while a help overlay is active (to detect expiry)
+                if getattr(self, '_help_overlay_text', None) is not None:
+                    self._needs_redraw = True
+                # Only redraw when state changed; prevents idle 10 Hz redraws that
+                # flicker on VT framebuffers where clear()+refresh() is not atomic.
+                if self._needs_redraw and (now - self._last_draw_time) >= self._draw_interval:
                     self._draw_dialog()
+                    self._needs_redraw = False
                     self._last_draw_time = now
 
                 # Non-blocking input
@@ -593,8 +608,8 @@ class YDialogCurses(YSingleChildContainerWidget):
                 if key in (ord('+'), ord('-')):
                     try:
                         if self._bubble_key_to_paned(key):
-                            # handled by a YPanedCurses ancestor; force redraw
-                            self._last_draw_time = 0
+                            # handled by a YPanedCurses ancestor; mark dirty
+                            self._needs_redraw = True
                             continue
                     except Exception:
                         pass
@@ -602,22 +617,22 @@ class YDialogCurses(YSingleChildContainerWidget):
                 # Focus navigation
                 if key == ord('\t'):
                     self._cycle_focus(forward=True)
-                    self._last_draw_time = 0
+                    self._needs_redraw = True
                     continue
                 elif key == curses.KEY_BTAB:
                     self._cycle_focus(forward=False)
-                    self._last_draw_time = 0
+                    self._needs_redraw = True
                     continue
 
                 # Dispatch key to focused widget
                 # Handle transient help overlay dismissal: any key (other than F1) should remove it and continue
                 if getattr(self, "_help_overlay_text", None) and key != curses.KEY_F1:
-                    # clear overlay immediately and force redraw, then proceed to normal handling
+                    # clear overlay immediately and mark dirty, then proceed to normal handling
                     try:
                         self._help_overlay_text = None
                         self._help_overlay_until = 0.0
                         self._help_overlay_pos = None
-                        self._last_draw_time = 0
+                        self._needs_redraw = True
                     except Exception:
                         pass
                 handled = False
@@ -644,7 +659,7 @@ class YDialogCurses(YSingleChildContainerWidget):
                                 self._help_overlay_text = str(ht)
                                 self._help_overlay_pos = pos
                                 self._help_overlay_until = time.time() + 5.0
-                                self._last_draw_time = 0
+                                self._needs_redraw = True
                                 # F1 handled
                                 handled = True
                                 # force immediate redraw next loop iteration
@@ -659,18 +674,18 @@ class YDialogCurses(YSingleChildContainerWidget):
                 if self._focused_widget and hasattr(self._focused_widget, '_handle_key'):
                     handled = self._focused_widget._handle_key(key)
                     if handled:
-                        self._last_draw_time = 0
+                        self._needs_redraw = True
 
                 # Global mnemonic fallback for pushbuttons when not handled
                 if not handled and ((key >= ord('a') and key <= ord('z')) or (key >= ord('A') and key <= ord('Z'))):
                     if self._activate_pushbutton_mnemonic(chr(key)):
-                        self._last_draw_time = 0
+                        self._needs_redraw = True
                         handled = True
 
                 # Trigger default button when Enter/Return pressed and no widget handled it
                 if not handled and key in (curses.KEY_ENTER, ord('\n'), ord('\r')):
                     if self._activate_default_button():
-                        self._last_draw_time = 0
+                        self._needs_redraw = True
                         continue
 
             except KeyboardInterrupt:

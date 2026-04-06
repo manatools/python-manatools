@@ -281,8 +281,8 @@ class YComboBoxCurses(YSelectionWidget):
                         dlg = self.findDialog()
                         if dlg is not None:
                             try:
-                                # notify dialog to redraw immediately
-                                dlg._last_draw_time = 0
+                                # notify dialog to redraw
+                                dlg.mark_dirty()
                                 # post a widget event for selection change
                                 dlg._post_event(YWidgetEvent(self, YEventReason.SelectionChanged))
                             except Exception:

@@ -107,7 +107,7 @@ class YReplacePointCurses(YSingleChildContainerWidget):
                 dlg = self.findDialog()
                 if dlg is not None:
                     try:
-                        dlg._last_draw_time = 0
+                        dlg.mark_dirty()
                     except Exception:
                         pass
                 # Update minimal height to reflect child's needs
