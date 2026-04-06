@@ -16,6 +16,8 @@ import os
 import time
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for inputfield curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.inputfield.module")
@@ -215,6 +217,9 @@ class YInputFieldCurses(YWidget):
             handled = False
         
         return handled
+
+    def key_hints(self) -> str:
+        return _("Type to edit")
 
     def minWidth(self):
         """Preferred minimal width in columns when not horizontally stretchable."""

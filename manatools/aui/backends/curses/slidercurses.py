@@ -23,6 +23,8 @@ import curses
 import curses.ascii
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 _mod_logger = logging.getLogger("manatools.aui.curses.slider.module")
 if not logging.getLogger().handlers:
@@ -240,6 +242,11 @@ class YSliderCurses(YWidget):
                 handled = False
 
         return handled
+
+    def key_hints(self) -> str:
+        if getattr(self, "_editing", False):
+            return _("digits=Edit") + " | " + _("ENTER=Confirm") + " | " + _("ESC=Cancel")
+        return _("←→=Adjust")
 
     def _begin_edit(self, initial_char=None):
         self._editing = True

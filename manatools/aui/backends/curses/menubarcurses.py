@@ -11,6 +11,8 @@ import curses
 import logging
 from ...yui_common import YWidget, YMenuEvent, YMenuItem, YUIDimension
 from .commoncurses import extract_mnemonic, split_mnemonic
+import gettext
+_ = gettext.gettext
 
 
 class YMenuBarCurses(YWidget):
@@ -652,6 +654,11 @@ class YMenuBarCurses(YWidget):
                         return True
             handled = False
         return handled
+
+    def key_hints(self) -> str:
+        if getattr(self, "_expanded", False):
+            return _("↑↓←→=Navigate") + " | " + _("ENTER=Select") + " | " + _("ESC=Close")
+        return _("←→=Move") + " | " + _("SPACE=Open")
 
     def setVisible(self, visible: bool = True):
         super().setVisible(visible)

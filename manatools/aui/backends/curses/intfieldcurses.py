@@ -12,6 +12,8 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import curses
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 _mod_logger = logging.getLogger("manatools.aui.curses.intfield.module")
 if not logging.getLogger().handlers:
@@ -273,6 +275,11 @@ class YIntFieldCurses(YWidget):
             return False
 
         return False
+
+    def key_hints(self) -> str:
+        if getattr(self, "_editing", False):
+            return _("digits=Edit") + " | " + _("ENTER=Confirm") + " | " + _("ESC=Cancel")
+        return _("↑↓=Adjust")
 
     def setVisible(self, visible: bool = True):
         super().setVisible(visible)

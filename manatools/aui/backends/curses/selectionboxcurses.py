@@ -17,6 +17,8 @@ import time
 from typing import Optional
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level safe logging setup: add a StreamHandler by default only if
 # the root logger has no handlers so main can fully configure logging later.
@@ -342,6 +344,10 @@ class YSelectionBoxCurses(YSelectionWidget):
 
         return handled
 
+    def key_hints(self) -> str:
+        if getattr(self, "_multi_selection", False):
+            return _("↑↓=Move") + " | " + _("SPACE=Toggle") + " | " + _("ENTER=Select")
+        return _("↑↓=Move") + " | " + _("ENTER=Select")
 
     def addItem(self, item):
         """Add item to model; if item has selected flag, update internal selection state.

@@ -16,6 +16,8 @@ import os
 import time
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for combobox curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.combobox.module")
@@ -308,6 +310,11 @@ class YComboBoxCurses(YSelectionWidget):
                 handled = False
         
         return handled
+
+    def key_hints(self) -> str:
+        if getattr(self, "_expanded", False):
+            return _("↑↓=Move") + " | " + _("ENTER=Select") + " | " + _("ESC=Close")
+        return _("SPACE=Open")
 
     # New: addItem at runtime
     def addItem(self, item):

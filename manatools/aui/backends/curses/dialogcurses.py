@@ -11,12 +11,15 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 import curses
 import curses.ascii
+import gettext
 import sys
 import os
 import time
 import logging
 from ...yui_common import *
 from ... import yui as yui_mod
+
+_ = gettext.gettext
 
 # Module-level safe logging setup for dialog backend; main application may override
 _mod_logger = logging.getLogger("manatools.aui.curses.dialog.module")
@@ -315,18 +318,33 @@ class YDialogCurses(YSingleChildContainerWidget):
                 self._draw_child_content(content_y, content_x, content_width, content_height)
             
             # Draw footer with instructions
-            footer_text = " TAB=Navigate | SPACE=Expand | ENTER=Select | F10=Quit "
+            # Fixed hints (always present) + widget-specific hints from key_hints()
+            fixed_hints = (
+                _("TAB=Next")
+                + " | " + _("Shift-TAB=Prev")
+                + " | " + _("F10=Quit")
+            )
+            widget_hints = ""
+            if self._focused_widget is not None:
+                try:
+                    widget_hints = getattr(self._focused_widget, "key_hints", lambda: "")() or ""
+                except Exception:
+                    widget_hints = ""
+            if widget_hints:
+                footer_text = " " + fixed_hints + " | " + widget_hints + " "
+            else:
+                footer_text = " " + fixed_hints + " "
             footer_x = max(0, (width - len(footer_text)) // 2)
             if footer_x + len(footer_text) < width:
                 self._backend_widget.addstr(height - 1, footer_x, footer_text, curses.A_DIM)
-            
+
             # Draw focus indicator: prefer widget label, otherwise use debugLabel() or 'unknown'
             if self._focused_widget:
                 lbl = getattr(self._focused_widget, '_label', None)
                 if not lbl:
                     lbl = (self._focused_widget.debugLabel()
                            if hasattr(self._focused_widget, 'debugLabel') else 'Unknown')
-                focus_text = f" Focus: {lbl} "
+                focus_text = " " + _("Focus") + ": " + str(lbl) + " "
                 if len(focus_text) < width:
                     self._backend_widget.addstr(height - 1, 2, focus_text, curses.A_REVERSE)
                 #ifthe focused widget has an expnded list (menus, combos,...), draw it on top

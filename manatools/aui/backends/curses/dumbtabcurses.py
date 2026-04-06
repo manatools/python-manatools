@@ -20,6 +20,8 @@ import curses
 import curses.ascii
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 _mod_logger = logging.getLogger("manatools.aui.curses.dumbtab.module")
 if not logging.getLogger().handlers:
@@ -172,6 +174,9 @@ class YDumbTabCurses(YSelectionWidget):
         else:
             handled = False
         return handled
+
+    def key_hints(self) -> str:
+        return _("←→=Switch")
 
     def _update_from_active(self, change_reason=YEventReason.SelectionChanged):
         try:

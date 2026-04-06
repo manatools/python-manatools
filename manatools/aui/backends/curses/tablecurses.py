@@ -13,6 +13,8 @@ import curses
 import curses.ascii
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for table curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.table.module")
@@ -454,6 +456,9 @@ class YTableCurses(YSelectionWidget):
         else:
             handled = False
         return handled
+
+    def key_hints(self) -> str:
+        return _("↑↓=Move") + " | " + _("SPACE=Toggle") + " | " + _("ENTER=Select")
 
     # API
     def addItem(self, item):

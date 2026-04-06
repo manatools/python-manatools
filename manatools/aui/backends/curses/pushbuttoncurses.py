@@ -18,6 +18,8 @@ import logging
 from typing import Optional
 from ...yui_common import *
 from .commoncurses import extract_mnemonic, split_mnemonic
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for pushbutton curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.pushbutton.module")
@@ -185,6 +187,9 @@ class YPushButtonCurses(YWidget):
         except Exception:
             pass
         return False
+
+    def key_hints(self) -> str:
+        return _("ENTER=Press")
 
     def setIcon(self, icon_name: str):
         """Store icon name for curses backend (no graphical icon support)."""

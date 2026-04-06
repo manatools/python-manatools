@@ -16,6 +16,8 @@ import os
 import time
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for tree curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.tree.module")
@@ -654,6 +656,9 @@ class YTreeCurses(YSelectionWidget):
         else:
             handled = False
         return handled
+
+    def key_hints(self) -> str:
+        return _("↑↓=Move") + " | " + _("SPACE=Expand") + " | " + _("ENTER=Select")
 
     def currentItem(self):
         try:

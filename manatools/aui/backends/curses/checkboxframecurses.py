@@ -17,6 +17,8 @@ import time
 import logging
 from ...yui_common import *
 from .commoncurses import _curses_recursive_min_height
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for checkbox frame curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.checkboxframe.module")
@@ -229,6 +231,9 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         except Exception:
             pass
         return False
+
+    def key_hints(self) -> str:
+        return _("SPACE=Toggle")
 
     def _set_focus(self, focused: bool):
         """Called by container when focus moves; track focus for drawing."""

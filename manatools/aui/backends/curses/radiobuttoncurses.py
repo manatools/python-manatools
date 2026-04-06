@@ -17,6 +17,8 @@ import os
 import time
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for radiobutton curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.radiobutton.module")
@@ -153,6 +155,9 @@ class YRadioButtonCurses(YWidget):
             self._select()
             return True
         return False
+
+    def key_hints(self) -> str:
+        return _("SPACE=Select")
 
     def _select(self):
         """Select this radio and unselect siblings; post event."""

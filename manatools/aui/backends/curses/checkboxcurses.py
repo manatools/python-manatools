@@ -16,6 +16,8 @@ import os
 import time
 import logging
 from ...yui_common import *
+import gettext
+_ = gettext.gettext
 
 # Module-level logger for curses checkbox backend
 _mod_logger = logging.getLogger("manatools.aui.curses.checkbox.module")
@@ -132,7 +134,10 @@ class YCheckBoxCurses(YWidget):
             self._toggle()
             return True
         return False
-    
+
+    def key_hints(self) -> str:
+        return _("SPACE=Toggle")
+
     def _toggle(self):
         """Toggle checkbox state and post event"""
         self._is_checked = not self._is_checked
