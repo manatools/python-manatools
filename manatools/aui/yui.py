@@ -128,22 +128,14 @@ class YUI:
         # ── 3. No desktop → headless / TTY → NCurses ──────────────────────
         if _try_ncurses():
             return Backend.NCURSES
-<<<<<<< HEAD
         raise RuntimeError(
             "No UI backend available: running headless but curses is not installed."
         )
-=======
-        except ImportError:
-            pass
-            
-        raise RuntimeError("No UI backend available. Install PySide6, PyGObject (GTK4), curses or set MUI_BACKEND=web")
->>>>>>> 087ea1d (Add web backend support to the selector)
     
     @classmethod
     def ui(cls):
         if cls._instance is None:
             cls._backend = cls._detect_backend()
-<<<<<<< HEAD
             import logging as _log
             _log.getLogger(__name__).info("Selected UI backend: %s", cls._backend)
 
@@ -151,21 +143,9 @@ class YUI:
                 Backend.QT:      ('.yui_qt',     'YUIQt'),
                 Backend.GTK:     ('.yui_gtk',    'YUIGtk'),
                 Backend.NCURSES: ('.yui_curses', 'YUICurses'),
+                Backend.WEB: ('.yui_web0, 'YUIWeb'),
             }
             if cls._backend not in _backend_map:
-=======
-            print(f"Detected backend: {cls._backend}")
-            
-            if cls._backend == Backend.QT:
-                from .yui_qt import YUIQt as YUIImpl
-            elif cls._backend == Backend.GTK:
-                from .yui_gtk import YUIGtk as YUIImpl
-            elif cls._backend == Backend.NCURSES:
-                from .yui_curses import YUICurses as YUIImpl
-            elif cls._backend == Backend.WEB:
-                from .yui_web import YUIWeb as YUIImpl
-            else:
->>>>>>> 087ea1d (Add web backend support to the selector)
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
 
             module_path, class_name = _backend_map[cls._backend]
