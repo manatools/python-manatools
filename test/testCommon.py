@@ -136,7 +136,7 @@ class TestDialog(basedialog.BaseDialog):
       '''
       yes = common.askYesOrNo({"title": "Choose About dialog mode", "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic", "richtext" : True, 'default_button': 1 })
       selected_mode = common.AboutDialogMode.TABBED if yes else common.AboutDialogMode.CLASSIC
-      info_text = self._tabbed_information if yes else self._about_metadata.get('setInformation', "")
+      info_text = self._tabbed_information if yes else self._about_metadata.get('information', "")
       self._apply_about_metadata(information=info_text)
       common.AboutDialog(dialog_mode=selected_mode, size=self._about_dialog_size)
    
