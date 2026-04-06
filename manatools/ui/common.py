@@ -807,11 +807,11 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 continue
             if info_btn and widget == info_btn:
                 logger.debug("AboutDialog information button activated")
-                msgBox({"title": _("Information"), "text": information or "", "richtext": True})
+                msgBox({"title": _("Information"), "text": information or "", "richtext": True, "size": size})
                 continue
             if credits_btn and widget == credits_btn:
                 logger.debug("AboutDialog credits button activated")
-                msgBox({"title": _("Credits"), "text": credits or "", "richtext": True})
+                msgBox({"title": _("Credits"), "text": credits or "", "richtext": True, "size": size})
                 continue
 
             logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())
