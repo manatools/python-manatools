@@ -61,14 +61,14 @@ class TestDialog(basedialog.BaseDialog):
     self._tabbed_information = "Tabbed About dialog additional information"
     self._about_dialog_size = (320, 240)
     self._about_metadata = {
-      'setApplicationName': "Test Dialog",
-      'setVersion': '0.0.0',
-      'setAuthors': 'Angelo Naselli &lt;anaselli@linux.it&gt; <br/> Author 2 <br/> Author 3 <br/> Author 4 <br/> Author 5',
-      'setDescription': "Manatools Test Dialog example",
-      'setLicense': 'GPLv2',
-      'setCredits': "Copyright (C) 2014-2026 Angelo Naselli",
-      'setLogo': 'manatools',
-      'setInformation': "Classic About dialog additional information",
+      'application_name': "Test Dialog",
+      'version': '0.0.0',
+      'authors': 'Angelo Naselli &lt;anaselli@linux.it&gt; <br/> Author 2 <br/> Author 3 <br/> Author 4 <br/> Author 5',
+      'description': "Manatools Test Dialog example",
+      'license': 'GPLv2',
+      'credits': "Copyright (C) 2014-2026 Angelo Naselli",
+      'logo': 'manatools',
+      'information': "Classic About dialog additional information",
     }
     self._apply_about_metadata()
 
@@ -78,9 +78,9 @@ class TestDialog(basedialog.BaseDialog):
     retrieves consistent information regardless of the selected backend.
     '''
     payload = dict(self._about_metadata)
-    for setter_name, value in overrides.items():
+    for prop_name, value in overrides.items():
       if value is not None:
-        payload[setter_name] = value
+        payload[prop_name] = value
 
     try:
       app = yui.YUI.app()
@@ -88,14 +88,11 @@ class TestDialog(basedialog.BaseDialog):
       logging.getLogger(__name__).debug("Unable to reach YUI app: %s", exc)
       return
 
-    for setter_name, value in payload.items():
-      setter = getattr(app, setter_name, None)
-      if not callable(setter):
-        continue
+    for prop_name, value in payload.items():
       try:
-        setter(value)
-      except Exception as exc:
-        logging.getLogger(__name__).debug("Failed to apply %s: %s", setter_name, exc)
+        setattr(app, prop_name, value)
+      except (AttributeError, TypeError) as exc:
+        logging.getLogger(__name__).debug("Failed to set %s: %s", prop_name, exc)
 
     
   def UIlayout(self, layout):
@@ -140,7 +137,7 @@ class TestDialog(basedialog.BaseDialog):
       yes = common.askYesOrNo({"title": "Choose About dialog mode", "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic", "richtext" : True, 'default_button': 1 })
       selected_mode = common.AboutDialogMode.TABBED if yes else common.AboutDialogMode.CLASSIC
       info_text = self._tabbed_information if yes else self._about_metadata.get('setInformation', "")
-      self._apply_about_metadata(setInformation=info_text)
+      self._apply_about_metadata(information=info_text)
       common.AboutDialog(dialog_mode=selected_mode, size=self._about_dialog_size)
    
   def onPressWarning(self) :

@@ -147,55 +147,71 @@ class YApplicationQt:
         """Get the application title."""
         return self._application_title
 
-    # --- About metadata getters/setters ---
-    def setApplicationName(self, name: str):
-        self._app_name = name or ""
-
-    def applicationName(self) -> str:
+    # --- About metadata as Python properties ---
+    @property
+    def application_name(self) -> str:
         return self._app_name or self._product_name or ""
 
-    def setVersion(self, version: str):
-        self._version = version or ""
+    @application_name.setter
+    def application_name(self, name: str):
+        self._app_name = name or ""
 
+    @property
     def version(self) -> str:
         return self._version or ""
 
-    def setAuthors(self, authors: str):
-        self._authors = authors or ""
+    @version.setter
+    def version(self, value: str):
+        self._version = value or ""
 
+    @property
     def authors(self) -> str:
         return self._authors or ""
 
-    def setDescription(self, description: str):
-        self._description = description or ""
+    @authors.setter
+    def authors(self, value: str):
+        self._authors = value or ""
 
+    @property
     def description(self) -> str:
         return self._description or ""
 
-    def setLicense(self, license_text: str):
-        self._license = license_text or ""
+    @description.setter
+    def description(self, value: str):
+        self._description = value or ""
 
+    @property
     def license(self) -> str:
         return self._license or ""
 
-    def setCredits(self, credits: str):
-        self._credits = credits or ""
+    @license.setter
+    def license(self, value: str):
+        self._license = value or ""
 
+    @property
     def credits(self) -> str:
         return self._credits or ""
 
-    def setInformation(self, information: str):
-        self._information = information or ""
+    @credits.setter
+    def credits(self, value: str):
+        self._credits = value or ""
 
+    @property
     def information(self) -> str:
         return self._information or ""
 
-    def setLogo(self, logo_path: str):
-        self._logo = logo_path or ""
+    @information.setter
+    def information(self, value: str):
+        self._information = value or ""
 
+    @property
     def logo(self) -> str:
         return self._logo or ""
-    
+
+    @logo.setter
+    def logo(self, value: str):
+        self._logo = value or ""
+
     def isTextMode(self) -> bool:
         """Indicate that this is not a text-mode (Qt) application."""
         return False
