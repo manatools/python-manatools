@@ -20,9 +20,12 @@ YPanedCurses: Curses Paned widget.
 '''
 
 import curses
+import gettext
 import logging
 from ...yui_common import YWidget, YUIDimension
 from .commoncurses import _curses_recursive_min_height
+
+_ = gettext.gettext
 
 class YPanedCurses(YWidget):
     """
@@ -222,6 +225,17 @@ class YPanedCurses(YWidget):
         except Exception as e:
             self._logger.error("_handle_key error: %s", e, exc_info=True)
             return False
+
+    def key_hints(self) -> str:
+        """Return key hints for the footer status bar."""
+        try:
+            idx = self._get_focused_child_index()
+            hidden = self._hidden[idx]
+        except Exception:
+            hidden = False
+        if hidden:
+            return _("+= Show pane")
+        return _("-= Hide pane")
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the paned container and propagate to children."""
