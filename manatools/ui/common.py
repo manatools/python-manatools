@@ -95,21 +95,28 @@ def _extract_dialog_size(info):
 
 
 def _create_message_text_widget(factory, parent, text, richtext):
-    """Create a compact text widget for message dialogs.
+    """Create a text widget for message dialogs that fills available space.
 
     On Qt backend, YRichText is implemented with QTextBrowser whose intrinsic
     minimum size is relatively large, causing popup dialogs with small size
-    hints to grow significantly. For compact message dialogs we prefer a wrapped
-    label on Qt while preserving rich text markup rendering.
+    hints to grow significantly. For Qt we use a wrapped label and keep its
+    vertical size compact (natural height only).
+
+    On GTK and ncurses backends we always use YRichText (plain-text mode for
+    non-markup content) because:
+      - YRichText defaults to stretchable in both dimensions;
+      - it handles multi-line content and scrolling natively;
+      - YLabel on ncurses is limited to a single display row.
 
     Args:
         factory: Active YUI widget factory.
         parent: Parent widget/container.
         text: Message text or markup.
-        richtext: Whether rich text rendering is requested.
+        richtext: Whether rich text (HTML) rendering is requested.
 
     Returns:
-        YWidget: Created text widget.
+        YWidget: Created text widget, stretchable horizontally and (for
+        non-Qt backends) vertically so it fills the dialog content area.
     """
     backend_name = ""
     try:
@@ -117,7 +124,10 @@ def _create_message_text_widget(factory, parent, text, richtext):
     except Exception:
         backend_name = ""
 
-    if richtext and backend_name == "qt":
+    if backend_name == "qt":
+        # Qt: YLabel avoids QTextBrowser's large minimum size.
+        # QLabel renders basic HTML markup natively.
+        # Keep vertical size compact so simple dialogs don't balloon.
         tw = factory.createLabel(parent, text)
         try:
             tw.setAutoWrap(True)
@@ -130,19 +140,15 @@ def _create_message_text_widget(factory, parent, text, richtext):
             pass
         return tw
 
-    if richtext:
-        tw = factory.createRichText(parent, "", False)
-        tw.setValue(text)
-    else:
-        tw = factory.createLabel(parent, text)
-        try:
-            tw.setAutoWrap(True)
-        except Exception:
-            pass
-
+    # GTK / ncurses: always use RichText for proper multi-line wrapping,
+    # scrolling and vertical stretch, regardless of whether markup is present.
+    # plainTextMode=True for plain text (avoids HTML interpretation);
+    # plainTextMode=False for richtext (renders <BR/>, <b>, links, etc.).
+    tw = factory.createRichText(parent, "", not richtext)
+    tw.setValue(text)
     try:
         tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, False)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
     except Exception:
         pass
     return tw
@@ -612,7 +618,7 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 pass
         return value or fallback
 
-    name        = _fetch_value('name', 'applicationName')
+    name        = _fetch_value('name', 'application_name')
     version     = _fetch_value('version', 'version')
     license_txt = _fetch_value('license', 'license')
     authors     = _fetch_value('authors', 'authors')
