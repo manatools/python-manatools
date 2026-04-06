@@ -97,16 +97,14 @@ def _extract_dialog_size(info):
 def _create_message_text_widget(factory, parent, text, richtext):
     """Create a text widget for message dialogs that fills available space.
 
-    On Qt backend, YRichText is implemented with QTextBrowser whose intrinsic
-    minimum size is relatively large, causing popup dialogs with small size
-    hints to grow significantly. For Qt we use a wrapped label and keep its
-    vertical size compact (natural height only).
+    Uses YRichText on all backends:
+      - plainTextMode=True for plain text (avoids HTML interpretation);
+      - plainTextMode=False for richtext (renders <BR/>, <b>, links, etc.).
+      - Stretchable in both dimensions so the text area fills the dialog.
 
-    On GTK and ncurses backends we always use YRichText (plain-text mode for
-    non-markup content) because:
-      - YRichText defaults to stretchable in both dimensions;
-      - it handles multi-line content and scrolling natively;
-      - YLabel on ncurses is limited to a single display row.
+    The Qt backend's QTextBrowser minimum-size issue is handled inside
+    YRichTextQt itself (compact minimumSizeHint), so no backend branching
+    is needed here.
 
     Args:
         factory: Active YUI widget factory.
@@ -115,35 +113,8 @@ def _create_message_text_widget(factory, parent, text, richtext):
         richtext: Whether rich text (HTML) rendering is requested.
 
     Returns:
-        YWidget: Created text widget, stretchable horizontally and (for
-        non-Qt backends) vertically so it fills the dialog content area.
+        YWidget: Created text widget, stretchable in both dimensions.
     """
-    backend_name = ""
-    try:
-        backend_name = str(getattr(yui.YUI.backend(), "value", "") or "").lower()
-    except Exception:
-        backend_name = ""
-
-    if backend_name == "qt":
-        # Qt: YLabel avoids QTextBrowser's large minimum size.
-        # QLabel renders basic HTML markup natively.
-        # Keep vertical size compact so simple dialogs don't balloon.
-        tw = factory.createLabel(parent, text)
-        try:
-            tw.setAutoWrap(True)
-        except Exception:
-            pass
-        try:
-            tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-            tw.setStretchable(yui.YUIDimension.YD_VERT, False)
-        except Exception:
-            pass
-        return tw
-
-    # GTK / ncurses: always use RichText for proper multi-line wrapping,
-    # scrolling and vertical stretch, regardless of whether markup is present.
-    # plainTextMode=True for plain text (avoids HTML interpretation);
-    # plainTextMode=False for richtext (renders <BR/>, <b>, links, etc.).
     tw = factory.createRichText(parent, "", not richtext)
     tw.setValue(text)
     try:
