@@ -265,7 +265,7 @@ class YApplicationQt:
         """
         try:
             start = startWith or ""
-            flt = filter.replace(";", " ") + ";;;All files (*)" if filter else "All files (*)"
+            flt = filter.replace(";", " ") + ";;All files (*)" if filter else "All files (*)"
             
             fn, _ = QtWidgets.QFileDialog.getOpenFileName(None, headline or "Open File", start, flt)
             return fn or ""
@@ -286,7 +286,7 @@ class YApplicationQt:
         """
         try:
             start = startWith or ""
-            flt = filter if filter else "All files (*)"
+            flt = filter.replace(";", " ") + ";;All files (*)" if filter else "All files (*)"
             fn, _ = QtWidgets.QFileDialog.getSaveFileName(None, headline or "Save File", start, flt)
             return fn or ""
         except Exception:
