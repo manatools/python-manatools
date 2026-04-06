@@ -773,3 +773,10 @@ class YTreeCurses(YSelectionWidget):
         super().setVisible(visible)
         # in curses backend visibility controls whether widget can receive focus
         self._can_focus = bool(visible)
+        # Notify the dialog that the layout has changed (tree shown/hidden)
+        try:
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg.mark_dirty()
+        except Exception:
+            pass

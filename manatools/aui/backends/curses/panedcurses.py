@@ -132,8 +132,20 @@ class YPanedCurses(YWidget):
         """
         try:
             start, end = self._children
-            start_vis = (start is not None) and (not self._hidden[0])
-            end_vis = (end is not None) and (not self._hidden[1])
+            # A pane is considered visible when BOTH the paned-internal hidden
+            # flag (toggled by +/- keys via _set_child_visible) AND the widget's
+            # own visible() flag agree.  The latter is updated by calls to
+            # child.setVisible() from outside the paned (e.g. _set_tree_visible).
+            start_vis = (
+                start is not None
+                and not self._hidden[0]
+                and start.visible()
+            )
+            end_vis = (
+                end is not None
+                and not self._hidden[1]
+                and end.visible()
+            )
 
             # If neither is visible, fill with spaces and return
             if not start_vis and not end_vis:
