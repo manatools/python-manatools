@@ -31,7 +31,14 @@ class YUICurses:
             curses.cbreak()
             curses.curs_set(1)  # Show cursor
             self._stdscr.keypad(True)
-            
+            # Explicitly map Shift+Tab (\033[Z) to KEY_BTAB so it works on
+            # Linux VT consoles (TERM=linux), whose terminfo has no kcbt entry.
+            # Terminal emulators already provide the entry; define_key is a no-op there.
+            try:
+                curses.define_key("\033[Z", curses.KEY_BTAB)
+            except Exception:
+                pass
+
             # Enable colors if available
             if curses.has_colors():
                 curses.start_color()
