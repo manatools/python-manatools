@@ -102,6 +102,8 @@ class YApplicationCurses:
         self._credits = ""
         self._information = ""
         self._logo = ""
+        # Wayland: no-op for ncurses (terminal has no window manager class)
+        self._desktop_file_name = ""
         # Default directories
         try:
             self._default_documents_dir = os.path.expanduser('~/Documenti')
@@ -260,6 +262,18 @@ class YApplicationCurses:
     def applicationTitle(self):
         """Get the application title."""
         return self._application_title
+
+    @property
+    def desktop_file_name(self) -> str:
+        """No-op on ncurses: terminal applications have no Wayland app_id.
+        Stored for API compatibility with the Qt and GTK backends.
+        """
+        return self._desktop_file_name
+
+    @desktop_file_name.setter
+    def desktop_file_name(self, value: str):
+        self._desktop_file_name = value or ""
+        # No action needed for ncurses; terminal has no WM class / Wayland app_id.
 
     def setApplicationIcon(self, Icon):
         """Set the application title."""

@@ -61,6 +61,8 @@ class YApplicationGtk:
         self._credits = ""
         self._information = ""
         self._logo = ""
+        # Wayland: reverse-DNS ID matching the installed .desktop file name
+        self._desktop_file_name = ""
         try:
             self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         except Exception:
@@ -204,6 +206,37 @@ class YApplicationGtk:
     
     def applicationIcon(self):
         return self._icon
+
+    @property
+    def desktop_file_name(self) -> str:
+        """Reverse-DNS application ID matching the installed .desktop file name.
+
+        On GTK4/Wayland this calls GLib.set_prgname() with the given value.
+        When a GTK4 window is created without a Gtk.Application, the Wayland
+        compositor reads the xdg_toplevel 'app_id' from GLib.get_prgname().
+        Setting this before the first dialog is created lets compositors (KDE
+        Plasma, GNOME Shell, etc.) associate the window with the correct
+        .desktop entry and show the right icon and name.
+
+        The value must be the base name of the .desktop file without the
+        '.desktop' extension, using reverse-DNS notation, e.g.
+        'org.mageia.dnfdragora'.  Must be set before the first dialog is shown.
+        """
+        return self._desktop_file_name
+
+    @desktop_file_name.setter
+    def desktop_file_name(self, value: str):
+        self._desktop_file_name = value or ""
+        if self._desktop_file_name:
+            try:
+                GLib.set_prgname(self._desktop_file_name)
+            except Exception:
+                try:
+                    self._logger.warning(
+                        "desktop_file_name: GLib.set_prgname() failed"
+                    )
+                except Exception:
+                    pass
 
     # --- About metadata as Python properties ---
     @property
