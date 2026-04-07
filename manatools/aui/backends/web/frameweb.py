@@ -27,12 +27,30 @@ class YFrameWeb(YSingleChildContainerWidget):
         dialog = self.findDialog()
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
-    
+
+    def _set_backend_enabled(self, enabled: bool):
+        """Propagate enabled state to child and trigger re-render."""
+        child = self.child()
+        if child is not None:
+            child._set_backend_enabled(enabled and child._enabled)
+        self._notify_update()
+
+    def setProperty(self, propertyName: str, val) -> bool:
+        if propertyName == "label":
+            self.setLabel(str(val))
+            return True
+        return False
+
+    def getProperty(self, propertyName: str):
+        if propertyName == "label":
+            return self._label
+        return None
+
     def render(self) -> str:
         attrs = widget_attrs(
             self.id(),
             "YFrame",
-            True,
+            self._enabled,
             self._visible
         )
         
