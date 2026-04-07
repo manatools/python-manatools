@@ -61,10 +61,35 @@ class YApplicationGtk:
         self._credits = ""
         self._information = ""
         self._logo = ""
+        # Wayland: reverse-DNS ID matching the installed .desktop file name
+        self._desktop_file_name = ""
         try:
             self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         except Exception:
             self._logger = logging.getLogger("manatools.aui.gtk.YApplicationGtk")
+        # GTK 4.10 bug workaround: the Adwaita CSS theme uses negative margins on
+        # the Gtk.Paned separator slider gizmo, causing GTK to emit:
+        #   "GtkGizmo (slider) reported min width -2, but sizes must be >= 0"
+        # This is a known upstream regression (fixed in GTK >= 4.12) where internal
+        # CSS min-width computation passes through a -1px margin that becomes -2 after
+        # border-box accounting.  Override the separator minimum size to silence it.
+        try:
+            display = Gdk.Display.get_default()
+            if display is not None:
+                _css = Gtk.CssProvider.new()
+                _css.load_from_data(
+                    "paned > separator { min-width: 1px; min-height: 1px; }", -1
+                )
+                Gtk.StyleContext.add_provider_for_display(
+                    display, _css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
+        except Exception:
+            try:
+                self._logger.warning(
+                    "Could not apply paned CSS workaround", exc_info=True
+                )
+            except Exception:
+                pass
 
     def _resolve_pixbuf(self, icon_spec):
         """Resolve icon_spec into a GdkPixbuf.Pixbuf if possible.
@@ -91,15 +116,34 @@ class YApplicationGtk:
         except Exception:
             pass
 
-        # fallback: try icon theme lookup
+        # fallback: try icon theme lookup (GTK4 API)
         try:
-            theme = Gtk.IconTheme.get_default()
-            # request a reasonable size (48) - theme will scale as needed
-            if theme and theme.has_icon(icon_spec) and GdkPixbuf is not None:
+            display = Gdk.Display.get_default()
+            theme = (
+                Gtk.IconTheme.get_for_display(display)
+                if display is not None
+                else None
+            )
+            if theme is None:
+                # GTK3 fallback (older deployments)
+                theme = Gtk.IconTheme.get_default()  # type: ignore[attr-defined]
+            if theme and GdkPixbuf is not None:
                 try:
-                    pix = theme.load_icon(icon_spec, 48, 0)
-                    if pix is not None:
-                        return pix
+                    # GTK4: lookup_icon returns a paintable; fall back to GTK3
+                    # load_icon for pixbuf-based callers.
+                    if hasattr(theme, "lookup_icon"):
+                        paintable = theme.lookup_icon(icon_spec, None, 48, 1, Gtk.TextDirection.NONE, 0)
+                        if paintable is None:
+                            raise AttributeError
+                        # We have a GTK4 paintable — we can't turn it into a
+                        # GdkPixbuf easily; skip to avoid errors.
+                        return None
+                    else:
+                        # GTK3 path
+                        if theme.has_icon(icon_spec):
+                            pix = theme.load_icon(icon_spec, 48, 0)  # type: ignore[call-arg]
+                            if pix is not None:
+                                return pix
                 except Exception:
                     pass
         except Exception:
@@ -204,6 +248,72 @@ class YApplicationGtk:
     
     def applicationIcon(self):
         return self._icon
+
+    @property
+    def desktop_file_name(self) -> str:
+        """Reverse-DNS application ID matching the installed .desktop file name.
+
+        On GTK4/Wayland this calls GLib.set_prgname() with the given value.
+        When a GTK4 window is created without a Gtk.Application, the Wayland
+        compositor reads the xdg_toplevel 'app_id' from GLib.get_prgname().
+        Setting this before the first dialog is created lets compositors (KDE
+        Plasma, GNOME Shell, etc.) associate the window with the correct
+        .desktop entry and show the right icon and name.
+
+        The value must be the base name of the .desktop file without the
+        '.desktop' extension, using reverse-DNS notation, e.g.
+        'org.mageia.dnfdragora'.  Must be set before the first dialog is shown.
+        """
+        return self._desktop_file_name
+
+    @desktop_file_name.setter
+    def desktop_file_name(self, value: str):
+        self._desktop_file_name = value or ""
+        if self._desktop_file_name:
+            # Set prgname: GTK 4.6+ uses this as xdg_toplevel app_id when it
+            # looks like a valid D-Bus name and no Gio.Application is registered.
+            try:
+                GLib.set_prgname(self._desktop_file_name)
+            except Exception:
+                try:
+                    self._logger.warning(
+                        "desktop_file_name: GLib.set_prgname() failed"
+                    )
+                except Exception:
+                    pass
+            # Register a Gio.Application with the correct application_id.
+            # GTK4's GDK Wayland backend reads g_application_get_default()
+            # *before* falling back to g_get_prgname(); by registering here we
+            # guarantee the compositor receives the right app_id on every GTK4
+            # version.  NON_UNIQUE means register() never acquires a D-Bus
+            # service name (no singleton enforcement), so it always succeeds.
+            # GNOME Shell / mutter then matches the app_id to the installed
+            # .desktop file and shows the correct icon and application name.
+            try:
+                if not getattr(self, "_gio_application", None):
+                    existing = Gio.Application.get_default()
+                    if existing is None:
+                        # Gtk.Application is preferred over Gio.Application:
+                        # GTK4 windows check g_application_get_default() for
+                        # the xdg_toplevel app_id, and Gtk.Application hooks
+                        # deeper into the GTK4 window lifecycle than plain
+                        # Gio.Application.  NON_UNIQUE prevents any D-Bus name
+                        # ownership, so register() always succeeds even when
+                        # multiple instances are running.
+                        _app = Gtk.Application(
+                            application_id=self._desktop_file_name,
+                            flags=Gio.ApplicationFlags.NON_UNIQUE,
+                        )
+                        _app.register(None)
+                        self._gio_application = _app
+            except Exception:
+                try:
+                    self._logger.warning(
+                        "desktop_file_name: Gtk.Application registration failed",
+                        exc_info=True,
+                    )
+                except Exception:
+                    pass
 
     # --- About metadata as Python properties ---
     @property

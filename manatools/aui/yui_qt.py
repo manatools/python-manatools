@@ -57,6 +57,8 @@ class YApplicationQt:
         self._credits = ""
         self._information = ""
         self._logo = ""
+        # Wayland/Plasma: reverse-DNS ID matching the installed .desktop file name
+        self._desktop_file_name = ""
         try:
             self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         except Exception:
@@ -146,6 +148,36 @@ class YApplicationQt:
     def applicationTitle(self):
         """Get the application title."""
         return self._application_title
+
+    @property
+    def desktop_file_name(self) -> str:
+        """Reverse-DNS application ID matching the installed .desktop file name.
+
+        On Qt/Wayland (KDE Plasma) this calls QGuiApplication.setDesktopFileName()
+        so that the Wayland compositor can associate the window's app_id with the
+        correct .desktop entry and display the right icon and application name in
+        the task manager / dock.
+
+        The value must be the base name of the .desktop file without the
+        '.desktop' extension, using reverse-DNS notation, e.g.
+        'org.mageia.dnfdragora'.  Must be set before the first dialog is shown.
+        """
+        return self._desktop_file_name
+
+    @desktop_file_name.setter
+    def desktop_file_name(self, value: str):
+        self._desktop_file_name = value or ""
+        if self._desktop_file_name:
+            try:
+                from PySide6.QtGui import QGuiApplication as _QGuiApp
+                _QGuiApp.setDesktopFileName(self._desktop_file_name)
+            except Exception:
+                try:
+                    self._logger.warning(
+                        "desktop_file_name: QGuiApplication.setDesktopFileName() failed"
+                    )
+                except Exception:
+                    pass
 
     # --- About metadata as Python properties ---
     @property
