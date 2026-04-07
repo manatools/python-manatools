@@ -28,7 +28,7 @@ class YUI:
            - Known GTK desktops  → try GTK4, warn + try Qt if unavailable.
            - Everything else     → try Qt, warn + try GTK4 if unavailable.
            In both cases NCurses is the last resort for graphical sessions.
-        3. No desktop session → NCurses only.
+        3. No desktop session → NCurses only → Web.
 
         A RuntimeError is raised only when every candidate backend is missing.
         Import probes are deferred: only the library actually needed is probed.
@@ -143,7 +143,7 @@ class YUI:
                 Backend.QT:      ('.yui_qt',     'YUIQt'),
                 Backend.GTK:     ('.yui_gtk',    'YUIGtk'),
                 Backend.NCURSES: ('.yui_curses', 'YUICurses'),
-                Backend.WEB:     ('.yui_web', 'YUIWeb'),
+                Backend.WEB:     ('.yui_web',    'YUIWeb'),
             }
             if cls._backend not in _backend_map:
                 raise RuntimeError(f"Unknown backend: {cls._backend}")
