@@ -188,20 +188,9 @@ class YTreeWeb(YSelectionWidget):
         attrs = widget_attrs(self.id(), "YTree", True, self._visible, "mana-ytable")
         disabled_attr = ' disabled' if not self._enabled else ''
 
-        # Controls bar — identical markup to tableweb
+        # Controls bar: search input only (page-size selector omitted)
         controls = (
             '<div class="mana-table-controls">'
-            '<label class="mana-table-length-label">'
-            'Show\u00a0'
-            f'<select class="form-select form-select-sm mana-table-pagesize"{disabled_attr}>'
-            '<option value="10">10</option>'
-            '<option value="25">25</option>'
-            '<option value="50">50</option>'
-            '<option value="100">100</option>'
-            '<option value="-1">All</option>'
-            '</select>'
-            '\u00a0entries'
-            '</label>'
             f'<input type="search" class="form-control form-control-sm mana-table-search"'
             f' placeholder="Search\u2026" aria-label="Search"{disabled_attr}>'
             '</div>'
