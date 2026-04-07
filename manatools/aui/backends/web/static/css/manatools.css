@@ -434,6 +434,9 @@ body {
     border-radius: var(--mana-radius);
     padding: var(--mana-spacing-md);
     margin: var(--mana-spacing-sm) 0;
+    min-height: 0;     /* allow shrinking in flex column */
+    overflow: auto;    /* scroll instead of overlapping siblings */
+    min-width: 0;
 }
 
 .mana-frame-legend {
@@ -444,6 +447,8 @@ body {
 
 .mana-frame-content {
     padding-top: var(--mana-spacing-sm);
+    min-height: 0;
+    overflow: auto;
 }
 
 /* CheckBox Frame */
@@ -1037,8 +1042,12 @@ html, body {
     }
 }
 
-/* YAlignment with stretch should grow */
-.mana-yalignment {
+/* YAlignment wrapping a layout container (VBox, HBox, Paned) should grow to
+   fill available space.  Plain alignments wrapping a leaf widget (Label,
+   Button…) must NOT grow — they shrink-wrap their content. */
+.mana-yalignment:has(> .mana-yvbox),
+.mana-yalignment:has(> .mana-yhbox),
+.mana-yalignment:has(> .mana-ypaned) {
     flex: 1;
     min-height: 0;
     min-width: 0;
