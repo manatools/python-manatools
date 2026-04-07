@@ -346,7 +346,39 @@ class YDialogGtk(YSingleChildContainerWidget):
 
         # Create Gtk4 Window
         self._window = _YDialogMeasureWindow(self, title=title)
-        # set window icon if available
+
+        # GTK4 equivalent of GTK3 set_wmclass(): associate the window with the
+        # registered Gtk.Application.  Without this, a plain Gtk.Window that is
+        # NOT a Gtk.ApplicationWindow has no application link, so:
+        #   - on Wayland: GDK falls back to g_get_prgname() for the
+        #     xdg_toplevel app_id (which we also set correctly, so this is
+        #     belt-and-suspenders)
+        #   - on X11/XWayland: GTK4 sets the WM_CLASS res_class from the
+        #     application_id only when the window is linked to an application;
+        #     without the link, res_class is derived from argv[0] / prgname in
+        #     a way that may not match StartupWMClass in the .desktop file.
+        # Calling set_application() makes GNOME Shell and other compositors
+        # correctly identify the window → .desktop entry → icon.
+        try:
+            import gi.repository.Gio as _Gio
+            _default_app = _Gio.Application.get_default()
+            if _default_app is not None:
+                import gi.repository.Gtk as _Gtk
+                if isinstance(_default_app, _Gtk.Application):
+                    self._window.set_application(_default_app)
+        except Exception:
+            try:
+                self._logger.warning(
+                    "YDialogGtk: set_application() failed", exc_info=True
+                )
+            except Exception:
+                pass
+
+        # In GTK4 Wayland, per-window icons do not exist — the compositor
+        # derives the icon from the xdg_toplevel app_id → .desktop file →
+        # Icon= field → icon theme.  The set_icon() / set_icon_name() calls
+        # below are GTK3 leftovers; they fail silently on GTK4 but are kept
+        # for X11/Xwayland fall-back compatibility.
         try:
             if _resolved_pixbuf is not None:
                 try:
