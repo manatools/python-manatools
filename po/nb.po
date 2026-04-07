@@ -2,38 +2,212 @@
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the python-manatools package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
-# 
+#
 # Translators:
 # Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2020
-# 
+#
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2018-01-27 23:12+0100\n"
+"POT-Creation-Date: 2026-04-06 16:29+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
 "Last-Translator: Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2020\n"
-"Language-Team: Norwegian Bokmål (https://www.transifex.com/MageiaLinux/teams/9361/nb/)\n"
+"Language-Team: Norwegian Bokmål (https://www.transifex.com/MageiaLinux/"
+"teams/9361/nb/)\n"
+"Language: nb\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Language: nb\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: manatools/ui/common.py:62 manatools/ui/common.py:100
-#: manatools/ui/common.py:136 manatools/ui/common.py:179
+#: manatools/args.py:28
+msgid "start using Gtk backend"
+msgstr ""
+
+#: manatools/args.py:29
+msgid "start using ncurses backend"
+msgstr ""
+
+#: manatools/args.py:30
+msgid "start using Qt backend"
+msgstr ""
+
+#: manatools/args.py:33
+msgid "directory containing localization strings (developer only)"
+msgstr ""
+
+#: manatools/args.py:34
+msgid "show application version and exit"
+msgstr ""
+
+#: manatools/aui/backends/curses/checkboxcurses.py:139
+#: manatools/aui/backends/curses/checkboxframecurses.py:236
+#: manatools/aui/backends/curses/selectionboxcurses.py:349
+#: manatools/aui/backends/curses/tablecurses.py:461
+msgid "SPACE=Toggle"
+msgstr ""
+
+#: manatools/aui/backends/curses/comboboxcurses.py:316
+#: manatools/aui/backends/curses/menubarcurses.py:660
+#: manatools/aui/backends/curses/selectionboxcurses.py:349
+#: manatools/aui/backends/curses/selectionboxcurses.py:350
+#: manatools/aui/backends/curses/tablecurses.py:461
+#: manatools/aui/backends/curses/treecurses.py:661
+msgid "ENTER=Select"
+msgstr ""
+
+#: manatools/aui/backends/curses/comboboxcurses.py:316
+#: manatools/aui/backends/curses/menubarcurses.py:660
+msgid "ESC=Close"
+msgstr ""
+
+#: manatools/aui/backends/curses/comboboxcurses.py:316
+#: manatools/aui/backends/curses/selectionboxcurses.py:349
+#: manatools/aui/backends/curses/selectionboxcurses.py:350
+#: manatools/aui/backends/curses/tablecurses.py:461
+#: manatools/aui/backends/curses/treecurses.py:661
+msgid "↑↓=Move"
+msgstr ""
+
+#: manatools/aui/backends/curses/comboboxcurses.py:317
+#: manatools/aui/backends/curses/menubarcurses.py:661
+msgid "SPACE=Open"
+msgstr ""
+
+#: manatools/aui/backends/curses/dialogcurses.py:323
+msgid "TAB=Next"
+msgstr ""
+
+#: manatools/aui/backends/curses/dialogcurses.py:324
+msgid "Shift-TAB=Prev"
+msgstr ""
+
+#: manatools/aui/backends/curses/dialogcurses.py:325
+msgid "F10=Quit"
+msgstr ""
+
+#: manatools/aui/backends/curses/dialogcurses.py:347
+msgid "Focus"
+msgstr ""
+
+#: manatools/aui/backends/curses/dumbtabcurses.py:179
+msgid "←→=Switch"
+msgstr ""
+
+#: manatools/aui/backends/curses/inputfieldcurses.py:222
+msgid "Type to edit"
+msgstr ""
+
+#: manatools/aui/backends/curses/intfieldcurses.py:281
+#: manatools/aui/backends/curses/slidercurses.py:248
+msgid "ENTER=Confirm"
+msgstr ""
+
+#: manatools/aui/backends/curses/intfieldcurses.py:281
+#: manatools/aui/backends/curses/slidercurses.py:248
+msgid "ESC=Cancel"
+msgstr ""
+
+#: manatools/aui/backends/curses/intfieldcurses.py:281
+#: manatools/aui/backends/curses/slidercurses.py:248
+msgid "digits=Edit"
+msgstr ""
+
+#: manatools/aui/backends/curses/intfieldcurses.py:282
+msgid "↑↓=Adjust"
+msgstr ""
+
+#: manatools/aui/backends/curses/menubarcurses.py:660
+msgid "↑↓←→=Navigate"
+msgstr ""
+
+#: manatools/aui/backends/curses/menubarcurses.py:661
+msgid "←→=Move"
+msgstr ""
+
+#: manatools/aui/backends/curses/panedcurses.py:237
+msgid "+= Show pane"
+msgstr ""
+
+#: manatools/aui/backends/curses/panedcurses.py:238
+msgid "-= Hide pane"
+msgstr ""
+
+#: manatools/aui/backends/curses/pushbuttoncurses.py:192
+msgid "ENTER=Press"
+msgstr ""
+
+#: manatools/aui/backends/curses/radiobuttoncurses.py:160
+msgid "SPACE=Select"
+msgstr ""
+
+#: manatools/aui/backends/curses/slidercurses.py:249
+msgid "←→=Adjust"
+msgstr ""
+
+#: manatools/aui/backends/curses/treecurses.py:661
+msgid "SPACE=Expand"
+msgstr ""
+
+#: manatools/ui/common.py:183 manatools/ui/common.py:259
+#: manatools/ui/common.py:324 manatools/ui/common.py:406
 msgid "&Ok"
 msgstr "&OK"
 
-#: manatools/ui/common.py:180
+#: manatools/ui/common.py:407
 msgid "&Cancel"
 msgstr "&Avbryt"
 
-#: manatools/ui/common.py:229
+#: manatools/ui/common.py:496
 msgid "&Yes"
 msgstr "&Ja"
 
-#: manatools/ui/common.py:230
+#: manatools/ui/common.py:497
 msgid "&No"
 msgstr "&Nei"
+
+#: manatools/ui/common.py:649
+msgid "About"
+msgstr ""
+
+#: manatools/ui/common.py:674
+msgid "Logo"
+msgstr ""
+
+#: manatools/ui/common.py:704
+msgid "Description"
+msgstr ""
+
+#: manatools/ui/common.py:706 manatools/ui/common.py:773
+msgid "Authors"
+msgstr ""
+
+#: manatools/ui/common.py:708 manatools/ui/common.py:810
+msgid "Information"
+msgstr ""
+
+#: manatools/ui/common.py:710 manatools/ui/common.py:814
+msgid "Credits"
+msgstr ""
+
+#: manatools/ui/common.py:779
+msgid "&Info"
+msgstr ""
+
+#: manatools/ui/common.py:781
+msgid "&Credits"
+msgstr ""
+
+#: manatools/ui/common.py:788
+msgid "&Close"
+msgstr ""
+
+#: manatools/ui/helpdialog.py:33
+msgid "Help dialog"
+msgstr ""
+
+#: manatools/ui/helpdialog.py:95
+msgid "Quit"
+msgstr ""

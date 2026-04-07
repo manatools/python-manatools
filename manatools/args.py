@@ -24,11 +24,10 @@ class AppArgs :
         gettext.install(command, localedir='/usr/share/locale', names=('ngettext',))
         self.parser = argparse.ArgumentParser(prog=command, usage='%(prog)s [options]')
         ui_select_parser = self.parser.add_mutually_exclusive_group()
-        # libyui pass through arguments
-        ui_select_parser.add_argument('--gtk', help=_('start using GTK+ plugin implementation'), action='store_true')
-        ui_select_parser.add_argument('--ncurses', help=_('start using ncurses plugin implementation'), action='store_true')
-        ui_select_parser.add_argument('--qt', help=_('start using Qt plugin implementation'), action='store_true')
-        self.parser.add_argument('--fullscreen', help=_('use full screen for dialogs'), action='store_true')
+        # force manatools aui backend
+        ui_select_parser.add_argument('--gtk', help=_('start using Gtk backend'), action='store_true')
+        ui_select_parser.add_argument('--ncurses', help=_('start using ncurses backend'), action='store_true')
+        ui_select_parser.add_argument('--qt', help=_('start using Qt backend'), action='store_true')
 
         # Application arguments
         self.parser.add_argument('--locales-dir', nargs='?', help=_('directory containing localization strings (developer only)'))

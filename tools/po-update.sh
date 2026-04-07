@@ -25,7 +25,7 @@ POT_FILE="$POT_DIR/$DOMAIN.pot"
 	--no-escape --add-location --sort-by-file \
 	--add-comments=I18N \
 	--output="$POT_FILE" \
-	manatools/ui/common.py
+	`find manatools -name '*.py'`
 
 /bin/sed --in-place --expression="s/charset=CHARSET/charset=UTF-8/" "$POT_FILE"
 
