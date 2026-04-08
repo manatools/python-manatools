@@ -493,19 +493,26 @@ class YDialogWeb(YSingleChildContainerWidget):
     def _push_deferred_tables(self):
         """Push table row content to all connected clients.
 
-        Called when the browser sends a ``ready`` message (WS open).  Tables
-        were rendered as loading skeletons in the initial HTTP response; this
-        replaces each skeleton tbody with the real rows so the page becomes
-        fully usable without a full reload.
+        Called when the browser sends a ``ready`` message (WS open).  Only
+        tables that actually rendered a loading skeleton (``_deferred_pending``
+        is True) are included so we never blindly overwrite a table that was
+        already fully rendered.  Each widget is rendered inside a try/except so
+        one broken widget cannot prevent the others from loading.
         """
         updates = []
         for widget_id, widget in self._widget_registry.items():
-            if hasattr(widget, '_render_rows_html'):
+            if not getattr(widget, '_deferred_pending', False):
+                continue
+            try:
+                html = widget._render_rows_html()
+                widget._deferred_pending = False
                 updates.append({
                     "action": "rows",
                     "target": f"#{widget_id}",
-                    "html": widget._render_rows_html(),
+                    "html": html,
                 })
+            except Exception:
+                logger.exception("_push_deferred_tables: failed to render rows for %s", widget_id)
         if updates:
             self._broadcast({"type": "update", "updates": updates})
 
