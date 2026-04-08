@@ -367,9 +367,9 @@ class YWidgetFactoryWeb:
         from .backends.web import YMultiLineEditWeb
         return YMultiLineEditWeb(parent, label)
 
-    def createImage(self, parent, imageFileName):
+    def createImage(self, parent, imageFileName, fallBackName=None):
         from .backends.web import YImageWeb
-        return YImageWeb(parent, imageFileName)
+        return YImageWeb(parent, imageFileName, fallBackName=fallBackName)
 
     def createDumbTab(self, parent):
         from .backends.web import YDumbTabWeb
