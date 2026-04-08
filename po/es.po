@@ -4,24 +4,28 @@
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 # Translators:
-# Miguel, 2020
-# José Alberto Valle Cid <j.alberto.vc@gmail.com>, 2020
+# José Alberto Valle Cid <j.alberto.vc@gmail.com>, 2026
+# Miguel, 2026
+# Jose Manuel López <joselp@e.email>, 2026
+# 9d2429286e4b6db037855ee18ff950ea_21b1117 <e234ccd2dcb0d5482e17780be633a729_130514>, 2026
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 16:29+0200\n"
+"POT-Creation-Date: 2026-04-06 17:28+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
-"Last-Translator: José Alberto Valle Cid <j.alberto.vc@gmail.com>, 2020\n"
-"Language-Team: Spanish (https://www.transifex.com/MageiaLinux/teams/9361/"
+"Last-Translator: 9d2429286e4b6db037855ee18ff950ea_21b1117 "
+"<e234ccd2dcb0d5482e17780be633a729_130514>, 2026\n"
+"Language-Team: Spanish (https://app.transifex.com/MageiaLinux/teams/9361/"
 "es/)\n"
 "Language: es\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
+"1 : 2;\n"
 
 #: manatools/args.py:28
 msgid "start using Gtk backend"
@@ -37,11 +41,11 @@ msgstr ""
 
 #: manatools/args.py:33
 msgid "directory containing localization strings (developer only)"
-msgstr ""
+msgstr "Directorio que contiene cadenas de localización (sólo desarrollador)"
 
 #: manatools/args.py:34
 msgid "show application version and exit"
-msgstr ""
+msgstr "Mostrar la versión de la aplicación y salir"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
 #: manatools/aui/backends/curses/checkboxframecurses.py:236
@@ -171,7 +175,7 @@ msgstr "&No"
 
 #: manatools/ui/common.py:649
 msgid "About"
-msgstr ""
+msgstr "Acerca de"
 
 #: manatools/ui/common.py:674
 msgid "Logo"
@@ -203,7 +207,7 @@ msgstr ""
 
 #: manatools/ui/common.py:788
 msgid "&Close"
-msgstr ""
+msgstr "&Cerrar"
 
 #: manatools/ui/helpdialog.py:33
 msgid "Help dialog"
@@ -211,4 +215,4 @@ msgstr ""
 
 #: manatools/ui/helpdialog.py:95
 msgid "Quit"
-msgstr ""
+msgstr "Salir"
