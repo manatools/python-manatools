@@ -6,22 +6,25 @@
 # Translators:
 # Eric Barbero <dune06@free.fr>, 2020
 # Aurelien <aoudelet@outlook.com>, 2020
+# K. R., 2026
+# Yves Brungard, 2026
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 16:29+0200\n"
+"POT-Creation-Date: 2026-04-06 17:28+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
-"Last-Translator: Aurelien <aoudelet@outlook.com>, 2020\n"
-"Language-Team: French (https://www.transifex.com/MageiaLinux/teams/9361/"
+"Last-Translator: Yves Brungard, 2026\n"
+"Language-Team: French (https://app.transifex.com/MageiaLinux/teams/9361/"
 "fr/)\n"
 "Language: fr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"Plural-Forms: nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % "
+"1000000 == 0 ? 1 : 2;\n"
 
 #: manatools/args.py:28
 msgid "start using Gtk backend"
@@ -38,10 +41,11 @@ msgstr ""
 #: manatools/args.py:33
 msgid "directory containing localization strings (developer only)"
 msgstr ""
+"répertoire contenant les chaînes traduites (pour les développeurs uniquement)"
 
 #: manatools/args.py:34
 msgid "show application version and exit"
-msgstr ""
+msgstr "montre la version de l'application et quitte"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
 #: manatools/aui/backends/curses/checkboxframecurses.py:236
@@ -171,7 +175,7 @@ msgstr "&Non"
 
 #: manatools/ui/common.py:649
 msgid "About"
-msgstr ""
+msgstr "À propos"
 
 #: manatools/ui/common.py:674
 msgid "Logo"
@@ -187,7 +191,7 @@ msgstr ""
 
 #: manatools/ui/common.py:708 manatools/ui/common.py:810
 msgid "Information"
-msgstr ""
+msgstr "Information"
 
 #: manatools/ui/common.py:710 manatools/ui/common.py:814
 msgid "Credits"
@@ -203,7 +207,7 @@ msgstr ""
 
 #: manatools/ui/common.py:788
 msgid "&Close"
-msgstr ""
+msgstr "&Fermer"
 
 #: manatools/ui/helpdialog.py:33
 msgid "Help dialog"
@@ -211,4 +215,4 @@ msgstr ""
 
 #: manatools/ui/helpdialog.py:95
 msgid "Quit"
-msgstr ""
+msgstr "Quitter"
