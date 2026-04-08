@@ -4,17 +4,17 @@
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 # Translators:
-# Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2020
+# Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2026
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 16:29+0200\n"
+"POT-Creation-Date: 2026-04-06 17:28+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
-"Last-Translator: Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2020\n"
-"Language-Team: Norwegian Bokmål (https://www.transifex.com/MageiaLinux/"
+"Last-Translator: Karl Morten Ramberg <karl.m.ramberg@gmail.com>, 2026\n"
+"Language-Team: Norwegian Bokmål (https://app.transifex.com/MageiaLinux/"
 "teams/9361/nb/)\n"
 "Language: nb\n"
 "MIME-Version: 1.0\n"
@@ -24,30 +24,30 @@ msgstr ""
 
 #: manatools/args.py:28
 msgid "start using Gtk backend"
-msgstr ""
+msgstr "begynn å bruke Gtk-backend"
 
 #: manatools/args.py:29
 msgid "start using ncurses backend"
-msgstr ""
+msgstr "begynn å bruke ncurses-backend"
 
 #: manatools/args.py:30
 msgid "start using Qt backend"
-msgstr ""
+msgstr "begynn å bruke Qt-backend"
 
 #: manatools/args.py:33
 msgid "directory containing localization strings (developer only)"
-msgstr ""
+msgstr "katalog som inneholder lokaliseringsstrenger (kun for utviklere)"
 
 #: manatools/args.py:34
 msgid "show application version and exit"
-msgstr ""
+msgstr "vis applikasjonsversjon og gå ut"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
 #: manatools/aui/backends/curses/checkboxframecurses.py:236
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
 #: manatools/aui/backends/curses/tablecurses.py:461
 msgid "SPACE=Toggle"
-msgstr ""
+msgstr "MELLOMROM=Veksle"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/menubarcurses.py:660
@@ -56,12 +56,12 @@ msgstr ""
 #: manatools/aui/backends/curses/tablecurses.py:461
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "ENTER=Select"
-msgstr ""
+msgstr "ENTER=Velg"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/menubarcurses.py:660
 msgid "ESC=Close"
-msgstr ""
+msgstr "ESC=Steng"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
@@ -69,87 +69,87 @@ msgstr ""
 #: manatools/aui/backends/curses/tablecurses.py:461
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "↑↓=Move"
-msgstr ""
+msgstr "↑↓=Flytt"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:317
 #: manatools/aui/backends/curses/menubarcurses.py:661
 msgid "SPACE=Open"
-msgstr ""
+msgstr "MELLOMROM-Åpne"
 
 #: manatools/aui/backends/curses/dialogcurses.py:323
 msgid "TAB=Next"
-msgstr ""
+msgstr "TAB=Neste"
 
 #: manatools/aui/backends/curses/dialogcurses.py:324
 msgid "Shift-TAB=Prev"
-msgstr ""
+msgstr "Shift-TAB=Forhåndsvisning"
 
 #: manatools/aui/backends/curses/dialogcurses.py:325
 msgid "F10=Quit"
-msgstr ""
+msgstr "F10=Slutt"
 
 #: manatools/aui/backends/curses/dialogcurses.py:347
 msgid "Focus"
-msgstr ""
+msgstr "Fokus"
 
 #: manatools/aui/backends/curses/dumbtabcurses.py:179
 msgid "←→=Switch"
-msgstr ""
+msgstr "←→=Bytt"
 
 #: manatools/aui/backends/curses/inputfieldcurses.py:222
 msgid "Type to edit"
-msgstr ""
+msgstr "Skriv for å redigere"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "ENTER=Confirm"
-msgstr ""
+msgstr "ENTER=Bekreft"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "ESC=Cancel"
-msgstr ""
+msgstr "ESC=Avbryt"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "digits=Edit"
-msgstr ""
+msgstr "tall=Rediger"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:282
 msgid "↑↓=Adjust"
-msgstr ""
+msgstr "↑↓=Juster"
 
 #: manatools/aui/backends/curses/menubarcurses.py:660
 msgid "↑↓←→=Navigate"
-msgstr ""
+msgstr "↑↓←→=Naviger"
 
 #: manatools/aui/backends/curses/menubarcurses.py:661
 msgid "←→=Move"
-msgstr ""
+msgstr "←→=Flytt"
 
 #: manatools/aui/backends/curses/panedcurses.py:237
 msgid "+= Show pane"
-msgstr ""
+msgstr "+= Vis panel"
 
 #: manatools/aui/backends/curses/panedcurses.py:238
 msgid "-= Hide pane"
-msgstr ""
+msgstr "-= Skjul panel"
 
 #: manatools/aui/backends/curses/pushbuttoncurses.py:192
 msgid "ENTER=Press"
-msgstr ""
+msgstr "ENTER=Trykk"
 
 #: manatools/aui/backends/curses/radiobuttoncurses.py:160
 msgid "SPACE=Select"
-msgstr ""
+msgstr "MELLOMROM-Velg"
 
 #: manatools/aui/backends/curses/slidercurses.py:249
 msgid "←→=Adjust"
-msgstr ""
+msgstr "←→=Juster"
 
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "SPACE=Expand"
-msgstr ""
+msgstr "MELLOMROM-Utvid"
 
 #: manatools/ui/common.py:183 manatools/ui/common.py:259
 #: manatools/ui/common.py:324 manatools/ui/common.py:406
@@ -170,44 +170,44 @@ msgstr "&Nei"
 
 #: manatools/ui/common.py:649
 msgid "About"
-msgstr ""
+msgstr "Om"
 
 #: manatools/ui/common.py:674
 msgid "Logo"
-msgstr ""
+msgstr "Logo"
 
 #: manatools/ui/common.py:704
 msgid "Description"
-msgstr ""
+msgstr "Beskrivelse"
 
 #: manatools/ui/common.py:706 manatools/ui/common.py:773
 msgid "Authors"
-msgstr ""
+msgstr "Forfattere"
 
 #: manatools/ui/common.py:708 manatools/ui/common.py:810
 msgid "Information"
-msgstr ""
+msgstr "Informsjon"
 
 #: manatools/ui/common.py:710 manatools/ui/common.py:814
 msgid "Credits"
-msgstr ""
+msgstr "Kreditt"
 
 #: manatools/ui/common.py:779
 msgid "&Info"
-msgstr ""
+msgstr "&Info"
 
 #: manatools/ui/common.py:781
 msgid "&Credits"
-msgstr ""
+msgstr "&Kreditt"
 
 #: manatools/ui/common.py:788
 msgid "&Close"
-msgstr ""
+msgstr "Lukk"
 
 #: manatools/ui/helpdialog.py:33
 msgid "Help dialog"
-msgstr ""
+msgstr "Hjelpedialog"
 
 #: manatools/ui/helpdialog.py:95
 msgid "Quit"
-msgstr ""
+msgstr "Avslutt"
