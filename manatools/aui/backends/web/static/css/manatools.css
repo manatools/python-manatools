@@ -870,8 +870,15 @@ body {
    Image
    ============================================ */
 .mana-yimage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mana-yimage-img {
     max-width: 100%;
     height: auto;
+    display: block;
 }
 
 /* ============================================
