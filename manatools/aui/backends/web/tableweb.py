@@ -11,6 +11,7 @@ class YTableWeb(YSelectionWidget):
         self._multi_selection = multiSelection
         self._rows = []
         self._changed_item = None
+        self._deferred_pending = False  # True while a skeleton is shown in the browser
 
     def widgetClass(self):
         return "YTable"
@@ -167,7 +168,9 @@ class YTableWeb(YSelectionWidget):
                 f'</td></tr>'
                 f'</tbody>'
             )
+            self._deferred_pending = True
         else:
+            self._deferred_pending = False
             tbody = f'<tbody>{self._render_rows_html()}</tbody>'
 
         scroll = (
