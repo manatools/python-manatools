@@ -221,6 +221,14 @@ body {
 
 .mana-yalignment {
     display: flex;
+    flex: 1 1 auto;         /* participate in parent flex layout */
+    min-width: min-content; /* allow wrapping in HBox, don't collapse */
+}
+
+/* Inside a VBox, alignment containers must shrink with the column */
+.mana-yvbox > .mana-yalignment,
+.mana-paned-section > .mana-yalignment {
+    min-width: 0;
 }
 
 .mana-yspacing {
@@ -434,8 +442,18 @@ body {
     border-radius: var(--mana-radius);
     padding: var(--mana-spacing-md);
     margin: var(--mana-spacing-sm) 0;
-    min-height: 0;     /* allow shrinking in flex column */
-    overflow: auto;    /* scroll instead of overlapping siblings */
+    min-height: 0;          /* allow shrinking in flex column */
+    overflow: auto;         /* scroll instead of overlapping siblings */
+    flex: 1 1 auto;         /* grow to fill available space */
+    min-width: min-content; /* wrap in HBox instead of collapsing to zero */
+}
+
+/* Inside a VBox (column direction) the frame must be allowed to shrink
+   narrower than its content's min-content width — otherwise it overflows
+   a narrow column.  The flex column context never needs wrapping, only
+   vertical shrinkage. */
+.mana-yvbox > .mana-yframe,
+.mana-paned-section > .mana-yframe {
     min-width: 0;
 }
 
