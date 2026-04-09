@@ -6,16 +6,19 @@
 # Translators:
 # Yuri Chornoivan <yurchor@ukr.net>, 2020
 # Dennis Holierhoek <dennis.hh@hotmail.com>, 2020
+# Marcel Pol <marcel@timelord.nl>, 2026
+# dragnadh, 2026
+# Marc Laan, 2026
 #
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 16:29+0200\n"
+"POT-Creation-Date: 2026-04-06 17:28+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
-"Last-Translator: Dennis Holierhoek <dennis.hh@hotmail.com>, 2020\n"
-"Language-Team: Dutch (https://www.transifex.com/MageiaLinux/teams/9361/nl/)\n"
+"Last-Translator: Marc Laan, 2026\n"
+"Language-Team: Dutch (https://app.transifex.com/MageiaLinux/teams/9361/nl/)\n"
 "Language: nl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -24,30 +27,30 @@ msgstr ""
 
 #: manatools/args.py:28
 msgid "start using Gtk backend"
-msgstr ""
+msgstr "begin met gebruik van Gtk-backend"
 
 #: manatools/args.py:29
 msgid "start using ncurses backend"
-msgstr ""
+msgstr "begin met gebruik van ncurses-backend"
 
 #: manatools/args.py:30
 msgid "start using Qt backend"
-msgstr ""
+msgstr "begin met gebruik van Qt-backend"
 
 #: manatools/args.py:33
 msgid "directory containing localization strings (developer only)"
-msgstr ""
+msgstr "map met lokalisatiestrings (enkel voor ontwikkelaars)"
 
 #: manatools/args.py:34
 msgid "show application version and exit"
-msgstr ""
+msgstr "Toon programmaversie en sluit af"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
 #: manatools/aui/backends/curses/checkboxframecurses.py:236
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
 #: manatools/aui/backends/curses/tablecurses.py:461
 msgid "SPACE=Toggle"
-msgstr ""
+msgstr "SPACE=Schakelen"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/menubarcurses.py:660
@@ -56,12 +59,12 @@ msgstr ""
 #: manatools/aui/backends/curses/tablecurses.py:461
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "ENTER=Select"
-msgstr ""
+msgstr "ENTER=Selecteer"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/menubarcurses.py:660
 msgid "ESC=Close"
-msgstr ""
+msgstr "ESC = Sluiten"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:316
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
@@ -69,87 +72,87 @@ msgstr ""
 #: manatools/aui/backends/curses/tablecurses.py:461
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "↑↓=Move"
-msgstr ""
+msgstr "↑↓=Verplaats"
 
 #: manatools/aui/backends/curses/comboboxcurses.py:317
 #: manatools/aui/backends/curses/menubarcurses.py:661
 msgid "SPACE=Open"
-msgstr ""
+msgstr "SPACE=Open"
 
 #: manatools/aui/backends/curses/dialogcurses.py:323
 msgid "TAB=Next"
-msgstr ""
+msgstr "TAB=Volgende"
 
 #: manatools/aui/backends/curses/dialogcurses.py:324
 msgid "Shift-TAB=Prev"
-msgstr ""
+msgstr "Shift-TAB=Vorige"
 
 #: manatools/aui/backends/curses/dialogcurses.py:325
 msgid "F10=Quit"
-msgstr ""
+msgstr "F10=Verlaten"
 
 #: manatools/aui/backends/curses/dialogcurses.py:347
 msgid "Focus"
-msgstr ""
+msgstr "Focus"
 
 #: manatools/aui/backends/curses/dumbtabcurses.py:179
 msgid "←→=Switch"
-msgstr ""
+msgstr "←→=Omschakelen"
 
 #: manatools/aui/backends/curses/inputfieldcurses.py:222
 msgid "Type to edit"
-msgstr ""
+msgstr "Typ om te bewerken"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "ENTER=Confirm"
-msgstr ""
+msgstr "ENTER=Bevestigen"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "ESC=Cancel"
-msgstr ""
+msgstr "ESC=Annuleren"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:281
 #: manatools/aui/backends/curses/slidercurses.py:248
 msgid "digits=Edit"
-msgstr ""
+msgstr "cijfers=Bewerken"
 
 #: manatools/aui/backends/curses/intfieldcurses.py:282
 msgid "↑↓=Adjust"
-msgstr ""
+msgstr "↑↓=Aanpassen"
 
 #: manatools/aui/backends/curses/menubarcurses.py:660
 msgid "↑↓←→=Navigate"
-msgstr ""
+msgstr "↑↓←→=Navigeer"
 
 #: manatools/aui/backends/curses/menubarcurses.py:661
 msgid "←→=Move"
-msgstr ""
+msgstr "←→=Verplaats"
 
 #: manatools/aui/backends/curses/panedcurses.py:237
 msgid "+= Show pane"
-msgstr ""
+msgstr "+= Toon venster"
 
 #: manatools/aui/backends/curses/panedcurses.py:238
 msgid "-= Hide pane"
-msgstr ""
+msgstr "-= Verberg venster"
 
 #: manatools/aui/backends/curses/pushbuttoncurses.py:192
 msgid "ENTER=Press"
-msgstr ""
+msgstr "ENTER=Toets"
 
 #: manatools/aui/backends/curses/radiobuttoncurses.py:160
 msgid "SPACE=Select"
-msgstr ""
+msgstr "SPACE=Selecteer"
 
 #: manatools/aui/backends/curses/slidercurses.py:249
 msgid "←→=Adjust"
-msgstr ""
+msgstr "←→=Aanpassen"
 
 #: manatools/aui/backends/curses/treecurses.py:661
 msgid "SPACE=Expand"
-msgstr ""
+msgstr "SPACE=Uitbreiden"
 
 #: manatools/ui/common.py:183 manatools/ui/common.py:259
 #: manatools/ui/common.py:324 manatools/ui/common.py:406
@@ -170,44 +173,44 @@ msgstr "&Nee"
 
 #: manatools/ui/common.py:649
 msgid "About"
-msgstr ""
+msgstr "Info"
 
 #: manatools/ui/common.py:674
 msgid "Logo"
-msgstr ""
+msgstr "Logo"
 
 #: manatools/ui/common.py:704
 msgid "Description"
-msgstr ""
+msgstr "Beschrijving"
 
 #: manatools/ui/common.py:706 manatools/ui/common.py:773
 msgid "Authors"
-msgstr ""
+msgstr "Auteurs"
 
 #: manatools/ui/common.py:708 manatools/ui/common.py:810
 msgid "Information"
-msgstr ""
+msgstr "Informatie"
 
 #: manatools/ui/common.py:710 manatools/ui/common.py:814
 msgid "Credits"
-msgstr ""
+msgstr "Credits"
 
 #: manatools/ui/common.py:779
 msgid "&Info"
-msgstr ""
+msgstr "&Info"
 
 #: manatools/ui/common.py:781
 msgid "&Credits"
-msgstr ""
+msgstr "&Credits"
 
 #: manatools/ui/common.py:788
 msgid "&Close"
-msgstr ""
+msgstr "&Sluiten"
 
 #: manatools/ui/helpdialog.py:33
 msgid "Help dialog"
-msgstr ""
+msgstr "Help-dialoogvenster"
 
 #: manatools/ui/helpdialog.py:95
 msgid "Quit"
-msgstr ""
+msgstr "Afsluiten"
