@@ -777,42 +777,27 @@ body {
 }
 
 /* ============================================
-   Tabs (DumbTab)
+   Tabs (DumbTab) — Bootstrap 5.3 nav-tabs
    ============================================ */
 .mana-ydumbtab {
     display: flex;
     flex-direction: column;
 }
 
-.mana-tab-bar {
-    display: flex;
-    gap: var(--mana-spacing-xs);
-    border-bottom: 1px solid var(--mana-border-color);
-    padding: 0 var(--mana-spacing-sm);
+/* Active tab colour follows the application accent */
+.mana-ydumbtab .nav-tabs .nav-link.active {
+    color: var(--mana-accent);
+    border-bottom-color: transparent;
 }
 
-.mana-tab {
-    padding: var(--mana-spacing-sm) var(--mana-spacing-md);
-    border: none;
-    background: none;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-family: inherit;
-    font-size: inherit;
-}
-
-.mana-tab:hover {
-    background: var(--mana-bg-hover);
-}
-
-.mana-tab.selected {
-    border-bottom-color: var(--mana-accent);
+.mana-ydumbtab .nav-tabs .nav-link:not(.active):hover {
     color: var(--mana-accent);
 }
 
-.mana-tab-content {
-    padding: var(--mana-spacing-md);
+.mana-dumbtab-content {
+    padding: var(--mana-spacing-md) 0;
+    flex: 1;
+    min-height: 0;
 }
 
 /* ============================================
