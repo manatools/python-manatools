@@ -433,10 +433,15 @@
 
     function handleTabClick(event) {
         const tab = event.currentTarget;
-        const tabIndex = parseInt(tab.dataset.tabIndex);
+        const tabIndex = parseInt(tab.dataset.tabIndex, 10);
         const tabWidget = tab.closest('.mana-ydumbtab');
-        tabWidget.querySelectorAll('.mana-tab').forEach(t => t.classList.remove('selected'));
-        tab.classList.add('selected');
+        if (!tabWidget) return;
+        tabWidget.querySelectorAll('.mana-tab').forEach(function (t) {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
         sendEvent({ type: 'event', widget_id: getWidgetId(tabWidget), reason: 'SelectionChanged', data: { selectedIndex: tabIndex } });
     }
 
