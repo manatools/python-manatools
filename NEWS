@@ -1,5 +1,28 @@
 Python-manatools
 ================
+0.99.0
+    - New `manatools.aui` module that re-exports backend-agnostic UI classes
+        (enums, `YWidget`, `YTreeItem`, `YTableItem`, `YTableHeader`, `YItem`,
+        events and exceptions) from `yui_common` for easier migration from
+        libyui-style code.
+    - Unified YUI frontend with automatic backend detection (Qt / GTK / NCurses)
+        and convenience accessors: `YUI.ui()`, `YUI.widgetFactory()`, `YUI.app()`.
+    - Improved backend selection strategy and safer imports for Qt/GTK/curses
+        backends (deferred probing and clear warnings when fallbacks are used).
+    - `BaseDialog` (`manatools.ui.basedialog`) enhanced with a robust
+        `_setupUI` layout pattern and guidance to protect column minimum widths
+        using `MinSize` + `Frame` + `ReplacePoint` (fixes flicker/resize issues).
+    - `AppConfig` (YAML-based) for system and per-user configuration file
+        management, with `userPreferences`/`systemSettings` accessors.
+    - `EventManager` improvements for consistent widget/menu/timeout/cancel
+        event handling.
+    - Various API stabilizations: re-exported enums (YUIDimension, YEventReason,
+        YCheckBoxState, ...) and helper globals for backward compatibility.
+    - Improved common dialogs and helpers: `AboutDialog`, `warningMsgBox`,
+        `infoMsgBox`, `msgBox`, `askOkCancel`, and `askYesOrNo` with a
+        unified, backend-agnostic API for simple informational and question
+        dialogs used by applications.
+
 0.0.4
     - set dialog icon if passed to costructor
     - exported Service Manager Interface to allow using systemd api
