@@ -210,13 +210,13 @@ class YReplacePointQt(YSingleChildContainerWidget):
                     except Exception:
                         pass
                 except Exception:
-                    # fallback: try remove any previous parent then add
+                    # fallback: widget may already be in the layout; check indexOf
+                    # before re-adding.  Never call setParent(None) on a visible
+                    # widget — that promotes it to a top-level window (popup).
                     try:
-                        try:
-                            cw.setParent(None)
-                        except Exception:
-                            pass
-                        self._layout.addWidget(cw)
+                        if self._layout.indexOf(cw) < 0:
+                            cw.setParent(self._backend_widget)
+                            self._layout.addWidget(cw)
                     except Exception:
                         self._logger.exception("_attach_child_backend: addWidget fallback failed")
                 # Encourage the child to expand so content becomes visible
