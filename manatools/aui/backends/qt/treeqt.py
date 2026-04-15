@@ -24,13 +24,15 @@ class YTreeQt(YSelectionWidget):
     - recursiveSelection if it should select children recursively
     """
     def __init__(self, parent=None, label="", multiSelection=False, recursiveSelection=False):
-        super().__init__(parent)
+        # All instance attributes must be set BEFORE super().__init__(parent).
+        # YDumbTabQt.addChild calls get_backend_widget() synchronously when
+        # its content area already exists, which triggers _create_backend_widget()
+        # before the subclass constructor has had a chance to set its own attrs.
         self._label = label
         self._multi = bool(multiSelection)
         self._recursive = bool(recursiveSelection)
         if self._recursive:
             self._multi = True  # recursive selection implies multi-selection
-        self._immediate = self.notify()
         self._backend_widget = None
         self._tree_widget = None
         # mappings between QTreeWidgetItem and logical YTreeItem (python objects in self._items)
@@ -42,7 +44,10 @@ class YTreeQt(YSelectionWidget):
         self._last_selected_qitems = set()
         # track logical selected item ids to preserve across rebuilds/swaps
         self._last_selected_ids = set()
-        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")            
+        self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
+
+        super().__init__(parent)  # may trigger _create_backend_widget via YDumbTabQt.addChild
+        self._immediate = self.notify()
 
     def widgetClass(self):
         return "YTree"
@@ -81,7 +86,8 @@ class YTreeQt(YSelectionWidget):
 
     def _rebuildTree(self):
         """Rebuild the QTreeWidget from self._items (calls helper recursively)."""
-        self._logger.debug("rebuildTree: rebuilding tree with %d items", len(self._items) if self._items else 0)
+        _items = getattr(self, '_items', None) or []
+        self._logger.debug("rebuildTree: rebuilding tree with %d items", len(_items))
         self._suppress_selection_handler = True
         if self._tree_widget is None:
             # ensure backend exists
