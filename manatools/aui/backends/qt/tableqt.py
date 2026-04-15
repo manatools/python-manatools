@@ -383,20 +383,23 @@ class YTableQt(YSelectionWidget):
     """
 
     def __init__(self, parent, header: YTableHeader, multiSelection=False):
-        super().__init__(parent)
+        # All instance attributes must be set BEFORE super().__init__(parent).
+        # YWidget.__init__ calls parent.addChild(self), which causes
+        # YDumbTabQt.addChild → get_backend_widget() → _create_backend_widget()
+        # while this constructor is still executing.  _create_backend_widget()
+        # must find every attribute it reads already in place.
+        if header is None:
+            raise ValueError("YTableQt requires a YTableHeader")
         self._header = header
         self._multi = bool(multiSelection)
         # Force single-selection when any checkbox column is present.
-        if self._header is not None:
-            try:
-                for c_idx in range(self._header.columns()):
-                    if self._header.isCheckboxColumn(c_idx):
-                        self._multi = False
-                        break
-            except Exception:
-                pass
-        else:
-            raise ValueError("YTableQt requires a YTableHeader")
+        try:
+            for c_idx in range(self._header.columns()):
+                if self._header.isCheckboxColumn(c_idx):
+                    self._multi = False
+                    break
+        except Exception:
+            pass
 
         self._view = None    # QTableView
         self._model = None   # _YTableModel
@@ -406,6 +409,8 @@ class YTableQt(YSelectionWidget):
         self._suppress_selection_handler = False
         self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         self._changed_item = None
+
+        super().__init__(parent)  # may trigger _create_backend_widget via addChild
 
     def widgetClass(self):
         return "YTable"
