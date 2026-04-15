@@ -857,6 +857,13 @@ body {
     background: var(--mana-accent);
 }
 
+/* Drag-state: lock cursor and suppress text selection across the whole page */
+body.mana-dragging-col,
+body.mana-dragging-col * { cursor: col-resize !important; user-select: none !important; }
+
+body.mana-dragging-row,
+body.mana-dragging-row * { cursor: row-resize !important; user-select: none !important; }
+
 /* Collapse a paned section whose direct-child widget is hidden, and hide
    the adjacent divider so the remaining section expands to fill the paned. */
 .mana-paned-section:has(> [style*="display: none"]) {
