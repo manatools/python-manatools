@@ -7,6 +7,7 @@ Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 
 """
+import html as _html
 from ...yui_common import YSelectionWidget, YItem
 from .commonweb import widget_attrs, escape_html, format_label_with_shortcut
 
@@ -137,9 +138,13 @@ class YComboBoxWeb(YSelectionWidget):
         options_html = ""
         for item in self._items:
             selected = " selected" if item in self._selected_items else ""
-            # escape_html only once � used for both value attr and display text
-            label = escape_html(item.label())
-            options_html += f'<option value="{label}"{selected}>{label}</option>'
+            # value= attribute needs quote=True so that labels containing "
+            # don't break the HTML attribute boundary.  The browser DOM decodes
+            # HTML entities in attribute values, so select.value delivered by JS
+            # will equal item.label() exactly — enabling reliable label lookup.
+            value_attr = _html.escape(item.label(), quote=True)
+            label_text = escape_html(item.label())
+            options_html += f'<option value="{value_attr}"{selected}>{label_text}</option>'
 
         inner += (
             f'<select'
