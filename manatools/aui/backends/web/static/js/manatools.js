@@ -44,6 +44,8 @@
         console.log('ManaTools Web Client initializing...');
         connectWebSocket();
         attachEventListeners();
+        const reloadBtn = document.getElementById('mana-reload-btn');
+        if (reloadBtn) reloadBtn.addEventListener('click', function () { window.location.reload(); });
     }
 
     // ============================================
@@ -283,6 +285,7 @@
         on('.mana-yrichtext a', 'click', handleRichTextLinkClick);
 
         initAllTables(root);
+        initSplitters(root);
         on('.mana-tree-item', 'click', handleTreeItemClick);
         on('.mana-tab', 'click', handleTabClick);
         on('.mana-menu-item', 'click', handleMenuItemClick);
@@ -663,6 +666,103 @@
             return [0, '…', total - 5, total - 4, total - 3, total - 2, total - 1];
         }
         return [0, '…', current - 1, current, current + 1, '…', total - 1];
+    }
+
+    // ============================================
+    // Paned splitter drag
+    // ============================================
+
+    let _splitter = null;
+
+    function initSplitters(root) {
+        const elements = Array.from((root || document).querySelectorAll('.mana-paned-divider'));
+        if (root && root.matches && root.matches('.mana-paned-divider')) elements.unshift(root);
+        elements.forEach(function (el) {
+            el.removeEventListener('mousedown', handleSplitterMouseDown);
+            el.addEventListener('mousedown', handleSplitterMouseDown);
+            el.removeEventListener('touchstart', handleSplitterTouchStart);
+            el.addEventListener('touchstart', handleSplitterTouchStart, { passive: false });
+        });
+    }
+
+    function handleSplitterMouseDown(e) {
+        e.preventDefault();
+        _startSplitter(e.currentTarget, e.clientX, e.clientY);
+        document.addEventListener('mousemove', handleSplitterMouseMove);
+        document.addEventListener('mouseup', handleSplitterMouseUp);
+    }
+
+    function handleSplitterTouchStart(e) {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        _startSplitter(e.currentTarget, t.clientX, t.clientY);
+        document.addEventListener('touchmove', handleSplitterTouchMove, { passive: false });
+        document.addEventListener('touchend', handleSplitterTouchEnd);
+    }
+
+    function _startSplitter(divider, clientX, clientY) {
+        const paned = divider.closest('.mana-ypaned');
+        if (!paned) return;
+
+        // Use the actual computed flex-direction so the drag axis is correct
+        // even when a media query flips a horizontal paned to column layout.
+        const isRow = window.getComputedStyle(paned).flexDirection === 'row';
+
+        const prev = divider.previousElementSibling;
+        const next = divider.nextElementSibling;
+        if (!prev || !next) return;
+
+        _splitter = {
+            paned, isRow, prev, next,
+            startPos:      isRow ? clientX : clientY,
+            startPrevSize: isRow ? prev.offsetWidth : prev.offsetHeight,
+            startNextSize: isRow ? next.offsetWidth : next.offsetHeight,
+        };
+
+        document.body.classList.add(isRow ? 'mana-dragging-col' : 'mana-dragging-row');
+    }
+
+    function handleSplitterMouseMove(e) {
+        _moveSplitter(e.clientX, e.clientY);
+    }
+
+    function handleSplitterTouchMove(e) {
+        if (!_splitter || e.touches.length !== 1) return;
+        e.preventDefault();
+        _moveSplitter(e.touches[0].clientX, e.touches[0].clientY);
+    }
+
+    function _moveSplitter(clientX, clientY) {
+        if (!_splitter) return;
+        const { isRow, prev, next, startPos, startPrevSize, startNextSize } = _splitter;
+
+        const delta    = (isRow ? clientX : clientY) - startPos;
+        const total    = startPrevSize + startNextSize;
+        const minSize  = 80;
+        const newPrev  = Math.max(minSize, Math.min(total - minSize, startPrevSize + delta));
+        const newNext  = total - newPrev;
+
+        prev.style.flex = '0 0 ' + newPrev + 'px';
+        next.style.flex = '0 0 ' + newNext + 'px';
+    }
+
+    function handleSplitterMouseUp() {
+        document.removeEventListener('mousemove', handleSplitterMouseMove);
+        document.removeEventListener('mouseup', handleSplitterMouseUp);
+        _endSplitter();
+    }
+
+    function handleSplitterTouchEnd() {
+        document.removeEventListener('touchmove', handleSplitterTouchMove);
+        document.removeEventListener('touchend', handleSplitterTouchEnd);
+        _endSplitter();
+    }
+
+    function _endSplitter() {
+        if (!_splitter) return;
+        document.body.classList.remove('mana-dragging-col', 'mana-dragging-row');
+        _splitter = null;
     }
 
     // ============================================
