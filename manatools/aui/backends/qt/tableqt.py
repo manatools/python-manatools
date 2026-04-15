@@ -517,8 +517,8 @@ class YTableQt(YSelectionWidget):
         beginResetModel/endResetModel does not create any widgets — the view
         repaints only the visible viewport (O(visible×cols)).
         """
-        self._logger.debug("rebuildTable: %d items",
-                           len(self._items) if self._items else 0)
+        _items = getattr(self, '_items', None) or []
+        self._logger.debug("rebuildTable: %d items", len(_items))
         if self._model is None:
             self._create_backend_widget()
             return  # _create_backend_widget calls rebuildTable recursively
