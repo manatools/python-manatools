@@ -336,7 +336,9 @@
 
     function handleSelectChange(event) {
         const select = event.target;
-        sendEvent({ type: 'event', widget_id: getWidgetId(select), reason: 'SelectionChanged', data: { selectedIndex: select.selectedIndex } });
+        // selectedValue carries the raw (DOM-decoded) option label so the server
+        // can match by item.label() directly, regardless of HTML-escaping.
+        sendEvent({ type: 'event', widget_id: getWidgetId(select), reason: 'SelectionChanged', data: { selectedIndex: select.selectedIndex, selectedValue: select.value } });
     }
 
     function handleSelectionChange(event) {
