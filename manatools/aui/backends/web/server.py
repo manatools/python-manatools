@@ -382,6 +382,30 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         logger.debug(format, *args)
 
+    def _send_security_headers(self):
+        """Emit HTTP security headers on every successful response.
+
+        * CSP: restricts scripts/fonts/images to same origin; allows inline
+          styles because Bootstrap JS sets ``style=""`` attributes at runtime.
+          WebSocket connections back to the same host are explicitly permitted.
+        * X-Content-Type-Options: prevents MIME-type sniffing.
+        * X-Frame-Options: prevents the page being embedded in an iframe.
+        * Referrer-Policy: prevents leaking the URL to third-party requests.
+        """
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'none';",
+        )
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "same-origin")
+
     def handle_one_request(self):
         """Override to suppress flush errors after a WebSocket upgrade."""
         try:
@@ -452,6 +476,7 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(encoded)
         except Exception as e:
