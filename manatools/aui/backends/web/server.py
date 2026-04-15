@@ -593,6 +593,10 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     # HTTP event fallback
     # ------------------------------------------------------------------
 
+    # Maximum body size accepted from the /event POST fallback endpoint.
+    # UI events are tiny JSON objects; anything larger is rejected immediately.
+    MAX_POST_BODY = 64 * 1024  # 64 KB
+
     def _handle_event_post(self):
         origin = self.headers.get("Origin")
         if not WebSocketHandler._is_local_origin(origin):
@@ -601,6 +605,10 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length > self.MAX_POST_BODY:
+                self.send_error(413, "Payload Too Large")
+                logger.warning("/event POST body too large: %d bytes", length)
+                return
             data = json.loads(self.rfile.read(length).decode("utf-8"))
             from .dialogweb import YDialogWeb
             topmost = YDialogWeb.currentDialog(doThrow=False)
