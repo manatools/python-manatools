@@ -307,6 +307,15 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
         except Exception:
             pass
 
+    def showContent(self, visible: bool = True):
+        """Show or hide the content area of the frame without affecting the checkbox."""
+        try:
+            self._show_content = bool(visible)
+            if getattr(self, '_content_box', None) is not None:
+                self._content_box.set_visible(bool(visible))
+        except Exception:
+            pass
+
     def _apply_children_enablement(self, isChecked: bool):
         try:
             if not self._auto_enable:

@@ -200,6 +200,15 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
         except Exception as exc:
             self._logger.error("_on_checkbox_toggled: unexpected error: %s", exc)
 
+    def showContent(self, visible: bool = True):
+        """Show or hide the content area of the frame without affecting the checkbox."""
+        try:
+            self._show_content = bool(visible)
+            if getattr(self, '_content_widget', None) is not None:
+                self._content_widget.setVisible(bool(visible))
+        except Exception as exc:
+            self._logger.debug("showContent failed: %s", exc)
+
     # ------------------------------------------------------------------
     # Children enablement helper
     # ------------------------------------------------------------------
