@@ -1,5 +1,8 @@
 Python-manatools
 ================
+0.99.1/1.0.0
+   - Added selection box visibility management
+
 0.99.0
     - New `manatools.aui` module that re-exports backend-agnostic UI classes
         (enums, `YWidget`, `YTreeItem`, `YTableItem`, `YTableHeader`, `YItem`,

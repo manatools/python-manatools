@@ -189,6 +189,7 @@ class YSelectionBoxQt(YSelectionWidget):
         
         self._backend_widget = container
         self._backend_widget.setEnabled(bool(self._enabled))
+        self._backend_widget.setVisible(bool(self._visible))
         self._list_widget = list_widget
         self._value = self._selected_items[0].label() if self._selected_items else ""
         try:
@@ -214,6 +215,15 @@ class YSelectionBoxQt(YSelectionWidget):
                     pass
         except Exception:
             pass
+
+    def setVisible(self, visible: bool = True):
+        """Show/hide the widget's Qt container."""
+        super().setVisible(visible)
+        if getattr(self, "_backend_widget", None) is not None:
+            try:
+                self._backend_widget.setVisible(bool(visible))
+            except Exception:
+                pass
 
     def addItem(self, item):
         """Add a single item to the selection box (model + Qt view)."""
