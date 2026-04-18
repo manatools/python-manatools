@@ -206,6 +206,13 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._show_content = bool(visible)
             if getattr(self, '_content_widget', None) is not None:
                 self._content_widget.setVisible(bool(visible))
+                # Ask the top-level window to resize itself to fit the updated layout.
+                try:
+                    top = self._content_widget.window()
+                    if top is not None:
+                        top.adjustSize()
+                except Exception:
+                    pass
         except Exception as exc:
             self._logger.debug("showContent failed: %s", exc)
 
