@@ -104,6 +104,8 @@ class YDateFieldQt(YWidget):
         layout.addWidget(de)
         self._backend_widget = container
         self._dateedit = de
+        if self._help_text:
+            de.setToolTip(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -138,6 +140,14 @@ class YDateFieldQt(YWidget):
                 pass
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_dateedit", None) is not None:
+                self._dateedit.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:
