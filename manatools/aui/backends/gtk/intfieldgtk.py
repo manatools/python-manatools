@@ -133,6 +133,8 @@ class YIntFieldGtk(YWidget):
                 self._label_widget = lbl
             except Exception:
                 self._label_widget = None
+            if self._help_text:
+                spin.set_tooltip_text(self._help_text)
             # apply size policy according to stretchable hints (do not expand by default)
             try:
                 self._apply_size_policy()
@@ -147,6 +149,14 @@ class YIntFieldGtk(YWidget):
                 logging.getLogger('manatools.aui.gtk.intfield').exception("Error creating GTK IntField backend: %s", e)
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_spin", None) is not None:
+                self._spin.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

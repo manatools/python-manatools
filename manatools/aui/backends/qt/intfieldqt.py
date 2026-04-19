@@ -136,6 +136,8 @@ class YIntFieldQt(YWidget):
 
             self._backend_widget = container
             self._spinbox = spin
+            if self._help_text:
+                spin.setToolTip(self._help_text)
             try:
                 self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
             except Exception:
@@ -150,6 +152,14 @@ class YIntFieldQt(YWidget):
                 logging.getLogger("manatools.aui.qt.intfield").exception("Error creating Qt IntField backend: %s", e)
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_spinbox", None) is not None:
+                self._spinbox.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:
