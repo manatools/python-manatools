@@ -19,11 +19,12 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _convert_mnemonic_to_gtk
 
 class YRadioButtonGtk(YWidget):
     def __init__(self, parent=None, label="", isChecked=False):
         super().__init__(parent)
-        self._label = label
+        self._label = _convert_mnemonic_to_gtk(label)
         self._is_checked = bool(isChecked)
         self._backend_widget = None
         # determine radio-group membership among siblings
@@ -59,10 +60,11 @@ class YRadioButtonGtk(YWidget):
 
     def setLabel(self, newLabel):
         try:
-            self._label = str(newLabel)
+            self._label = _convert_mnemonic_to_gtk(str(newLabel))
             if getattr(self, "_backend_widget", None) is not None:
                 try:
                     self._backend_widget.set_label(self._label)
+                    self._backend_widget.set_use_underline(True)
                 except Exception:
                     pass
         except Exception:
@@ -93,6 +95,7 @@ class YRadioButtonGtk(YWidget):
         # widget exists, try to join its GTK group via `set_group`.
         try:
             self._backend_widget = Gtk.CheckButton(label=self._label)
+            self._backend_widget.set_use_underline(True)
             if getattr(self, '_group', None) is not None and self._group is not self:
                 ref_w = getattr(self._group, '_backend_widget', None)
                 if ref_w is not None:
@@ -107,6 +110,7 @@ class YRadioButtonGtk(YWidget):
         except Exception:
             try:
                 self._backend_widget = Gtk.CheckButton(label=self._label)
+                self._backend_widget.set_use_underline(True)
             except Exception:
                 self._backend_widget = None
  
