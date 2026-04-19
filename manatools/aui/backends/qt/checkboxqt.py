@@ -59,10 +59,20 @@ class YCheckBoxQt(YWidget):
         self._backend_widget.setChecked(self._is_checked)
         self._backend_widget.stateChanged.connect(self._on_state_changed)
         self._backend_widget.setEnabled(bool(self._enabled))
+        if self._help_text:
+            self._backend_widget.setToolTip(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the QCheckBox backend."""

@@ -65,10 +65,20 @@ class YCheckBoxGtk(YWidget):
         except Exception:
             self._logger.error("_create_backend_widget toggle setup failed", exc_info=True)
         self._backend_widget.set_sensitive(self._enabled)
+        if self._help_text:
+            self._backend_widget.set_tooltip_text(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
     
     def _on_toggled(self, button):
         try:
