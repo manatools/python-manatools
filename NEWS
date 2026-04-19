@@ -3,6 +3,8 @@ Python-manatools
 0.99.1/1.0.0
    - Added selection box visibility management
    - Added showContent to checkBoxFrame to show/hide frame content
+   - Added helpText (tooltip) management to CheckBox, InputField, RadioButton, Tree
+     CheckBoxFrame, IntField, MultiLineEdit, SelectionBox, Slider,DateField, TimeField
 
 0.99.0
     - New `manatools.aui` module that re-exports backend-agnostic UI classes
