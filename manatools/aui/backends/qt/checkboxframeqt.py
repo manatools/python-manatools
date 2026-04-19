@@ -128,6 +128,8 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._content_widget = content
             self._content_layout = content_layout
             self._backend_widget.setEnabled(bool(self._enabled))
+            if self._help_text:
+                self._checkbox.setToolTip(self._help_text)
 
             # QGroupBox.toggled(bool) fires whenever the checkable group changes state.
             try:
@@ -262,6 +264,14 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._logger.debug("addChild: _attach_child_backend failed: %s", exc)
 
     # ------------------------------------------------------------------
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_checkbox", None) is not None:
+                self._checkbox.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
+
     # Backend enable/disable
     # ------------------------------------------------------------------
 

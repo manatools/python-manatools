@@ -195,6 +195,11 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
                 pass
 
             # Connect toggled handler
+            if self._help_text:
+                try:
+                    self._checkbox.set_tooltip_text(self._help_text)
+                except Exception:
+                    pass
             try:
                 self._checkbox.connect("toggled", self._on_toggled)
             except Exception:
@@ -341,6 +346,14 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
     def addChild(self, child):
         super().addChild(child)
         self._attach_child_backend()
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_checkbox", None) is not None:
+                self._checkbox.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled: bool):
         try:
