@@ -357,7 +357,17 @@ class YSelectionBoxGtk(YSelectionWidget):
         self.setMultiSelection( self._multi_selection )
         self._backend_widget.set_sensitive(self._enabled)
         self._backend_widget.set_visible(bool(self._visible))
+        if self._help_text:
+            listbox.set_tooltip_text(self._help_text)
         self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_listbox", None) is not None:
+                self._listbox.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the selection box and its listbox/rows."""

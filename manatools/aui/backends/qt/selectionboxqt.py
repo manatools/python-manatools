@@ -192,10 +192,20 @@ class YSelectionBoxQt(YSelectionWidget):
         self._backend_widget.setVisible(bool(self._visible))
         self._list_widget = list_widget
         self._value = self._selected_items[0].label() if self._selected_items else ""
+        if self._help_text:
+            list_widget.setToolTip(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_list_widget", None) is not None:
+                self._list_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the selection box and its list widget; propagate where applicable."""

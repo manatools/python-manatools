@@ -68,6 +68,8 @@ class YTreeQt(YSelectionWidget):
         self._backend_widget = container
         self._tree_widget = tree
         self._backend_widget.setEnabled(bool(self._enabled))
+        if self._help_text:
+            tree.setToolTip(self._help_text)
         # populate if items already present
         try:
             self._rebuildTree()
@@ -562,6 +564,14 @@ class YTreeQt(YSelectionWidget):
                 self._backend_widget.setVisible(bool(visible))
         except Exception:
             self._logger.exception("setVisible failed")
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_tree_widget", None) is not None:
+                self._tree_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the tree widget and propagate to logical items/widgets."""
