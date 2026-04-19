@@ -671,7 +671,8 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
         header = factory.createHBox(vbox)
         if logo:
             try:
-                factory.createImage(header, logo, fallBackName=name or _("Logo"))
+                logo_align = factory.createTop(header)
+                factory.createImage(logo_align, logo, fallBackName=name or _("Logo"))
                 factory.createHSpacing(header, 8)
             except Exception as exc:
                 logger.debug("Unable to load logo '%s': %s", logo, exc)
@@ -684,12 +685,12 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
             factory.createLabel(labels, license_txt)
 
         # Helper to add a RichText block
-        def _add_richtext(parent, value):
+        def _add_richtext(parent, value, stretch_vert=True):
             rt = factory.createRichText(parent, "", False)
             rt.setValue(value)
             try:
                 rt.setStretchable(YUIDimension.YD_HORIZ, True)
-                rt.setStretchable(YUIDimension.YD_VERT, True)
+                rt.setStretchable(YUIDimension.YD_VERT, stretch_vert)
             except Exception:
                 pass
             return rt
@@ -765,27 +766,29 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                     use_tabbed = False
                     tab_widget = None
                     tab_content_updater = None
+            button_row = vbox
 
         if not use_tabbed:
+            # In CLASSIC mode richtext blocks must NOT stretch vertically — let
+            # content determine height so the dialog stays compact.
             if description:
-                _add_richtext(vbox, description)
-            if authors:
-                factory.createHeading(vbox, _("Authors"))
-                _add_richtext(vbox, authors)
+                factory.createVSpacing(vbox, 1)
+                _add_richtext(vbox, description, stretch_vert=True)
 
-            if information or credits:
-                button_row = factory.createHBox(vbox)
-                if information:
-                    info_btn = factory.createPushButton(button_row, _("&Info"))
-                if credits:
-                    credits_btn = factory.createPushButton(button_row, _("&Credits"))
-            else:
-                button_row = None
+            # Authors are shown inside the Credits popup, not in the main body.
+
+            # Push buttons to bottom; VStretch fills any leftover space.
+            factory.createVStretch(vbox)
+            button_row = factory.createHBox(vbox)
+                
+            if information:
+                info_btn = factory.createPushButton(button_row, _("&Info"))
+            if credits or authors:
+                credits_btn = factory.createPushButton(button_row, _("&Credits"))
 
         # Close button aligned to the right, as in the C++ dialog
-        close_row = factory.createHBox(vbox)
-        factory.createHStretch(close_row)
-        close_btn = factory.createPushButton(close_row, _("&Close"))
+        factory.createHStretch(button_row)
+        close_btn = factory.createIconButton(button_row, 'window-close', _("C&lose"))
 
         while True:
             ev = dlg.waitForEvent()
@@ -811,7 +814,14 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 continue
             if credits_btn and widget == credits_btn:
                 logger.debug("AboutDialog credits button activated")
-                msgBox({"title": _("Credits"), "text": credits or "", "richtext": True, "size": size})
+                credits_text = ""
+                if authors:
+                    credits_text += authors
+                if credits:
+                    if credits_text:
+                        credits_text += "<br/><br/>"
+                    credits_text += credits
+                msgBox({"title": _("Credits"), "text": credits_text, "richtext": True, "size": size})
                 continue
 
             logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())

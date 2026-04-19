@@ -6,6 +6,7 @@ Python-manatools
    - Added helpText (tooltip) management to CheckBox, InputField, RadioButton, Tree
      CheckBoxFrame, IntField, MultiLineEdit, SelectionBox, Slider,DateField, TimeField
    - Added mnemonic label for gtk widgets: YCheckBoxGtk, YRadioButtonGtk, YCheckBoxFrameGtk
+   - Redesigned Classic About Dialog
 
 0.99.0
     - New `manatools.aui` module that re-exports backend-agnostic UI classes
