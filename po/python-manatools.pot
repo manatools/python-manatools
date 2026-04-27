@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 17:28+0200\n"
+"POT-Creation-Date: 2026-04-27 20:18+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -38,7 +38,7 @@ msgid "show application version and exit"
 msgstr ""
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
-#: manatools/aui/backends/curses/checkboxframecurses.py:236
+#: manatools/aui/backends/curses/checkboxframecurses.py:248
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
 #: manatools/aui/backends/curses/tablecurses.py:461
 msgid "SPACE=Toggle"
@@ -167,36 +167,36 @@ msgstr ""
 msgid "About"
 msgstr ""
 
-#: manatools/ui/common.py:674
+#: manatools/ui/common.py:675
 msgid "Logo"
 msgstr ""
 
-#: manatools/ui/common.py:704
+#: manatools/ui/common.py:705
 msgid "Description"
 msgstr ""
 
-#: manatools/ui/common.py:706 manatools/ui/common.py:773
+#: manatools/ui/common.py:707
 msgid "Authors"
 msgstr ""
 
-#: manatools/ui/common.py:708 manatools/ui/common.py:810
+#: manatools/ui/common.py:709 manatools/ui/common.py:813
 msgid "Information"
 msgstr ""
 
-#: manatools/ui/common.py:710 manatools/ui/common.py:814
+#: manatools/ui/common.py:711 manatools/ui/common.py:824
 msgid "Credits"
 msgstr ""
 
-#: manatools/ui/common.py:779
+#: manatools/ui/common.py:785
 msgid "&Info"
 msgstr ""
 
-#: manatools/ui/common.py:781
+#: manatools/ui/common.py:787
 msgid "&Credits"
 msgstr ""
 
-#: manatools/ui/common.py:788
-msgid "&Close"
+#: manatools/ui/common.py:791
+msgid "C&lose"
 msgstr ""
 
 #: manatools/ui/helpdialog.py:33
