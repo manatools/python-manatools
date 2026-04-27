@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "python-manatools"
-version = "0.99.0"
+version = "0.99.1"
 description = "Framework to build ManaTools applications"
 license = "LGPL-2.1-or-later"
 readme = "README.md"
