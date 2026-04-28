@@ -86,7 +86,46 @@ class YDialogQt(YSingleChildContainerWidget):
                 self._create_backend_widget()
             
             self._qwidget.show()
-            self._is_open = True       
+            self._is_open = True
+            # Center popup over the parent dialog (X11 only; on Wayland move() is a no-op).
+            if self._dialog_type == YDialogType.YPopupDialog:
+                self._center_over_parent()
+
+    def _center_over_parent(self):
+        """Move this popup so it is centered above the parent dialog window.
+
+        Works reliably on X11.  On Wayland, QWidget.move() is a no-op because
+        Wayland compositors control window placement; proper Wayland centering
+        requires switching popup dialogs from QMainWindow to QDialog (deferred,
+        see sow/POPUP-CENTERING-TODO).  The call is safe to make on any platform
+        because it is wrapped in try/except and never raises.
+        """
+        try:
+            open_list = YDialogQt._open_dialogs
+            idx = open_list.index(self)
+            if idx <= 0:
+                return
+            parent_dlg = open_list[idx - 1]
+            parent_win = getattr(parent_dlg, "_qwidget", None)
+            if parent_win is None:
+                return
+            # Ensure Qt has processed pending layout / show events so geometry() is valid.
+            QtWidgets.QApplication.processEvents()
+            parent_geo = parent_win.geometry()
+            my_geo = self._qwidget.geometry()
+            new_x = parent_geo.x() + (parent_geo.width()  - my_geo.width())  // 2
+            new_y = parent_geo.y() + (parent_geo.height() - my_geo.height()) // 2
+            # Clip to available screen area so the popup does not go off-screen.
+            screen = self._qwidget.screen()
+            if screen is None:
+                screen = parent_win.screen()
+            if screen is not None:
+                avail = screen.availableGeometry()
+                new_x = max(avail.x(), min(new_x, avail.x() + avail.width()  - my_geo.width()))
+                new_y = max(avail.y(), min(new_y, avail.y() + avail.height() - my_geo.height()))
+            self._qwidget.move(new_x, new_y)
+        except Exception:
+            self._logger.debug("_center_over_parent failed (best-effort)", exc_info=True)
      
     def isOpen(self):
          return self._is_open

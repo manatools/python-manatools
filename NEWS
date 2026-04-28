@@ -2,6 +2,7 @@ Python-manatools
 ================
 0.99.2
    - Detecting the backend now tests also DISPLAY/WAYLAND_DISPLAY and PKEXEC_UID variables
+   - Centering pop up dialogs related to the main windows (works on X11 only)
 
 0.99.1
    - Added selection box visibility management
