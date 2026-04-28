@@ -1,5 +1,8 @@
 Python-manatools
 ================
+0.99.2
+   - Detecting the backend now tests also DISPLAY/WAYLAND_DISPLAY and PKEXEC_UID variables
+
 0.99.1
    - Added selection box visibility management
    - Added new showContent method to checkBoxFrame to show/hide frame content
