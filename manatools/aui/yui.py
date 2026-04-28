@@ -114,7 +114,33 @@ class YUI:
                 "No UI backend available: Qt, GTK4, and NCurses are all missing."
             )
 
-        # ── 3. No desktop → headless / TTY → NCurses ──────────────────────
+        # ── 3. Display server available but no XDG desktop (e.g. after su -) ──
+        # DISPLAY or WAYLAND_DISPLAY is set, so a graphical session is reachable
+        # even though XDG_CURRENT_DESKTOP was not inherited.  Try graphical
+        # backends before falling back to NCurses.
+        _display_env = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('DISPLAY')
+        if _display_env:
+            _log.warning(
+                "XDG_CURRENT_DESKTOP not set but a display server is available "
+                "(%s) — trying graphical backends.",
+                'WAYLAND_DISPLAY' if os.environ.get('WAYLAND_DISPLAY') else 'DISPLAY',
+            )
+            if _try_qt():
+                return Backend.QT
+            if _try_gtk():
+                return Backend.GTK
+            _log.warning(
+                "No graphical backend available despite display server "
+                "— falling back to NCurses."
+            )
+            if _try_ncurses():
+                return Backend.NCURSES
+            raise RuntimeError(
+                "No UI backend available: Qt and GTK4 are both missing, "
+                "and curses is not installed."
+            )
+
+        # ── 4. No desktop, no display → headless / TTY → NCurses ──────────
         if _try_ncurses():
             return Backend.NCURSES
         raise RuntimeError(
