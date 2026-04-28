@@ -27,7 +27,16 @@ class YUI:
            - Known GTK desktops  → try GTK4, warn + try Qt if unavailable.
            - Everything else     → try Qt, warn + try GTK4 if unavailable.
            In both cases NCurses is the last resort for graphical sessions.
-        3. No desktop session → NCurses only.
+        3. DISPLAY or WAYLAND_DISPLAY present but XDG_CURRENT_DESKTOP absent
+           (e.g. after «su -»): try Qt then GTK4, fall back to NCurses.
+        4. PKEXEC_UID present (app launched via pkexec/polkit): recover display
+           access by detecting live sockets in the filesystem
+           (/run/user/<uid>/ for Wayland, /tmp/.X11-unix/ for X11), inject the
+           minimum required variables into the environment, then try graphical
+           backends before falling back to NCurses.
+           Inspired by the Anaconda liveinst recovery pattern
+           (data/liveinst/liveinst lines 81-108).
+        5. No display available → headless / TTY → NCurses only.
 
         A RuntimeError is raised only when every candidate backend is missing.
         Import probes are deferred: only the library actually needed is probed.
@@ -140,7 +149,102 @@ class YUI:
                 "and curses is not installed."
             )
 
-        # ── 4. No desktop, no display → headless / TTY → NCurses ──────────
+        # ── 4. pkexec context: recover display access from the filesystem ──
+        # pkexec strips the environment, including DISPLAY, WAYLAND_DISPLAY and
+        # XDG_CURRENT_DESKTOP.  PKEXEC_UID is the one variable pkexec always
+        # preserves; from it we can locate the original user's XDG_RUNTIME_DIR
+        # and search for a live Wayland or X11 socket.
+        #
+        # Security notes:
+        #   • PKEXEC_UID is validated as a plain non-negative integer before
+        #     being used in any path construction (prevents directory traversal).
+        #   • Every candidate socket is verified with os.stat + S_ISSOCK so that
+        #     a regular file planted at the expected path is rejected.
+        #   • X11 display numbers are validated as integers (e.g. «X0» → «:0»).
+        #   • Only DISPLAY, WAYLAND_DISPLAY, and XDG_RUNTIME_DIR are written to
+        #     os.environ; no arbitrary data from the filesystem is exported.
+        #   • No subprocess is spawned; no shell interpolation takes place.
+        _pkexec_uid_str = os.environ.get('PKEXEC_UID', '')
+        if _pkexec_uid_str:
+            _uid = None
+            try:
+                _uid = int(_pkexec_uid_str)
+                if _uid < 0:
+                    raise ValueError("negative UID")
+            except ValueError:
+                _log.warning("PKEXEC_UID is not a valid non-negative integer (%r) — skipping pkexec recovery.",
+                             _pkexec_uid_str)
+
+            if _uid is not None:
+                import stat as _stat
+                _runtime_dir = f'/run/user/{_uid}'
+                _wayland_name = None
+                _x11_display  = None
+
+                # Prefer Wayland: look for wayland-* sockets in the user's
+                # XDG_RUNTIME_DIR (typically /run/user/<uid>/).
+                if os.path.isdir(_runtime_dir):
+                    try:
+                        for _name in sorted(os.listdir(_runtime_dir)):
+                            if _name.startswith('wayland-') and not _name.endswith('.lock'):
+                                _path = os.path.join(_runtime_dir, _name)
+                                try:
+                                    if _stat.S_ISSOCK(os.stat(_path).st_mode):
+                                        _wayland_name = _name
+                                        break
+                                except OSError:
+                                    pass
+                    except OSError:
+                        pass
+
+                # Fall back to X11: look for X<n> sockets in /tmp/.X11-unix/.
+                if not _wayland_name:
+                    _x11_dir = '/tmp/.X11-unix'
+                    if os.path.isdir(_x11_dir):
+                        try:
+                            for _name in sorted(os.listdir(_x11_dir)):
+                                if _name.startswith('X'):
+                                    try:
+                                        _num  = int(_name[1:])   # must be digits only
+                                        _path = os.path.join(_x11_dir, _name)
+                                        if _stat.S_ISSOCK(os.stat(_path).st_mode):
+                                            _x11_display = f':{_num}'
+                                            break
+                                    except (ValueError, OSError):
+                                        pass
+                        except OSError:
+                            pass
+
+                if _wayland_name or _x11_display:
+                    # Inject only the variables needed to connect to the
+                    # display server; nothing else from the filesystem is exported.
+                    os.environ['XDG_RUNTIME_DIR'] = _runtime_dir
+                    if _wayland_name:
+                        os.environ['WAYLAND_DISPLAY'] = _wayland_name
+                        _display_info = f'WAYLAND_DISPLAY={_wayland_name}'
+                    else:
+                        os.environ['DISPLAY'] = _x11_display
+                        _display_info = f'DISPLAY={_x11_display}'
+
+                    _log.info(
+                        "pkexec context (PKEXEC_UID=%d): recovered %s from "
+                        "filesystem — trying graphical backends.", _uid, _display_info
+                    )
+                    if _try_qt():
+                        return Backend.QT
+                    if _try_gtk():
+                        return Backend.GTK
+                    _log.warning(
+                        "pkexec context: no graphical backend available "
+                        "despite display server — falling back to NCurses."
+                    )
+                else:
+                    _log.info(
+                        "pkexec context (PKEXEC_UID=%d): no display socket found "
+                        "— falling back to NCurses.", _uid
+                    )
+
+        # ── 5. No desktop, no display → headless / TTY → NCurses ──────────
         if _try_ncurses():
             return Backend.NCURSES
         raise RuntimeError(
