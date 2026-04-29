@@ -1,10 +1,9 @@
 Python-manatools
 ================
-0.99.2
+0.99.1
+   - Fixed locale files management
    - Detecting the backend now tests also DISPLAY/WAYLAND_DISPLAY and PKEXEC_UID variables
    - Centering pop up dialogs related to the main windows (works on X11 only)
-
-0.99.1
    - Added selection box visibility management
    - Added new showContent method to checkBoxFrame to show/hide frame content
    - Added helpText (tooltip) management to CheckBox, InputField, RadioButton, Tree
