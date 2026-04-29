@@ -7,16 +7,19 @@ This script serves two purposes:
 
 1. **Poetry build hook** (called automatically during ``pip install`` / ``poetry build``):
    The ``build(setup_kwargs)`` function is invoked by Poetry before assembling the
-   wheel.  It compiles ``po/*.po`` → ``manatools/locale/<lang>/LC_MESSAGES/python-manatools.mo``
-   so the compiled translations are bundled *inside* the wheel under the package
-   tree.  After installation via pip, they are found at runtime by
-   ``manatools.ui._get_translation()`` using ``importlib.resources``.
+   wheel.  It compiles ``po/*.po`` → ``share/locale/<lang>/LC_MESSAGES/python-manatools.mo``
+   so the compiled translations are bundled in the wheel alongside the package.
+   After installation via pip, they are found at runtime by
+   ``manatools.ui._get_translation()`` using the relative-path lookup (#4):
+   ``Path(__file__).parent.parent.parent / "share" / "locale"`` resolves to
+   ``site-packages/share/locale/`` where pip installs the wheel's ``share/`` tree.
 
-2. **Standalone developer tool** (``python3 build.py``):
-   Run manually after a ``git clone`` to populate ``manatools/locale/`` before
-   doing ``pip install -e .`` (editable install).
+2. **Standalone developer tool** (``python3 po_build.py``):
+   Run manually after a ``git clone`` to populate ``share/locale/`` before
+   doing ``pip install -e .`` (editable install).  Same output directory as
+   ``tools/po-compile.sh`` so both workflows are consistent.
 
-Packagers (RPM/DEB) should use ``tools/po-compile.sh`` which writes to
+Packagers (RPM/DEB) can also use ``tools/po-compile.sh`` which writes to
 ``share/locale/`` and can be installed to ``/usr/share/locale/``.  The system
 path is also covered by ``_get_translation()`` (lookup #5).
 
@@ -34,19 +37,19 @@ from pathlib import Path
 _DOMAIN = "python-manatools"
 
 
-def _compile_po_files(target_dir: Path="share") -> None:
+def _compile_po_files(target_dir: Path) -> None:
     """Compile all po/*.po files to <target_dir>/<lang>/LC_MESSAGES/<domain>.mo."""
     root = Path(__file__).parent
     po_dir = root / "po"
 
     if not po_dir.is_dir():
-        print("build.py: no po/ directory found, skipping translation compilation")
+        print("po_build.py: no po/ directory found, skipping translation compilation")
         return
 
     msgfmt_bin = shutil.which("msgfmt")
     if not msgfmt_bin:
-        print("build.py: WARNING: msgfmt not found — skipping translation compilation.")
-        print("          Install gettext-tools and re-run:  python3 build.py")
+        print("po_build.py: WARNING: msgfmt not found — skipping translation compilation.")
+        print("          Install gettext-tools and re-run:  python3 po_build.py")
         return
 
     compiled = errors = 0
@@ -64,21 +67,21 @@ def _compile_po_files(target_dir: Path="share") -> None:
             compiled += 1
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors="replace").strip()
-            print(f"build.py: WARNING: could not compile {po_file.name}: {stderr}")
+            print(f"po_build.py: WARNING: could not compile {po_file.name}: {stderr}")
             errors += 1
 
-    print(f"build.py: compiled {compiled} translation file(s)"
+    print(f"po_build.py: compiled {compiled} translation file(s)"
           + (f", {errors} error(s)" if errors else ""))
 
 
 def build(setup_kwargs: dict) -> None:
-    """Poetry PEP-517 build hook — compiles .mo into manatools/locale/ for the wheel."""
+    """Poetry PEP-517 build hook — compiles .mo into share/locale/ for the wheel."""
     root = Path(__file__).parent
     _compile_po_files(root / "share" / "locale")
 
 
 if __name__ == "__main__":
-    # Standalone: compile into manatools/locale/ (editable install / development).
-    # For the packager target (share/locale/) use tools/po-compile.sh instead.
+    # Standalone: compile into share/locale/ (source checkout / editable install).
+    # Same output as tools/po-compile.sh so both workflows are interchangeable.
     root = Path(__file__).parent
     _compile_po_files(root / "share" / "locale")

@@ -26,12 +26,15 @@ def _get_translation() -> gettext.NullTranslations:
        Base Directory spec, user-scoped locale data lives here.  Useful when a
        user manually installs translations or when a future install-locale command
        places them here.
-    3. ``manatools/locale/`` inside the installed package — populated by the
-       Poetry build hook (``build.py``) during ``pip install`` / ``pip install -e .``
-       after running ``python3 build.py``.  Found via ``importlib.resources``.
-    4. ``<project-root>/share/locale/`` relative to this file — populated by
-       ``tools/po-compile.sh`` for packagers building from source.  Also works in
-       a plain source checkout after running ``tools/po-compile.sh``.
+    3. ``manatools/locale/`` inside the installed package — legacy path, kept for
+       backwards compatibility with older wheels that bundled .mo there.
+       Found via ``importlib.resources``.
+    4. ``share/locale/`` relative to ``__file__`` — primary path for pip/wheel
+       installs with the current build layout.  ``po_build.py`` (the Poetry build
+       hook) compiles .po → ``share/locale/``; pip installs that tree next to
+       ``manatools/`` in site-packages so the relative path resolves correctly.
+       Also works in a source checkout after running ``python3 po_build.py`` or
+       ``tools/po-compile.sh``.
     5. ``/usr/share/locale/`` — distro package installs (RPM, DEB, …).
     6. ``NullTranslations`` — no translation found; strings pass through in English.
     """
