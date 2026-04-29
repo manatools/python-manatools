@@ -14,15 +14,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 from ..aui import yui
 from ..aui.yui_common import YUIDimension, YItem
 from enum import Enum
-import gettext
 import logging
 import warnings
-# https://pymotw.com/3/gettext/#module-localization
-t = gettext.translation(
-    'python-manatools',
-    '/usr/share/locale',
-    fallback=True,
-)
+from . import _get_translation
+t = _get_translation()
 _ = t.gettext
 ngettext = t.ngettext
 

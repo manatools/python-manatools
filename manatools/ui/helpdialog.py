@@ -16,13 +16,8 @@ import webbrowser
 from . import basedialog as basedialog
 from .. import basehelpinfo as helpdata
 from ..aui import yui as yui
-import gettext
-# https://pymotw.com/3/gettext/#module-localization
-t = gettext.translation(
-    'python-manatools',
-    '/usr/share/locale',
-    fallback=True,
-)
+from . import _get_translation
+t = _get_translation()
 _ = t.gettext
 ngettext = t.ngettext
 
