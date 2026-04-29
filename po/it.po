@@ -194,11 +194,11 @@ msgstr ""
 
 #: manatools/ui/common.py:779
 msgid "&Info"
-msgstr ""
+msgstr "&Informazioni"
 
 #: manatools/ui/common.py:781
 msgid "&Credits"
-msgstr ""
+msgstr "&Crediti"
 
 #: manatools/ui/common.py:788
 msgid "&Close"
