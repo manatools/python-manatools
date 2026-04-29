@@ -33,9 +33,21 @@ include = [
    { path = "tools/**",    format = "sdist" },
 ]
 
-# build.py is invoked by Poetry before assembling the wheel.
-# It compiles po/*.po → manatools/locale/<lang>/LC_MESSAGES/python-manatools.mo.
-build = "po_build.py"
+# NOTE: intentionally NO build hook here.
+# Having `build = "po_build.py"` would cause Poetry to set pure_lib=false in the
+# WHEEL metadata, producing a platform+version-specific wheel
+# (e.g. cp310-cp310-manylinux_2_36_x86_64) instead of a pure-Python wheel
+# (py3-none-any / noarch).  This breaks RPM packaging which declares the package
+# as noarch, and causes pythondistdeps.py to fail with "metadata missing or
+# corrupted".
+#
+# Instead, compile .mo files manually BEFORE building the wheel/sdist:
+#   python3 po_build.py          # → share/locale/**/*.mo
+#   pip wheel . -w dist/         # picks them up via the include directive above
+#
+# Packagers (RPM/DEB) should do the same in their spec:
+#   python3 po_build.py          # (or tools/po-compile.sh for /usr/share/locale/)
+#   %pyproject_wheel or pip install --no-build-isolation .
 
 classifiers = [
    # classifier: http://pypi.python.org/pypi?%3Aaction=list_classifiers
