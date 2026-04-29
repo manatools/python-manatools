@@ -201,6 +201,9 @@ class YDialogCurses(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         # Use the main screen
         self._backend_widget = curses.newwin(0, 0, 0, 0)
+        # keypad(True) must be called on the window used for getch() so that
+        # function keys (F1, F10, arrow keys, KEY_BTAB, …) are decoded properly.
+        self._backend_widget.keypad(True)
         try:
             self._logger.debug("_create_backend_widget created backend window")
         except Exception:
@@ -575,6 +578,8 @@ class YDialogCurses(YSingleChildContainerWidget):
                             pass
                         # Recreate backend window (full-screen)
                         self._backend_widget = curses.newwin(new_h, new_w, 0, 0)
+                        # Restore keypad on the new window so function keys keep working.
+                        self._backend_widget.keypad(True)
                         self._last_term_size = (new_h, new_w)
                     except Exception:
                         pass
@@ -592,9 +597,17 @@ class YDialogCurses(YSingleChildContainerWidget):
                     self._needs_redraw = False
                     self._last_draw_time = now
 
-                # Non-blocking input
-                ui._stdscr.nodelay(True)
-                key = ui._stdscr.getch()
+                # Non-blocking input.
+                # IMPORTANT: read from _backend_widget, NOT from _stdscr.
+                # ncurses calls wrefresh(win) internally before waiting in getch().
+                # If we used _stdscr (which is blank), that implicit wrefresh would
+                # overwrite the virtual screen with spaces, erasing whatever
+                # _draw_dialog() just painted in _backend_widget — making the
+                # dialog appear blank until the next forced redraw.
+                # Reading from _backend_widget triggers wrefresh(_backend_widget)
+                # instead, which re-paints the correct content before waiting.
+                self._backend_widget.nodelay(True)
+                key = self._backend_widget.getch()
 
                 if key == -1:
                     if deadline and time.time() >= deadline:

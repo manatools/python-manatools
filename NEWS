@@ -1,6 +1,7 @@
 Python-manatools
 ================
 0.99.1
+   - Fixed ncurses widgets drawing at start up
    - Fixed locale files management
    - Detecting the backend now tests also DISPLAY/WAYLAND_DISPLAY and PKEXEC_UID variables
    - Centering pop up dialogs related to the main windows (works on X11 only)
