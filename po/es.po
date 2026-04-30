@@ -4,7 +4,7 @@
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 # Translators:
-# Miguel, 2026
+# Miguel, 2020
 # Jose Manuel López <joselp@e.email>, 2026
 # José Alberto Valle Cid <j.alberto.vc@gmail.com>, 2026
 #
@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: python-manatools 0.xx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-06 17:28+0200\n"
+"POT-Creation-Date: 2026-04-27 20:18+0200\n"
 "PO-Revision-Date: 2020-09-06 07:17+0000\n"
 "Last-Translator: José Alberto Valle Cid <j.alberto.vc@gmail.com>, 2026\n"
 "Language-Team: Spanish (https://app.transifex.com/MageiaLinux/teams/9361/"
@@ -46,7 +46,7 @@ msgid "show application version and exit"
 msgstr "Mostrar la versión de la aplicación y salir"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
-#: manatools/aui/backends/curses/checkboxframecurses.py:236
+#: manatools/aui/backends/curses/checkboxframecurses.py:248
 #: manatools/aui/backends/curses/selectionboxcurses.py:349
 #: manatools/aui/backends/curses/tablecurses.py:461
 msgid "SPACE=Toggle"
@@ -140,7 +140,7 @@ msgstr "-= Ocultar panel"
 
 #: manatools/aui/backends/curses/pushbuttoncurses.py:192
 msgid "ENTER=Press"
-msgstr ""
+msgstr "ENTER=Proceder"
 
 #: manatools/aui/backends/curses/radiobuttoncurses.py:160
 msgid "SPACE=Select"
@@ -175,36 +175,36 @@ msgstr "&No"
 msgid "About"
 msgstr "Acerca de"
 
-#: manatools/ui/common.py:674
+#: manatools/ui/common.py:675
 msgid "Logo"
-msgstr ""
+msgstr "Logo"
 
-#: manatools/ui/common.py:704
+#: manatools/ui/common.py:705
 msgid "Description"
 msgstr "Descripción"
 
-#: manatools/ui/common.py:706 manatools/ui/common.py:773
+#: manatools/ui/common.py:707
 msgid "Authors"
 msgstr "Autores"
 
-#: manatools/ui/common.py:708 manatools/ui/common.py:810
+#: manatools/ui/common.py:709 manatools/ui/common.py:813
 msgid "Information"
 msgstr "Información"
 
-#: manatools/ui/common.py:710 manatools/ui/common.py:814
+#: manatools/ui/common.py:711 manatools/ui/common.py:824
 msgid "Credits"
 msgstr "Créditos"
 
-#: manatools/ui/common.py:779
+#: manatools/ui/common.py:785
 msgid "&Info"
 msgstr "&Información"
 
-#: manatools/ui/common.py:781
+#: manatools/ui/common.py:787
 msgid "&Credits"
 msgstr "C&réditos"
 
-#: manatools/ui/common.py:788
-msgid "&Close"
+#: manatools/ui/common.py:791
+msgid "C&lose"
 msgstr "&Cerrar"
 
 #: manatools/ui/helpdialog.py:33
