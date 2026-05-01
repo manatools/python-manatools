@@ -28,7 +28,7 @@ include = [
    # Sdist: everything a packager needs to rebuild translations from source.
    { path = "NEWS",        format = "sdist" },
    { path = "po/*.po",     format = "sdist" },
-   { path = "po_build.py", format = "sdist" },
+   { path = "tools/po_build.py", format = "sdist" },
    { path = "share/**",    format = "sdist" },
    { path = "tools/**",    format = "sdist" },
 ]
