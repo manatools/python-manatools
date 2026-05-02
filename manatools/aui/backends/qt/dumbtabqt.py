@@ -151,6 +151,18 @@ class YDumbTabQt(YSelectionWidget):
             except Exception:
                 pass
 
+    def deleteAllItems(self):
+        super().deleteAllItems()
+        try:
+            if self._tabbar is not None:
+                while self._tabbar.count() > 0:
+                    self._tabbar.removeTab(0)
+        except Exception:
+            try:
+                self._logger.exception("YDumbTabQt.deleteAllItems failed")
+            except Exception:
+                pass
+
     def addItem(self, item):
         super().addItem(item)
         try:

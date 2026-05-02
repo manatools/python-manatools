@@ -74,6 +74,10 @@ class YDumbTabCurses(YSelectionWidget):
             raise YUIInvalidWidgetException("YDumbTab can only have one child")
         super().addChild(child)
 
+    def deleteAllItems(self):
+        super().deleteAllItems()
+        self._active_index = -1
+
     def addItem(self, item):
         super().addItem(item)
         # If this is the first item and nothing selected, select it
