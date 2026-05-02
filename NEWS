@@ -1,5 +1,9 @@
 Python-manatools
 ================
+0.99.2
+   - Added deleteAllItems to DumbTab to allow redesing tabs at run time
+   - YDumbTabGtk redesigned using Gtk.Notebook to avoid enlarging the dialog with more tabs
+
 0.99.1
    - Fixed ncurses widgets drawing at start up
    - Fixed locale files management
