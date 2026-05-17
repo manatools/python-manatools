@@ -60,11 +60,16 @@ class AppConfig() :
 
             try:
                 with open(self._userPrfesPathName, 'r') as ymlfile:
-                    self._userPrefs = yaml.safe_load(ymlfile)
-                if not self._userPrefs:
-                  self._userPrefs = {}
+                    loaded = yaml.safe_load(ymlfile)
+                if isinstance(loaded, dict):
+                    self._userPrefs = loaded
+                elif loaded is not None:
+                    print("Warning: user preferences file is not a mapping, ignoring (got %s)" % type(loaded).__name__)
+                # else loaded is None (empty file) — _userPrefs stays as {}
             except IOError as e:
-                print ("Skipped exception: <%s> " % str(e))
+                print("Skipped exception: <%s>" % str(e))
+            except yaml.YAMLError as e:
+                print("Warning: failed to parse user preferences YAML: %s" % str(e))
 
     @property
     def systemSettings(self) :
