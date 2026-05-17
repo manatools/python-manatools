@@ -9,6 +9,7 @@ Python-manatools
     `QDialog` is mapped as an XCB transient-for child, not a standalone top-level, so its 
     destruction does not trigger a screen-topology flush.
   - Fixed: when parent main windows is disabled, QDialog children do not have by default.
+  - Improve type checking reading user preferences from AppConfig
 
 0.99.2
    - Added deleteAllItems to DumbTab to allow redesing tabs at run time

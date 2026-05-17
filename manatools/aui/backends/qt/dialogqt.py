@@ -313,7 +313,13 @@ class YDialogQt(YSingleChildContainerWidget):
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
-        self._backend_widget.setEnabled(bool(self._enabled))
+        # Use _set_backend_enabled instead of calling setEnabled() directly on
+        # _backend_widget.  For YMainDialog, _set_backend_enabled only touches
+        # centralWidget()/menuBar() and never disables the QMainWindow itself.
+        # Calling QMainWindow.setEnabled(False) here would prevent later calls
+        # to centralWidget().setEnabled(True) from making the window interactive
+        # again, because Qt keeps the parent's disabled state as a hard block.
+        self._set_backend_enabled(bool(self._enabled))
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
