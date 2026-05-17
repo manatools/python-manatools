@@ -130,11 +130,35 @@ class YDialogQt(YSingleChildContainerWidget):
     def isOpen(self):
          return self._is_open
     
+    def _get_parent_qwidget(self):
+        """Return the Qt widget of the dialog directly below this one in the stack.
+
+        Used to parent popup QDialog instances to their logical owner window so
+        that they are mapped as XCB transient-for children rather than standalone
+        top-level windows (see _create_backend_widget docstring).
+        """
+        open_list = YDialogQt._open_dialogs
+        try:
+            idx = open_list.index(self)
+        except ValueError:
+            return None
+        if idx > 0:
+            parent_dlg = open_list[idx - 1]
+            return getattr(parent_dlg, "_qwidget", None)
+        return None
+
     def destroy(self, doThrow=True):
         self._clear_default_button()
         if self._qwidget:
-            self._qwidget.close()
+            widget = self._qwidget
             self._qwidget = None
+            widget.close()
+            if self._dialog_type == YDialogType.YPopupDialog:
+                # QDialog is parented to the main window; Qt keeps the C++ object
+                # alive until the parent is destroyed unless we explicitly schedule
+                # deletion.  deleteLater() queues deletion for the next event-loop
+                # cycle, preventing unbounded memory accumulation.
+                widget.deleteLater()
         self._is_open = False
         if self in YDialogQt._open_dialogs:
             YDialogQt._open_dialogs.remove(self)
@@ -202,11 +226,27 @@ class YDialogQt(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         """Create the Qt window and initialize title, icon, content, and initial size.
 
-        Popup dialogs should honor content-driven minimum size hints (e.g. from
-        createMinSize in BaseDialog) instead of forcing a large default size.
-        Main dialogs keep a larger default for usability.
+        Popup dialogs use QDialog parented to the current main window.  This is
+        critical on Qt/XCB and XWayland: a standalone QMainWindow is mapped as a
+        full top-level XCB window.  When such a window is destroyed, the XCB
+        platform layer flushes and may rebuild its internal screen-sibling list,
+        leaving QScreen::virtualSiblings() in an inconsistent state for sibling
+        windows.  Any subsequent Qt operation that queries screen geometry
+        (tooltip positioning, font-DPI calculations, window placement) then
+        crashes with SIGSEGV deep inside the C++ platform code.  A QDialog
+        parented to a QMainWindow is mapped as an XCB transient-for window and
+        is NOT a standalone top-level; its destruction does not trigger a screen
+        topology flush, so the parent window's screen state remains valid.
+
+        Main dialogs keep QMainWindow for full application-window behaviour
+        (menu bar, status bar, title bar controls).
         """
-        self._qwidget = QtWidgets.QMainWindow()
+        if self._dialog_type == YDialogType.YPopupDialog:
+            # Popup: transient child window; see docstring for the crash rationale.
+            parent_widget = self._get_parent_qwidget()
+            self._qwidget = QtWidgets.QDialog(parent_widget)
+        else:
+            self._qwidget = QtWidgets.QMainWindow()
         # Determine window title:from YApplicationQt instance stored on the YUI backend
         title = "Manatools Qt Dialog"
         
@@ -249,15 +289,22 @@ class YDialogQt(YSingleChildContainerWidget):
         except Exception:
             pass
 
-        central_widget = QtWidgets.QWidget()
-        self._qwidget.setCentralWidget(central_widget)
-        
-        if self.child():
-            layout = QtWidgets.QVBoxLayout(central_widget)
-            layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
-            layout.addWidget(self.child().get_backend_widget())
-            # If the child is a layout box with a menubar as first child, Qt can display QMenuBar inline.
-            # Alternatively, backends may add YMenuBarQt directly to layout.
+        if self._dialog_type == YDialogType.YPopupDialog:
+            # QDialog: set the layout directly on the dialog widget.
+            # There is no central widget or menu bar; all content goes in one VBox.
+            if self.child():
+                layout = QtWidgets.QVBoxLayout(self._qwidget)
+                layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
+                layout.addWidget(self.child().get_backend_widget())
+        else:
+            # QMainWindow: content lives inside a central widget so that the menu
+            # bar and status bar are properly separated from the content area.
+            central_widget = QtWidgets.QWidget()
+            self._qwidget.setCentralWidget(central_widget)
+            if self.child():
+                layout = QtWidgets.QVBoxLayout(central_widget)
+                layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
+                layout.addWidget(self.child().get_backend_widget())
 
         try:
             self._apply_initial_size()
@@ -308,17 +355,18 @@ class YDialogQt(YSingleChildContainerWidget):
     def setVisible(self, visible: bool = True):
         """Show or hide the dialog window.
 
-        Delegates to the Qt QMainWindow show/hide machinery and keeps the
-        YWidget logical visibility flag in sync via the base-class call.
-        If the backend window has not been created yet the flag is stored
-        and will be applied the next time the window is realised.
+        Delegates to the underlying Qt widget (QMainWindow for main dialogs,
+        QDialog for popups) and keeps the YWidget logical visibility flag in
+        sync via the base-class call.  If the backend window has not been
+        created yet the flag is stored and applied the next time the window
+        is realised.
         """
         super().setVisible(visible)
         try:
             if getattr(self, "_qwidget", None) is not None:
                 self._qwidget.setVisible(bool(visible))
                 self._logger.debug(
-                    "setVisible(%s) applied to QMainWindow <%s>",
+                    "setVisible(%s) applied to dialog <%s>",
                     visible, self.debugLabel())
         except Exception:
             self._logger.exception(
@@ -352,8 +400,10 @@ class YDialogQt(YSingleChildContainerWidget):
             self._post_event(YCancelEvent())
         except Exception:
             pass
-        # Ensure dialog is destroyed and accept the close
-        self.destroy()
+        # Do not call destroy() from closeEvent: destroy() itself calls
+        # QMainWindow.close(), which re-enters Qt close/hide handling and can
+        # crash on popup teardown. The caller that receives YCancelEvent is
+        # responsible for invoking destroy()/close() once the event loop exits.
         event.accept()
     
     def _post_event(self, event):
