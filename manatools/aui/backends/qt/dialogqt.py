@@ -374,13 +374,39 @@ class YDialogQt(YSingleChildContainerWidget):
                 visible, self.debugLabel())
 
     def _set_backend_enabled(self, enabled):
-        """Enable/disable the dialog window and propagate to logical child widgets."""
+        """Enable/disable the dialog window and propagate to logical child widgets.
+
+        For main dialogs the Qt window is disabled by acting on its parts
+        (central widget and menu bar) rather than on the QMainWindow itself.
+        Calling QMainWindow.setEnabled() propagates the state to *every*
+        descendant widget including child QDialog windows, which would
+        inadvertently disable any open popup.  Targeting only the central widget
+        and the menu bar achieves the same visible effect (greyed-out content,
+        non-interactive menus) without touching sibling dialog windows.
+
+        For popup dialogs (QDialog) setEnabled() is called directly on the
+        widget, so an explicit setEnabled(False) on the popup always works.
+        """
         try:
-            if getattr(self, "_qwidget", None) is not None:
-                try:
-                    self._qwidget.setEnabled(bool(enabled))
-                except Exception:
-                    pass
+            qw = getattr(self, "_qwidget", None)
+            if qw is not None:
+                if self._dialog_type == YDialogType.YMainDialog:
+                    # Disable/enable only the parts owned by this window so that
+                    # child QDialog windows are never touched by the propagation.
+                    try:
+                        central = qw.centralWidget()
+                        if central is not None:
+                            central.setEnabled(bool(enabled))
+                    except Exception:
+                        pass
+                    try:
+                        mb = qw.menuBar()
+                        if mb:
+                            mb.setEnabled(bool(enabled))
+                    except Exception:
+                        pass
+                else:
+                    qw.setEnabled(bool(enabled))
         except Exception:
             pass
         # propagate logical enabled state to contained YWidget(s)
