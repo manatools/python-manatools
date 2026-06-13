@@ -126,6 +126,23 @@ class YRichTextGtk(YWidget):
                 except Exception:
                     self._logger.debug("set_valign failed on %s", type(ww), exc_info=True)
 
+            # ScrolledWindow scrollbar policy: in compact message dialogs where
+            # vertical stretch is disabled, avoid forcing a vertical scrollbar
+            # for short text. Let wrapped content use natural height.
+            sw = getattr(self, "_backend_widget", None)
+            if isinstance(sw, Gtk.ScrolledWindow):
+                try:
+                    hpol = Gtk.PolicyType.AUTOMATIC if eff_h else Gtk.PolicyType.NEVER
+                    vpol = Gtk.PolicyType.AUTOMATIC if eff_v else Gtk.PolicyType.NEVER
+                    sw.set_policy(hpol, vpol)
+                except Exception:
+                    self._logger.debug("set_policy failed on Gtk.ScrolledWindow", exc_info=True)
+                try:
+                    if not eff_v:
+                        sw.set_propagate_natural_height(True)
+                except Exception:
+                    pass
+
             # Enforce left/top content alignment for Label/TextView
             try:
                 cw = getattr(self, "_content_widget", None)
@@ -335,6 +352,11 @@ class YRichTextGtk(YWidget):
             sw.set_vexpand(True)
             sw.set_halign(Gtk.Align.FILL)
             sw.set_valign(Gtk.Align.FILL)
+            try:
+                sw.set_propagate_natural_width(True)
+                sw.set_propagate_natural_height(True)
+            except Exception:
+                pass
         except Exception:
             self._logger.debug("Failed to set initial expand/align on scrolled window", exc_info=True)
 

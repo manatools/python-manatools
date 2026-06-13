@@ -344,6 +344,24 @@ class YDialogQt(YSingleChildContainerWidget):
             # sizes the window to at least the layout's minimumSizeHint().
             return
 
+        # Popup: if a MinSize alignment exists in the logical child tree,
+        # prefer that explicit size as initial geometry instead of the full
+        # natural sizeHint (which can be overly large with rich text widgets).
+        try:
+            declared = self._find_declared_min_size(self.child())
+        except Exception:
+            declared = None
+        if declared:
+            try:
+                w, h = int(declared[0]), int(declared[1])
+                if w > 0 and h > 0:
+                    self._qwidget.setMinimumSize(w, h)
+                    self._qwidget.resize(w, h)
+                    self._logger.debug("Applied popup size from declared MinSize: %sx%s", w, h)
+                    return
+            except Exception:
+                self._logger.exception("Failed to apply declared popup MinSize", exc_info=True)
+
         # Popup: derive initial size from content to better match GTK behavior.
         try:
             self._qwidget.adjustSize()
@@ -357,6 +375,44 @@ class YDialogQt(YSingleChildContainerWidget):
                 self._logger.debug("Applied popup size from sizeHint: %sx%s", hint.width(), hint.height())
         except Exception:
             self._logger.exception("Failed to apply popup sizeHint", exc_info=True)
+
+    def _find_declared_min_size(self, root):
+        """Return the largest declared MinSize (width, height) in logical subtree.
+
+        Alignment widgets created by createMinSize carry `_min_width_px` and
+        `_min_height_px`. For popups we treat these as an explicit caller hint.
+        """
+        if root is None:
+            return None
+
+        best_w = 0
+        best_h = 0
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            try:
+                mw = int(getattr(node, "_min_width_px", 0) or 0)
+            except Exception:
+                mw = 0
+            try:
+                mh = int(getattr(node, "_min_height_px", 0) or 0)
+            except Exception:
+                mh = 0
+
+            if mw > 0 and mh > 0:
+                best_w = max(best_w, mw)
+                best_h = max(best_h, mh)
+
+            try:
+                if node.hasChildren():
+                    for ch in node.childrenBegin():
+                        stack.append(ch)
+            except Exception:
+                continue
+
+        if best_w > 0 and best_h > 0:
+            return (best_w, best_h)
+        return None
     
     def setVisible(self, visible: bool = True):
         """Show or hide the dialog window.
