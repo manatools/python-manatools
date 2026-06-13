@@ -326,12 +326,13 @@ def msgBox (info) :
 
         # Text widget
         tw = _create_message_text_widget(factory, row, text, rt, stretch_vert=False)
+        factory.createVStretch(vbox)
 
         # Ok button on the right
-        btns = factory.createHBox(vbox)
-        factory.createHStretch(btns)
-        ok_btn = factory.createPushButton(btns, _("&Ok"))
-        factory.createHStretch(btns)
+        btns_row = factory.createHBox(vbox)
+        factory.createHStretch(btns_row)
+        ok_btn = factory.createPushButton(btns_row, _("&Ok"))
+        factory.createHStretch(btns_row)
 
         # Event loop
         while True:

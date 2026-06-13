@@ -345,8 +345,11 @@ class YDialogQt(YSingleChildContainerWidget):
             return
 
         # Popup: if a MinSize alignment exists in the logical child tree,
-        # prefer that explicit size as initial geometry instead of the full
-        # natural sizeHint (which can be overly large with rich text widgets).
+        # treat it as a lower bound (minimum), not as a forced fixed size.
+        # This prevents clipping controls in dialogs whose natural size is
+        # larger than the declared minimum.
+        declared_w = 0
+        declared_h = 0
         try:
             declared = self._find_declared_min_size(self.child())
         except Exception:
@@ -355,10 +358,9 @@ class YDialogQt(YSingleChildContainerWidget):
             try:
                 w, h = int(declared[0]), int(declared[1])
                 if w > 0 and h > 0:
+                    declared_w, declared_h = w, h
                     self._qwidget.setMinimumSize(w, h)
-                    self._qwidget.resize(w, h)
-                    self._logger.debug("Applied popup size from declared MinSize: %sx%s", w, h)
-                    return
+                    self._logger.debug("Applied popup minimum from declared MinSize: %sx%s", w, h)
             except Exception:
                 self._logger.exception("Failed to apply declared popup MinSize", exc_info=True)
 
@@ -369,10 +371,12 @@ class YDialogQt(YSingleChildContainerWidget):
             self._logger.exception("adjustSize failed for popup dialog", exc_info=True)
 
         try:
-            hint = self._qwidget.sizeHint()
+            hint = self._qwidget.minimumSizeHint()
             if hint is not None and hint.isValid():
-                self._qwidget.resize(hint)
-                self._logger.debug("Applied popup size from sizeHint: %sx%s", hint.width(), hint.height())
+                target_w = max(int(hint.width()), int(declared_w))
+                target_h = max(int(hint.height()), int(declared_h))
+                self._qwidget.resize(target_w, target_h)
+                self._logger.debug("Applied popup size from sizeHint/min: %sx%s", target_w, target_h)
         except Exception:
             self._logger.exception("Failed to apply popup sizeHint", exc_info=True)
 
