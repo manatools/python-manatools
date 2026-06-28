@@ -2,7 +2,8 @@ Python-manatools
 ================
 0.99.3
    - Fixed common dialogs (Msg, Info, Warning, AskOkCancel, AskYesOrNo) layout to prevent big 
-     icons and no room for the text. Fixed issue #6 originally open for dnfdragora as 
+     icons and no room for the text. Fixed issue #6 originally open for dnfdragora 
+   - Fixed RadioButton value/checked call for any backends.
 
 0.99.2
    - Qt/XCB crash (SIGSEGV in QScreen::virtualSiblings) when dnfdragora transaction dialog closes

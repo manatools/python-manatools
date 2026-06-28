@@ -38,10 +38,10 @@ class YRadioButtonQt(YWidget):
         except Exception:
             pass
 
-    def isChecked(self):
+    def value(self):
         return bool(self._is_checked)
 
-    def setChecked(self, checked):
+    def setValue(self, checked):
         try:
             self._is_checked = bool(checked)
             if getattr(self, "_backend_widget", None) is not None:
@@ -56,13 +56,6 @@ class YRadioButtonQt(YWidget):
                         pass
         except Exception:
             pass
-
-    # Compatibility with other widgets: provide value()/setValue()
-    def value(self):
-        return self.isChecked()
-
-    def setValue(self, checked):
-        return self.setChecked(checked)
 
     def _create_backend_widget(self):
         try:

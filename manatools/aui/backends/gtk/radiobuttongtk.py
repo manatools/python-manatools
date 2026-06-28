@@ -89,6 +89,13 @@ class YRadioButtonGtk(YWidget):
         except Exception:
             pass
 
+    # Compatibility with other widgets: provide value()/setValue()
+    def value(self):
+        return self.isChecked()
+
+    def setValue(self, checked):
+        return self.setChecked(checked)
+
     def _create_backend_widget(self):
         # Create a check-like radio using Gtk.CheckButton (GTK4 bindings may
         # not provide Gtk.RadioButton reliably). If a sibling group's backend
