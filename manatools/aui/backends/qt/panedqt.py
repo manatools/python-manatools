@@ -62,11 +62,6 @@ class YPanedQt(YWidget):
         orient = Qt.Horizontal if self._orientation == YUIDimension.YD_HORIZ else Qt.Vertical
         self._backend_widget = QSplitter(orient)
         self._logger.debug("Created QSplitter orientation=%s", "H" if orient == Qt.Horizontal else "V")
-        try:
-            # Keep nested splitter handles recoverable: avoid full child collapse.
-            self._backend_widget.setChildrenCollapsible(False)
-        except Exception:
-            self._logger.debug("QSplitter.setChildrenCollapsible(False) failed", exc_info=True)
 
         axis = YUIDimension.YD_HORIZ if self._orientation == YUIDimension.YD_HORIZ else YUIDimension.YD_VERT
 

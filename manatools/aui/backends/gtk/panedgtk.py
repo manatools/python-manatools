@@ -43,6 +43,8 @@ class YPanedGtk(YWidget):
         self._orientation = dimension
         self._backend_widget = None
         self._weight_resize_connected = False
+        self._position_guard_connected = False
+        self._position_guard_reentrant = False
         # Make paned stretchable by default so it fills available space
         try:
             self.setStretchable(YUIDimension.YD_HORIZ, True)
@@ -149,25 +151,73 @@ class YPanedGtk(YWidget):
 
     def _configure_paned_behavior(self):
         """
-                Configure Gtk.Paned with robust cross-backend defaults:
-                - keep both children resizable
-                - avoid full collapse to zero size, which can make inner nested handles
-                    practically unreachable in deep paned chains
+        Configure Gtk.Paned baseline behavior closer to Qt:
+        - both children resizable
+        - both children shrinkable (full range); unrecoverable edge-collapse is
+          handled by a lightweight position guard, not by disabling shrink.
         """
         if self._backend_widget is None or Gtk is None:
             return
         try:
             if hasattr(self._backend_widget, "set_shrink_start_child"):
-                self._backend_widget.set_shrink_start_child(False)
+                self._backend_widget.set_shrink_start_child(True)
             if hasattr(self._backend_widget, "set_shrink_end_child"):
-                self._backend_widget.set_shrink_end_child(False)
+                self._backend_widget.set_shrink_end_child(True)
             if hasattr(self._backend_widget, "set_resize_start_child"):
                 self._backend_widget.set_resize_start_child(True)
             if hasattr(self._backend_widget, "set_resize_end_child"):
                 self._backend_widget.set_resize_end_child(True)
-            self._logger.debug("Paned behavior configured: shrink(start/end)=False, resize(start/end)=True")
+            self._logger.debug("Paned behavior configured: shrink(start/end)=True, resize(start/end)=True")
         except Exception:
             self._logger.error("Failed to configure paned behavior", exc_info=True)
+
+    def _ensure_position_guard(self):
+        """Install a soft clamp to keep divider recoverable near borders.
+
+        GTK allows dragging a pane to absolute 0px; in deep nested stacks this
+        can make inner handles hard/impossible to reach. We keep nearly full
+        travel range, but avoid exact edge positions.
+        """
+        if self._backend_widget is None or Gtk is None or self._position_guard_connected:
+            return
+
+        min_edge_px = 2
+        is_vert = self._orientation != YUIDimension.YD_HORIZ
+
+        def _guard_position(*_args):
+            if self._position_guard_reentrant:
+                return
+            try:
+                if is_vert:
+                    total_px = int(self._backend_widget.get_height() or 0)
+                else:
+                    total_px = int(self._backend_widget.get_width() or 0)
+                if total_px <= 0:
+                    return
+
+                pos = int(self._backend_widget.get_position() or 0)
+                low = min_edge_px
+                high = max(low, total_px - min_edge_px)
+                clamped = min(max(pos, low), high)
+                if clamped != pos:
+                    self._position_guard_reentrant = True
+                    self._backend_widget.set_position(clamped)
+            except Exception:
+                self._logger.debug("Paned position guard failed", exc_info=True)
+            finally:
+                self._position_guard_reentrant = False
+
+        connected = False
+        for sig in ("notify::position", "notify::height" if is_vert else "notify::width"):
+            try:
+                self._backend_widget.connect(sig, _guard_position)
+                connected = True
+            except Exception:
+                continue
+
+        self._position_guard_connected = connected
+        if connected:
+            self._logger.debug("Paned position guard connected")
 
     def _schedule_weight_position(self):
         """Schedule setting the Gtk.Paned divider position based on child weights.
@@ -316,6 +366,7 @@ class YPanedGtk(YWidget):
 
         # Ensure splitter can fully collapse either child (Qt-like behavior)
         self._configure_paned_behavior()
+        self._ensure_position_guard()
 
         # Attach already collected children (like HBox/VBox does)
         for idx, child in enumerate(getattr(self, "_children", [])):
@@ -375,6 +426,7 @@ class YPanedGtk(YWidget):
             self._logger.error("addChild error: %s", e, exc_info=True)
         # Keep paned behavior consistent after dynamic changes
         self._configure_paned_behavior()
+        self._ensure_position_guard()
         # Re-apply overall size policy
         self._apply_size_policy()
 
