@@ -1,6 +1,7 @@
 Python-manatools
 ================
 0.99.3
+   - Fixed paned multi-layout (Gtk, ncurses and Qt)
    - Fixed common dialogs (Msg, Info, Warning, AskOkCancel, AskYesOrNo) layout to prevent big 
      icons and no room for the text. Fixed issue #6 originally open for dnfdragora 
    - Fixed RadioButton value/checked call for any backends.
