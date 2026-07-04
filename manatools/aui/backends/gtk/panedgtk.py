@@ -36,9 +36,12 @@ class YPanedGtk(YWidget):
     - Paned is stretchable by default on both directions.
     - Children are set to expand and fill, similar to HBox/VBox behavior.
     """
+    _instance_counter = 0
 
     def __init__(self, parent=None, dimension: YUIDimension = YUIDimension.YD_HORIZ):
         super().__init__(parent)
+        YPanedGtk._instance_counter += 1
+        self._paned_id = YPanedGtk._instance_counter
         self._logger = logging.getLogger("manatools.aui.gtk.YPanedGtk")
         self._orientation = dimension
         self._backend_widget = None
@@ -132,6 +135,13 @@ class YPanedGtk(YWidget):
         """
         if child_widget is None or Gtk is None:
             return
+        # Allow nested paneds to honor weight ratios at startup: if child
+        # widgets expose large natural minimums, deep splits can hide one pane.
+        try:
+            if hasattr(child_widget, "set_size_request"):
+                child_widget.set_size_request(1, 1)
+        except Exception:
+            self._logger.debug("child.set_size_request failed", exc_info=True)
         try:
             child_widget.set_hexpand(True)
         except Exception:
@@ -236,16 +246,29 @@ class YPanedGtk(YWidget):
         * If neither child has a weight declared, no automatic positioning is done
           and GTK chooses the split freely.
         """
+        self._logger.debug("[Paned#%d] _schedule_weight_position: ENTRY", self._paned_id)
         if Gtk is None or self._backend_widget is None:
+            self._logger.debug("[Paned#%d] _schedule_weight_position: Gtk or backend_widget is None, returning", self._paned_id)
             return
 
         children = list(getattr(self, "_children", []))
         if len(children) < 2:
+            self._logger.debug("[Paned#%d] _schedule_weight_position: only %d children, skipping", self._paned_id, len(children))
             return  # need both panes to compute a ratio
 
         # Determine which dimension drives the split.
         is_vert = self._orientation != YUIDimension.YD_HORIZ
         axis = YUIDimension.YD_VERT if is_vert else YUIDimension.YD_HORIZ
+        
+        self._logger.debug(
+            "[Paned#%d] _schedule_weight_position called: orientation=%s children=[%s, %s]",
+            self._paned_id,
+            "V" if is_vert else "H",
+            children[0].__class__.__name__,
+            children[1].__class__.__name__
+        )
+        
+        startup_retries = {"left": 50}
 
         def _apply_pos(*_args):
             """Compute pixel position and call Gtk.Paned.set_position()."""
@@ -266,17 +289,27 @@ class YPanedGtk(YWidget):
                 total_w = w_start + w_end
                 if total_w <= 0:
                     self._logger.debug(
-                        "Paned _apply_pos: no weights (%s) – skipping",
-                        "V" if is_vert else "H",
+                        "[Paned#%d] _apply_pos: no weights (%s) children=[%s,%s] – waiting (retries=%d)",
+                        self._paned_id, "V" if is_vert else "H",
+                        current_children[0].__class__.__name__, current_children[1].__class__.__name__,
+                        startup_retries["left"],
                     )
+                    if startup_retries["left"] > 0:
+                        startup_retries["left"] -= 1
+                        return True
                     return False
 
                 # Avoid collapsing one side when only one pane carries a weight.
                 if w_start == 0 or w_end == 0:
                     self._logger.debug(
-                        "Paned _apply_pos: partial weights (%d,%d) – skipping forced position",
-                        w_start, w_end,
+                        "[Paned#%d] _apply_pos: partial weights (%d,%d) children=[%s,%s] – skipping (retries=%d)",
+                        self._paned_id, w_start, w_end,
+                        current_children[0].__class__.__name__, current_children[1].__class__.__name__,
+                        startup_retries["left"],
                     )
+                    if startup_retries["left"] > 0:
+                        startup_retries["left"] -= 1
+                        return True
                     return False
 
                 if is_vert:
@@ -284,17 +317,21 @@ class YPanedGtk(YWidget):
                 else:
                     total_px = self._backend_widget.get_width()
 
-                if not total_px or total_px <= 0:
+                # Nested paneds may get tiny allocations (1-10px) before parent
+                # paned applies its divider position. Retry until reasonable size.
+                if not total_px or total_px < 20:
                     self._logger.debug(
-                        "Paned _apply_pos: no allocation yet (total_px=%s) – retrying",
-                        total_px,
+                        "[Paned#%d] _apply_pos: allocation too small (total_px=%s) – retrying",
+                        self._paned_id, total_px,
                     )
                     return True  # keep retrying via idle / stay connected via notify
 
                 pos = int(total_px * w_start / total_w)
                 self._logger.debug(
-                    "Paned _apply_pos: total_px=%d w_start=%d total_w=%d -> pos=%d",
-                    total_px, w_start, total_w, pos,
+                    "[Paned#%d] _apply_pos: total_px=%d w_start=%d w_end=%d total_w=%d children=[%s,%s] -> pos=%d",
+                    self._paned_id, total_px, w_start, w_end, total_w,
+                    current_children[0].__class__.__name__, current_children[1].__class__.__name__,
+                    pos,
                 )
                 try:
                     self._backend_widget.set_position(pos)
