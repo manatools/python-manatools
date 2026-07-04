@@ -42,6 +42,7 @@ class YPanedGtk(YWidget):
         self._logger = logging.getLogger("manatools.aui.gtk.YPanedGtk")
         self._orientation = dimension
         self._backend_widget = None
+        self._weight_resize_connected = False
         # Make paned stretchable by default so it fills available space
         try:
             self.setStretchable(YUIDimension.YD_HORIZ, True)
@@ -148,22 +149,23 @@ class YPanedGtk(YWidget):
 
     def _configure_paned_behavior(self):
         """
-        Configure Gtk.Paned to behave like Qt's QSplitter:
-        - allow full collapse of either child (shrink = True on both sides)
-        - let both children participate in resize (resize = True on both sides)
+                Configure Gtk.Paned with robust cross-backend defaults:
+                - keep both children resizable
+                - avoid full collapse to zero size, which can make inner nested handles
+                    practically unreachable in deep paned chains
         """
         if self._backend_widget is None or Gtk is None:
             return
         try:
             if hasattr(self._backend_widget, "set_shrink_start_child"):
-                self._backend_widget.set_shrink_start_child(True)
+                self._backend_widget.set_shrink_start_child(False)
             if hasattr(self._backend_widget, "set_shrink_end_child"):
-                self._backend_widget.set_shrink_end_child(True)
+                self._backend_widget.set_shrink_end_child(False)
             if hasattr(self._backend_widget, "set_resize_start_child"):
                 self._backend_widget.set_resize_start_child(True)
             if hasattr(self._backend_widget, "set_resize_end_child"):
                 self._backend_widget.set_resize_end_child(True)
-            self._logger.debug("Paned behavior configured: shrink(start/end)=True, resize(start/end)=True")
+            self._logger.debug("Paned behavior configured: shrink(start/end)=False, resize(start/end)=True")
         except Exception:
             self._logger.error("Failed to configure paned behavior", exc_info=True)
 
@@ -195,31 +197,38 @@ class YPanedGtk(YWidget):
         is_vert = self._orientation != YUIDimension.YD_HORIZ
         axis = YUIDimension.YD_VERT if is_vert else YUIDimension.YD_HORIZ
 
-        try:
-            w_start = int(children[0].weight(axis) or 0)
-        except Exception:
-            w_start = 0
-        try:
-            w_end = int(children[1].weight(axis) or 0)
-        except Exception:
-            w_end = 0
-
-        total_w = w_start + w_end
-        if total_w <= 0:
-            self._logger.debug(
-                "Paned _schedule_weight_position: no weights declared (%s) – skipping",
-                "V" if is_vert else "H",
-            )
-            return
-
-        self._logger.debug(
-            "Paned _schedule_weight_position: orientation=%s w_start=%d w_end=%d",
-            "V" if is_vert else "H", w_start, w_end,
-        )
-
         def _apply_pos(*_args):
             """Compute pixel position and call Gtk.Paned.set_position()."""
             try:
+                current_children = list(getattr(self, "_children", []))
+                if len(current_children) < 2:
+                    return False
+
+                try:
+                    w_start = int(current_children[0].weight(axis) or 0)
+                except Exception:
+                    w_start = 0
+                try:
+                    w_end = int(current_children[1].weight(axis) or 0)
+                except Exception:
+                    w_end = 0
+
+                total_w = w_start + w_end
+                if total_w <= 0:
+                    self._logger.debug(
+                        "Paned _apply_pos: no weights (%s) – skipping",
+                        "V" if is_vert else "H",
+                    )
+                    return False
+
+                # Avoid collapsing one side when only one pane carries a weight.
+                if w_start == 0 or w_end == 0:
+                    self._logger.debug(
+                        "Paned _apply_pos: partial weights (%d,%d) – skipping forced position",
+                        w_start, w_end,
+                    )
+                    return False
+
                 if is_vert:
                     total_px = self._backend_widget.get_height()
                 else:
@@ -265,19 +274,21 @@ class YPanedGtk(YWidget):
             except Exception:
                 self._logger.exception("Paned _on_resize: position re-application failed")
 
-        connected = False
-        for sig in (notify_signal, "size-allocate"):
-            try:
-                self._backend_widget.connect(sig, _on_resize)
-                connected = True
-                self._logger.debug("Paned connected resize signal '%s' for weight positioning", sig)
-                break
-            except Exception:
-                continue
-        if not connected:
-            self._logger.warning(
-                "Paned: no resize signal available; weight position will not update on resize"
-            )
+        if not self._weight_resize_connected:
+            connected = False
+            for sig in (notify_signal, "size-allocate"):
+                try:
+                    self._backend_widget.connect(sig, _on_resize)
+                    connected = True
+                    self._weight_resize_connected = True
+                    self._logger.debug("Paned connected resize signal '%s' for weight positioning", sig)
+                    break
+                except Exception:
+                    continue
+            if not connected:
+                self._logger.warning(
+                    "Paned: no resize signal available; weight position will not update on resize"
+                )
 
     def _create_backend_widget(self):
         """

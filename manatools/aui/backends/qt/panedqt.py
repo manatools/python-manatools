@@ -62,6 +62,11 @@ class YPanedQt(YWidget):
         orient = Qt.Horizontal if self._orientation == YUIDimension.YD_HORIZ else Qt.Vertical
         self._backend_widget = QSplitter(orient)
         self._logger.debug("Created QSplitter orientation=%s", "H" if orient == Qt.Horizontal else "V")
+        try:
+            # Keep nested splitter handles recoverable: avoid full child collapse.
+            self._backend_widget.setChildrenCollapsible(False)
+        except Exception:
+            self._logger.debug("QSplitter.setChildrenCollapsible(False) failed", exc_info=True)
 
         axis = YUIDimension.YD_HORIZ if self._orientation == YUIDimension.YD_HORIZ else YUIDimension.YD_VERT
 
@@ -103,42 +108,50 @@ class YPanedQt(YWidget):
         axis = YUIDimension.YD_HORIZ if self._orientation == YUIDimension.YD_HORIZ else YUIDimension.YD_VERT
 
         try:
-            weights = []
-            for c in children:
-                try:
-                    w = int(c.weight(axis) or 0)
-                except Exception:
-                    w = 0
-                weights.append(w)
-
-            total_w = sum(weights)
-            if total_w <= 0:
-                self._logger.debug("YPanedQt _apply_sizes_from_weights: no weights – skipping")
-                return
-
-            # Apply stretch factors (controls distribution of surplus space).
-            for idx, w in enumerate(weights):
-                try:
-                    self._backend_widget.setStretchFactor(idx, w)
-                except Exception:
-                    self._logger.exception("setStretchFactor(%d, %d) failed", idx, w)
-
-            self._logger.debug(
-                "YPanedQt _apply_sizes_from_weights: weights=%s total=%d", weights, total_w
-            )
-
             # Compute initial pixel sizes once the splitter has a real size.
+            # Weights are read at execution time (not capture time) so callers
+            # can set weights after building child hierarchy.
             def _set_initial_sizes():
                 try:
+                    current_children = list(getattr(self, "_children", []))
+                    if len(current_children) < 2:
+                        return
+
+                    weights = []
+                    for c in current_children:
+                        try:
+                            w = int(c.weight(axis) or 0)
+                        except Exception:
+                            w = 0
+                        weights.append(w)
+
+                    total_w = sum(weights)
+                    if total_w <= 0:
+                        self._logger.debug("YPanedQt _set_initial_sizes: no weights – skipping")
+                        return
+
+                    non_zero = [w for w in weights if w > 0]
+                    if len(non_zero) == 1:
+                        self._logger.debug(
+                            "YPanedQt _set_initial_sizes: partial weights=%s – skipping forced sizes",
+                            weights,
+                        )
+                        return
+
+                    for idx, w in enumerate(weights):
+                        try:
+                            self._backend_widget.setStretchFactor(idx, w)
+                        except Exception:
+                            self._logger.exception("setStretchFactor(%d, %d) failed", idx, w)
+
                     if self._orientation == YUIDimension.YD_HORIZ:
                         total_px = self._backend_widget.width()
                     else:
                         total_px = self._backend_widget.height()
                     if not total_px or total_px <= 0:
-                        return  # not realized yet; stretch factors will handle later
+                        return
 
                     sizes = [int(total_px * w / total_w) for w in weights]
-                    # Correct rounding drift on the last element.
                     sizes[-1] = max(0, total_px - sum(sizes[:-1]))
                     self._backend_widget.setSizes(sizes)
                     self._logger.debug(
