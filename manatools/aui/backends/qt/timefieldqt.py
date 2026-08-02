@@ -111,10 +111,20 @@ class YTimeFieldQt(YWidget):
         lay.addWidget(edit)
         self._edit = edit
         self._backend_widget = cont
+        if self._help_text:
+            edit.setToolTip(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_edit", None) is not None:
+                self._edit.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

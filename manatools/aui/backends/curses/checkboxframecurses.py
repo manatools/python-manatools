@@ -136,7 +136,11 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         """Recompute minimal height: borders + padding + child's minimal layout."""
         try:
             child = self.child()
-            inner_min = _curses_recursive_min_height(child) if child is not None else 1
+            # When content is hidden, only the title/border row is needed.
+            if child is None or not getattr(self, '_show_content', True):
+                self._height = 3
+                return
+            inner_min = _curses_recursive_min_height(child)
             self._height = max(3, 2 + self._inner_top_padding + inner_min)
         except Exception:
             self._height = max(self._height, 3)
@@ -208,6 +212,14 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
         self._update_min_height()
         try:
             self._apply_children_enablement(self._checked)
+        except Exception:
+            pass
+
+    def showContent(self, visible: bool = True):
+        """Show or hide the content area of the frame without affecting the checkbox."""
+        try:
+            self._show_content = bool(visible)
+            self._update_min_height()
         except Exception:
             pass
 
@@ -342,7 +354,7 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
             content_h = max(0, inner_h - pad_top)
 
             child = self.child()
-            if child is None:
+            if child is None or not getattr(self, '_show_content', True):
                 return
 
             needed = _curses_recursive_min_height(child)

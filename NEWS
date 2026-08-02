@@ -1,5 +1,59 @@
 Python-manatools
 ================
+0.99.3
+   - Fixed paned multi-layout (Gtk, ncurses and Qt)
+   - Fixed common dialogs (Msg, Info, Warning, AskOkCancel, AskYesOrNo) layout to prevent big 
+     icons and no room for the text. Fixed issue #6 originally open for dnfdragora 
+   - Fixed RadioButton value/checked call for any backends.
+
+0.99.2
+   - Qt/XCB crash (SIGSEGV in QScreen::virtualSiblings) when dnfdragora transaction dialog closes
+     Destroying any top-level `QMainWindow` on XCB/XWayland can flush the platform screen-sibling
+     list, leaving `virtualSiblings()` in an inconsistent state for other windows.  Any subsequent
+     Qt operation that queries screen geometry (tooltip positioning, font-DPI) then crashes.
+   - Fix dialogqt.py now creates popup dialogs as `QDialog` parented to the current main window.  
+     `QDialog` is mapped as an XCB transient-for child, not a standalone top-level, so its 
+     destruction does not trigger a screen-topology flush.
+   - Fixed: when parent main windows is disabled, QDialog children do not have by default.
+   - Improve type checking reading user preferences from AppConfig
+   - Added deleteAllItems to DumbTab to allow redesing tabs at run time
+   - YDumbTabGtk redesigned using Gtk.Notebook to avoid enlarging the dialog with more tabs
+
+0.99.1
+   - Fixed ncurses widgets drawing at start up
+   - Fixed locale files management
+   - Detecting the backend now tests also DISPLAY/WAYLAND_DISPLAY and PKEXEC_UID variables
+   - Centering pop up dialogs related to the main windows (works on X11 only)
+   - Added selection box visibility management
+   - Added new showContent method to checkBoxFrame to show/hide frame content
+   - Added helpText (tooltip) management to CheckBox, InputField, RadioButton, Tree
+     CheckBoxFrame, IntField, MultiLineEdit, SelectionBox, Slider,DateField, TimeField
+   - Added mnemonic label for gtk widgets: YCheckBoxGtk, YRadioButtonGtk, YCheckBoxFrameGtk
+   - Redesigned Classic About Dialog
+
+0.99.0
+    - New `manatools.aui` module that re-exports backend-agnostic UI classes
+        (enums, `YWidget`, `YTreeItem`, `YTableItem`, `YTableHeader`, `YItem`,
+        events and exceptions) from `yui_common` for easier migration from
+        libyui-style code.
+    - Unified YUI frontend with automatic backend detection (Qt / GTK / NCurses)
+        and convenience accessors: `YUI.ui()`, `YUI.widgetFactory()`, `YUI.app()`.
+    - Improved backend selection strategy and safer imports for Qt/GTK/curses
+        backends (deferred probing and clear warnings when fallbacks are used).
+    - `BaseDialog` (`manatools.ui.basedialog`) enhanced with a robust
+        `_setupUI` layout pattern and guidance to protect column minimum widths
+        using `MinSize` + `Frame` + `ReplacePoint` (fixes flicker/resize issues).
+    - `AppConfig` (YAML-based) for system and per-user configuration file
+        management, with `userPreferences`/`systemSettings` accessors.
+    - `EventManager` improvements for consistent widget/menu/timeout/cancel
+        event handling.
+    - Various API stabilizations: re-exported enums (YUIDimension, YEventReason,
+        YCheckBoxState, ...) and helper globals for backward compatibility.
+    - Improved common dialogs and helpers: `AboutDialog`, `warningMsgBox`,
+        `infoMsgBox`, `msgBox`, `askOkCancel`, and `askYesOrNo` with a
+        unified, backend-agnostic API for simple informational and question
+        dialogs used by applications.
+
 0.0.4
     - set dialog icon if passed to costructor
     - exported Service Manager Interface to allow using systemd api

@@ -89,6 +89,8 @@ class YInputFieldQt(YWidget):
         self._backend_widget = container
         self._entry_widget = entry
         self._backend_widget.setEnabled(bool(self._enabled))
+        if self._help_text:
+            self._entry_widget.setToolTip(self._help_text)
 
         # Apply initial stretch policy
         try:
@@ -99,6 +101,14 @@ class YInputFieldQt(YWidget):
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_entry_widget", None) is not None:
+                self._entry_widget.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         """Enable/disable the input field: entry and container."""

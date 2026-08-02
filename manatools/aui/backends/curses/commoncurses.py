@@ -194,6 +194,14 @@ def _curses_recursive_min_height(widget):
             for c in chs:
                 tallest = max(tallest, _curses_recursive_min_height(c))
             return max(1, tallest)
+        elif cls == "YPaned":
+            chs = [c for c in list(getattr(widget, "_children", []) or []) if c is not None and c.visible()]
+            if not chs:
+                return 1
+            orient = getattr(widget, "_orientation", YUIDimension.YD_HORIZ)
+            if orient == YUIDimension.YD_VERT:
+                return max(1, sum(_curses_recursive_min_height(c) for c in chs))
+            return max(1, max(_curses_recursive_min_height(c) for c in chs))
         elif cls == "YAlignment":
             child = widget.child()
             return max(1, _curses_recursive_min_height(child))

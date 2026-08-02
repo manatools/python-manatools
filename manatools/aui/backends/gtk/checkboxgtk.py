@@ -19,12 +19,13 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _convert_mnemonic_to_gtk
 
 
 class YCheckBoxGtk(YWidget):
     def __init__(self, parent=None, label="", is_checked=False):
         super().__init__(parent)
-        self._label = label
+        self._label = _convert_mnemonic_to_gtk(label)
         self._is_checked = is_checked
         self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
     
@@ -59,16 +60,27 @@ class YCheckBoxGtk(YWidget):
     
     def _create_backend_widget(self):
         self._backend_widget = Gtk.CheckButton(label=self._label)
+        self._backend_widget.set_use_underline(True)
         try:
             self._backend_widget.set_active(self._is_checked)
             self._backend_widget.connect("toggled", self._on_toggled)
         except Exception:
             self._logger.error("_create_backend_widget toggle setup failed", exc_info=True)
         self._backend_widget.set_sensitive(self._enabled)
+        if self._help_text:
+            self._backend_widget.set_tooltip_text(self._help_text)
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
     
     def _on_toggled(self, button):
         try:

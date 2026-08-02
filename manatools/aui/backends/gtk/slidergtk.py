@@ -106,7 +106,10 @@ class YSliderGtk(YWidget):
 
             self._backend_widget = box
             self._adjustment = adj
+            self._scale = scale
             self._backend_widget.set_sensitive(self._enabled)
+            if self._help_text:
+                scale.set_tooltip_text(self._help_text)
             try:
                 self._logger.debug("_create_backend_widget: <%s> range=[%d,%d] value=%d", self.debugLabel(), self._min, self._max, self._value)
             except Exception:
@@ -116,6 +119,14 @@ class YSliderGtk(YWidget):
                 self._logger.exception("YSliderGtk _create_backend_widget failed")
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_scale", None) is not None:
+                self._scale.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

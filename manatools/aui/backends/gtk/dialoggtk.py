@@ -421,6 +421,23 @@ class YDialogGtk(YSingleChildContainerWidget):
         except Exception:
             pass
 
+        # For popup dialogs, make the window transient for the previous dialog so
+        # the compositor/WM places it centered above the parent and keeps it on top.
+        # set_modal(True) is needed on some desktops to activate the centering hint.
+        if self._dialog_type == YDialogType.YPopupDialog:
+            try:
+                # The new dialog is already in _open_dialogs; parent is [-2].
+                open_list = YDialogGtk._open_dialogs
+                idx = open_list.index(self)
+                if idx > 0:
+                    parent_dlg = open_list[idx - 1]
+                    parent_win = getattr(parent_dlg, "_window", None)
+                    if parent_win is not None:
+                        self._window.set_transient_for(parent_win)
+                        self._window.set_modal(True)
+            except Exception:
+                self._logger.debug("set_transient_for failed (best-effort)", exc_info=True)
+
         # Content container with margins (window.set_child used in Gtk4)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         content.set_margin_start(10)

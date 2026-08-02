@@ -164,6 +164,8 @@ class YMultiLineEditGtk(YWidget):
                 box.append(self._textview)
             self._widget = box
             self._backend_widget = self._widget
+            if self._help_text:
+                self._textview.set_tooltip_text(self._help_text)
             try:
                 # Apply initial stretch/min size policy
                 self._apply_stretch_policy()
@@ -174,6 +176,14 @@ class YMultiLineEditGtk(YWidget):
                 self._logger.exception("Error creating GTK MultiLineEdit backend: %s", e)
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_textview", None) is not None:
+                self._textview.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

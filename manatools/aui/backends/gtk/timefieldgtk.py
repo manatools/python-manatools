@@ -206,7 +206,20 @@ class YTimeFieldGtk(YWidget):
             self._logger.exception("startup: failed to sync spins from time")
         self._update_display()
         self._backend_widget = outer
+        if self._help_text:
+            try:
+                self._entry.set_tooltip_text(self._help_text)
+            except Exception:
+                pass
         self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_entry", None) is not None:
+                self._entry.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

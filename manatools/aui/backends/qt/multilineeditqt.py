@@ -232,11 +232,21 @@ class YMultiLineEditQt(YWidget):
             except Exception:
                 pass
             self._backend_widget = self._qwidget
+            if self._help_text:
+                self._qtext.setToolTip(self._help_text)
         except Exception as e:
             try:
                 self._logger.exception("Error creating Qt MultiLineEdit backend: %s", e)
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_qtext", None) is not None:
+                self._qtext.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

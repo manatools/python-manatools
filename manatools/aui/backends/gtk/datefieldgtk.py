@@ -272,10 +272,23 @@ class YDateFieldGtk(YWidget):
         box.append(row)
 
         self._backend_widget = box
+        if self._help_text:
+            try:
+                self._date_entry.set_tooltip_text(self._help_text)
+            except Exception:
+                pass
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_date_entry", None) is not None:
+                self._date_entry.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

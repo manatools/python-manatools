@@ -14,15 +14,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 from ..aui import yui
 from ..aui.yui_common import YUIDimension, YItem
 from enum import Enum
-import gettext
 import logging
 import warnings
-# https://pymotw.com/3/gettext/#module-localization
-t = gettext.translation(
-    'python-manatools',
-    '/usr/share/locale',
-    fallback=True,
-)
+from . import _get_translation
+t = _get_translation()
 _ = t.gettext
 ngettext = t.ngettext
 
@@ -94,7 +89,7 @@ def _extract_dialog_size(info):
     return None
 
 
-def _create_message_text_widget(factory, parent, text, richtext):
+def _create_message_text_widget(factory, parent, text, richtext, stretch_vert=False):
     """Create a text widget for message dialogs that fills available space.
 
     Uses YRichText on all backends:
@@ -113,13 +108,13 @@ def _create_message_text_widget(factory, parent, text, richtext):
         richtext: Whether rich text (HTML) rendering is requested.
 
     Returns:
-        YWidget: Created text widget, stretchable in both dimensions.
+        YWidget: Created text widget.
     """
     tw = factory.createRichText(parent, "", not richtext)
     tw.setValue(text)
     try:
         tw.setStretchable(yui.YUIDimension.YD_HORIZ, True)
-        tw.setStretchable(yui.YUIDimension.YD_VERT, True)
+        tw.setStretchable(yui.YUIDimension.YD_VERT, bool(stretch_vert))
     except Exception:
         pass
     return tw
@@ -154,34 +149,41 @@ def warningMsgBox (info) :
         if size_hint:
             try:
                 content_parent = factory.createMinSize(root_vbox, size_hint[0], size_hint[1])
-            except Exception:
+            except Exception as exc:
+                logger.exception("Unable to apply min-size hint: %s", exc)
                 content_parent = root_vbox
         vbox = factory.createVBox(content_parent)
 
-        # Content row: icon + text
         text = info.get('text', "") or ""
         rt = bool(info.get('richtext', False))
-        row = factory.createHBox(vbox)
 
-        # Icon (warning)
+        # Content row: icon + text
+        info_row = factory.createHBox(vbox)
+
+        # Icon: top-aligned in a fixed-minimum column; autoScale maintains aspect ratio
+        icon_col = factory.createMinSize(info_row, 32, 32)
+        icon_col.setWeight(yui.YUIDimension.YD_HORIZ, 16)
         try:
-            icon_align = factory.createTop(row)
+            icon_align = factory.createTop(icon_col)
             icon = factory.createImage(icon_align, "dialog-warning", fallBackName='[!]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-            icon.setAutoScale(False)
+            icon.setAutoScale(True)
         except Exception:
-            # If icon creation fails, continue without it
             pass
 
+        factory.createHSpacing(info_row, 4)
+
         # Text widget
-        tw = _create_message_text_widget(factory, row, text, rt)
+        tw = _create_message_text_widget(factory, info_row, text, rt, stretch_vert=False)
+        tw.setWeight(yui.YUIDimension.YD_HORIZ, 84)
+        factory.createVStretch(vbox)
 
         # Ok button on the right
-        btns = factory.createHBox(vbox)
-        factory.createHStretch(btns)
-        ok_btn = factory.createPushButton(btns, _("&Ok"))
-        factory.createHStretch(btns)
+        btns_row = factory.createHBox(vbox)
+        factory.createHStretch(btns_row)
+        ok_btn = factory.createPushButton(btns_row, _("&Ok"))
+        factory.createHStretch(btns_row)
 
         # Event loop
         while True:
@@ -235,23 +237,30 @@ def infoMsgBox (info) :
                 content_parent = root_vbox
         vbox = factory.createVBox(content_parent)
 
-        # Content row: icon + text
         text = info.get('text', "") or ""
-        rt = bool(info.get('richtext', False))    
-        row = factory.createHBox(vbox)
+        rt = bool(info.get('richtext', False))
 
-        # Icon (information)
+        # Content row: icon + text
+        info_row = factory.createHBox(vbox)
+
+        # Icon: top-aligned in a fixed-minimum column; autoScale maintains aspect ratio
+        icon_col = factory.createMinSize(info_row, 32, 32)
+        icon_col.setWeight(yui.YUIDimension.YD_HORIZ, 16)
         try:
-            icon_align = factory.createTop(row)
+            icon_align = factory.createTop(icon_col)
             icon = factory.createImage(icon_align, "dialog-information", fallBackName='[I]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-            icon.setAutoScale(False)
+            icon.setAutoScale(True)
         except Exception:
             pass
 
+        factory.createHSpacing(info_row, 4)
+
         # Text widget
-        tw = _create_message_text_widget(factory, row, text, rt)
+        tw = _create_message_text_widget(factory, info_row, text, rt, stretch_vert=False)
+        tw.setWeight(yui.YUIDimension.YD_HORIZ, 84)
+        factory.createVStretch(vbox)
 
         # Ok button on the right
         btns = factory.createHBox(vbox)
@@ -316,13 +325,14 @@ def msgBox (info) :
         row = factory.createHBox(vbox)
 
         # Text widget
-        tw = _create_message_text_widget(factory, row, text, rt)
+        tw = _create_message_text_widget(factory, row, text, rt, stretch_vert=False)
+        factory.createVStretch(vbox)
 
         # Ok button on the right
-        btns = factory.createHBox(vbox)
-        factory.createHStretch(btns)
-        ok_btn = factory.createPushButton(btns, _("&Ok"))
-        factory.createHStretch(btns)
+        btns_row = factory.createHBox(vbox)
+        factory.createHStretch(btns_row)
+        ok_btn = factory.createPushButton(btns_row, _("&Ok"))
+        factory.createHStretch(btns_row)
 
         # Event loop
         while True:
@@ -349,7 +359,7 @@ def askOkCancel (info) :
 
     @param info: dictionary, information to be passed to the dialog.
         title     =>     dialog title
-        text      =>     string to be swhon into the dialog
+        text      =>     string to be shown into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Ok - any other values => Cancel]
         size => Mapping | Sequence | None
@@ -382,23 +392,30 @@ def askOkCancel (info) :
                 content_parent = root_vbox
         vbox = factory.createVBox(content_parent)
 
-        # Content row: icon + text
         text = info.get('text', "") or ""
         rt = bool(info.get('richtext', False))
-        row = factory.createHBox(vbox)
 
-        # Icon (information)
+        # Content row: icon + text
+        info_row = factory.createHBox(vbox)
+
+        # Icon: top-aligned in a fixed-minimum column; autoScale maintains aspect ratio
+        icon_col = factory.createMinSize(info_row, 32, 32)
+        icon_col.setWeight(yui.YUIDimension.YD_HORIZ, 16)
         try:
-            icon_align = factory.createTop(row)
+            icon_align = factory.createTop(icon_col)
             icon = factory.createImage(icon_align, "dialog-information", fallBackName='[I]')
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-            icon.setAutoScale(False)
+            icon.setAutoScale(True)
         except Exception:
             pass
 
+        factory.createHSpacing(info_row, 4)
+
         # Text widget
-        tw = _create_message_text_widget(factory, row, text, rt)
+        tw = _create_message_text_widget(factory, info_row, text, rt, stretch_vert=False)
+        tw.setWeight(yui.YUIDimension.YD_HORIZ, 84)
+        factory.createVStretch(vbox)
 
         # Buttons on the right
         btns = factory.createHBox(vbox)
@@ -440,7 +457,7 @@ def askYesOrNo (info) :
 
     @param info: dictionary, information to be passed to the dialog.
         title     =>     dialog title
-        text      =>     string to be swhon into the dialog
+        text      =>     string to be shown  into the dialog
         richtext  =>     True if using rich text
         default_button => optional default button [1 => Yes - any other values => No]
         size => Mapping | Sequence | None
@@ -472,23 +489,30 @@ def askYesOrNo (info) :
                 content_parent = root_vbox
         vbox = factory.createVBox(content_parent)
 
-        # Content row: icon + text
         text = info.get('text', "") or ""
-        rt = bool(info.get('richtext', False))    
-        row = factory.createHBox(vbox)
+        rt = bool(info.get('richtext', False))
 
-        # Icon (question)
+        # Content row: icon + text
+        info_row = factory.createHBox(vbox)
+
+        # Icon: top-aligned in a fixed-minimum column; autoScale maintains aspect ratio
+        icon_col = factory.createMinSize(info_row, 32, 32)
+        icon_col.setWeight(yui.YUIDimension.YD_HORIZ, 16)
         try:
-            icon_align = factory.createTop(row)
+            icon_align = factory.createTop(icon_col)
             icon = factory.createImage(icon_align, "dialog-question", fallBackName="[?]")
             icon.setStretchable(yui.YUIDimension.YD_VERT, False)
             icon.setStretchable(yui.YUIDimension.YD_HORIZ, False)
-            icon.setAutoScale(False)
+            icon.setAutoScale(True)
         except Exception:
             pass
 
+        factory.createHSpacing(info_row, 4)
+
         # Text widget
-        tw = _create_message_text_widget(factory, row, text, rt)
+        tw = _create_message_text_widget(factory, info_row, text, rt, stretch_vert=False)
+        tw.setWeight(yui.YUIDimension.YD_HORIZ, 84)
+        factory.createVStretch(vbox)
 
         # Buttons on the right
         btns = factory.createHBox(vbox)
@@ -671,7 +695,8 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
         header = factory.createHBox(vbox)
         if logo:
             try:
-                factory.createImage(header, logo, fallBackName=name or _("Logo"))
+                logo_align = factory.createTop(header)
+                factory.createImage(logo_align, logo, fallBackName=name or _("Logo"))
                 factory.createHSpacing(header, 8)
             except Exception as exc:
                 logger.debug("Unable to load logo '%s': %s", logo, exc)
@@ -684,12 +709,12 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
             factory.createLabel(labels, license_txt)
 
         # Helper to add a RichText block
-        def _add_richtext(parent, value):
+        def _add_richtext(parent, value, stretch_vert=True):
             rt = factory.createRichText(parent, "", False)
             rt.setValue(value)
             try:
                 rt.setStretchable(YUIDimension.YD_HORIZ, True)
-                rt.setStretchable(YUIDimension.YD_VERT, True)
+                rt.setStretchable(YUIDimension.YD_VERT, stretch_vert)
             except Exception:
                 pass
             return rt
@@ -765,27 +790,29 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                     use_tabbed = False
                     tab_widget = None
                     tab_content_updater = None
+            button_row = vbox
 
         if not use_tabbed:
+            # In CLASSIC mode richtext blocks must NOT stretch vertically — let
+            # content determine height so the dialog stays compact.
             if description:
-                _add_richtext(vbox, description)
-            if authors:
-                factory.createHeading(vbox, _("Authors"))
-                _add_richtext(vbox, authors)
+                factory.createVSpacing(vbox, 1)
+                _add_richtext(vbox, description, stretch_vert=True)
 
-            if information or credits:
-                button_row = factory.createHBox(vbox)
-                if information:
-                    info_btn = factory.createPushButton(button_row, _("&Info"))
-                if credits:
-                    credits_btn = factory.createPushButton(button_row, _("&Credits"))
-            else:
-                button_row = None
+            # Authors are shown inside the Credits popup, not in the main body.
+
+            # Push buttons to bottom; VStretch fills any leftover space.
+            factory.createVStretch(vbox)
+            button_row = factory.createHBox(vbox)
+                
+            if information:
+                info_btn = factory.createPushButton(button_row, _("&Info"))
+            if credits or authors:
+                credits_btn = factory.createPushButton(button_row, _("&Credits"))
 
         # Close button aligned to the right, as in the C++ dialog
-        close_row = factory.createHBox(vbox)
-        factory.createHStretch(close_row)
-        close_btn = factory.createPushButton(close_row, _("&Close"))
+        factory.createHStretch(button_row)
+        close_btn = factory.createIconButton(button_row, 'window-close', _("C&lose"))
 
         while True:
             ev = dlg.waitForEvent()
@@ -811,7 +838,14 @@ def AboutDialog(info=None, *, dialog_mode: AboutDialogMode = AboutDialogMode.CLA
                 continue
             if credits_btn and widget == credits_btn:
                 logger.debug("AboutDialog credits button activated")
-                msgBox({"title": _("Credits"), "text": credits or "", "richtext": True, "size": size})
+                credits_text = ""
+                if authors:
+                    credits_text += authors
+                if credits:
+                    if credits_text:
+                        credits_text += "<br/><br/>"
+                    credits_text += credits
+                msgBox({"title": _("Credits"), "text": credits_text, "richtext": True, "size": size})
                 continue
 
             logger.debug("Unhandled widget event from %s", getattr(widget, 'widgetClass', lambda: 'unknown')())

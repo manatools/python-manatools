@@ -74,6 +74,13 @@ class YRadioButtonCurses(YWidget):
         except Exception:
             pass
 
+    # Compatibility with other widgets: provide isChecked()/setChecked()
+    def isChecked(self):
+        return self._is_checked
+
+    def setChecked(self, checked):
+        return self.setValue(checked)
+
     def label(self):
         return self._label
 

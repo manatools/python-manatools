@@ -134,7 +134,10 @@ class TestDialog(basedialog.BaseDialog):
       '''
       About menu call back
       '''
-      yes = common.askYesOrNo({"title": "Choose About dialog mode", "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic", "richtext" : True, 'default_button': 1 })
+      yes = common.askYesOrNo({"title": "Choose About dialog mode",
+                               "text": "Do you want a tabbed About dialog? <br>Yes means Tabbed, No Classic",
+                               "size": (300, 200),
+                               "richtext" : True, 'default_button': 1 })
       selected_mode = common.AboutDialogMode.TABBED if yes else common.AboutDialogMode.CLASSIC
       info_text = self._tabbed_information if yes else self._about_metadata.get('information', "")
       self._apply_about_metadata(information=info_text)
@@ -148,7 +151,7 @@ class TestDialog(basedialog.BaseDialog):
     wd = common.warningMsgBox({
       "title" : "Warning Dialog",
       "text": "<b>Warning</b> button has been pressed!",
-      "size": (300, 120),
+      "size": (320, 120),
       "richtext" : True})
 
   def onPressInformation(self) :

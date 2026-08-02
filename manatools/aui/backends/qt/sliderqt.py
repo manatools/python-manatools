@@ -122,6 +122,8 @@ class YSliderQt(YWidget):
             self._spin = spin
             self._backend_widget = root
             self._backend_widget.setEnabled(bool(self._enabled))
+            if self._help_text:
+                slider.setToolTip(self._help_text)
             try:
                 self._logger.debug("_create_backend_widget: <%s> range=[%d,%d] value=%d", self.debugLabel(), self._min, self._max, self._value)
             except Exception:
@@ -131,6 +133,14 @@ class YSliderQt(YWidget):
                 self._logger.exception("YSliderQt _create_backend_widget failed")
             except Exception:
                 pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_slider", None) is not None:
+                self._slider.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

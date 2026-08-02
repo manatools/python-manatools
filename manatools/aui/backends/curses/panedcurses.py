@@ -40,6 +40,10 @@ class YPanedCurses(YWidget):
         self._hidden = [False, False]  # visibility flags per child index
         # Minimum height will be computed from children
         self._height = 1
+        # Paned must be stretchable by default, otherwise parent VBox/HBox
+        # treats it as fixed-size and allocates only its minimal height.
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
         self._logger.debug("YPanedCurses created orientation=%s", "H" if dimension == YUIDimension.YD_HORIZ else "V")
 
     def widgetClass(self):
@@ -53,12 +57,19 @@ class YPanedCurses(YWidget):
         self._logger.debug("_create_backend_widget: using self-managed backend")
 
     def _recompute_min_height(self):
-        """Compute minimal height for this horizontal box as the tallest child's minimum."""
+        """Compute minimal height based on orientation and visible children."""
         try:
-            if not self._children:
+            visible_children = [c for c in self._children if c is not None and c.visible()]
+            if not visible_children:
                 self._height = 1
                 return
-            self._height = max(1, max(_curses_recursive_min_height(c) for c in self._children))
+            child_heights = [_curses_recursive_min_height(c) for c in visible_children]
+            if self._orientation == YUIDimension.YD_VERT:
+                # Vertical paned stacks top/bottom: min height is the sum.
+                self._height = max(1, sum(child_heights))
+            else:
+                # Horizontal paned is side-by-side: min height is the tallest pane.
+                self._height = max(1, max(child_heights))
         except Exception:
             self._height = 1
 
@@ -122,9 +133,24 @@ class YPanedCurses(YWidget):
                 return
             self._hidden[idx] = not bool(visible)
             self._children[idx].setVisible(visible)
+            self._recompute_min_height()
             self._logger.debug("Child %d visibility -> %s", idx, "visible" if visible else "hidden")
         except Exception as e:
             self._logger.error("_set_child_visible error: %s", e, exc_info=True)
+
+    def stretchable(self, dim):
+        """Paned is stretchable if itself is flagged or any visible child is stretchable/weighted."""
+        if super().stretchable(dim):
+            return True
+        for child in self._children:
+            if child is None or not child.visible():
+                continue
+            try:
+                if bool(child.stretchable(dim)) or bool(child.weight(dim)):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def _draw(self, window, y, x, width, height):
         """

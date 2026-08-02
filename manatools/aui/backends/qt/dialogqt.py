@@ -86,16 +86,79 @@ class YDialogQt(YSingleChildContainerWidget):
                 self._create_backend_widget()
             
             self._qwidget.show()
-            self._is_open = True       
+            self._is_open = True
+            # Center popup over the parent dialog (X11 only; on Wayland move() is a no-op).
+            if self._dialog_type == YDialogType.YPopupDialog:
+                self._center_over_parent()
+
+    def _center_over_parent(self):
+        """Move this popup so it is centered above the parent dialog window.
+
+        Works reliably on X11.  On Wayland, QWidget.move() is a no-op because
+        Wayland compositors control window placement; proper Wayland centering
+        requires switching popup dialogs from QMainWindow to QDialog (deferred,
+        see sow/POPUP-CENTERING-TODO).  The call is safe to make on any platform
+        because it is wrapped in try/except and never raises.
+        """
+        try:
+            open_list = YDialogQt._open_dialogs
+            idx = open_list.index(self)
+            if idx <= 0:
+                return
+            parent_dlg = open_list[idx - 1]
+            parent_win = getattr(parent_dlg, "_qwidget", None)
+            if parent_win is None:
+                return
+            # Ensure Qt has processed pending layout / show events so geometry() is valid.
+            QtWidgets.QApplication.processEvents()
+            parent_geo = parent_win.geometry()
+            my_geo = self._qwidget.geometry()
+            new_x = parent_geo.x() + (parent_geo.width()  - my_geo.width())  // 2
+            new_y = parent_geo.y() + (parent_geo.height() - my_geo.height()) // 2
+            # Clip to available screen area so the popup does not go off-screen.
+            screen = self._qwidget.screen()
+            if screen is None:
+                screen = parent_win.screen()
+            if screen is not None:
+                avail = screen.availableGeometry()
+                new_x = max(avail.x(), min(new_x, avail.x() + avail.width()  - my_geo.width()))
+                new_y = max(avail.y(), min(new_y, avail.y() + avail.height() - my_geo.height()))
+            self._qwidget.move(new_x, new_y)
+        except Exception:
+            self._logger.debug("_center_over_parent failed (best-effort)", exc_info=True)
      
     def isOpen(self):
          return self._is_open
     
+    def _get_parent_qwidget(self):
+        """Return the Qt widget of the dialog directly below this one in the stack.
+
+        Used to parent popup QDialog instances to their logical owner window so
+        that they are mapped as XCB transient-for children rather than standalone
+        top-level windows (see _create_backend_widget docstring).
+        """
+        open_list = YDialogQt._open_dialogs
+        try:
+            idx = open_list.index(self)
+        except ValueError:
+            return None
+        if idx > 0:
+            parent_dlg = open_list[idx - 1]
+            return getattr(parent_dlg, "_qwidget", None)
+        return None
+
     def destroy(self, doThrow=True):
         self._clear_default_button()
         if self._qwidget:
-            self._qwidget.close()
+            widget = self._qwidget
             self._qwidget = None
+            widget.close()
+            if self._dialog_type == YDialogType.YPopupDialog:
+                # QDialog is parented to the main window; Qt keeps the C++ object
+                # alive until the parent is destroyed unless we explicitly schedule
+                # deletion.  deleteLater() queues deletion for the next event-loop
+                # cycle, preventing unbounded memory accumulation.
+                widget.deleteLater()
         self._is_open = False
         if self in YDialogQt._open_dialogs:
             YDialogQt._open_dialogs.remove(self)
@@ -163,11 +226,27 @@ class YDialogQt(YSingleChildContainerWidget):
     def _create_backend_widget(self):
         """Create the Qt window and initialize title, icon, content, and initial size.
 
-        Popup dialogs should honor content-driven minimum size hints (e.g. from
-        createMinSize in BaseDialog) instead of forcing a large default size.
-        Main dialogs keep a larger default for usability.
+        Popup dialogs use QDialog parented to the current main window.  This is
+        critical on Qt/XCB and XWayland: a standalone QMainWindow is mapped as a
+        full top-level XCB window.  When such a window is destroyed, the XCB
+        platform layer flushes and may rebuild its internal screen-sibling list,
+        leaving QScreen::virtualSiblings() in an inconsistent state for sibling
+        windows.  Any subsequent Qt operation that queries screen geometry
+        (tooltip positioning, font-DPI calculations, window placement) then
+        crashes with SIGSEGV deep inside the C++ platform code.  A QDialog
+        parented to a QMainWindow is mapped as an XCB transient-for window and
+        is NOT a standalone top-level; its destruction does not trigger a screen
+        topology flush, so the parent window's screen state remains valid.
+
+        Main dialogs keep QMainWindow for full application-window behaviour
+        (menu bar, status bar, title bar controls).
         """
-        self._qwidget = QtWidgets.QMainWindow()
+        if self._dialog_type == YDialogType.YPopupDialog:
+            # Popup: transient child window; see docstring for the crash rationale.
+            parent_widget = self._get_parent_qwidget()
+            self._qwidget = QtWidgets.QDialog(parent_widget)
+        else:
+            self._qwidget = QtWidgets.QMainWindow()
         # Determine window title:from YApplicationQt instance stored on the YUI backend
         title = "Manatools Qt Dialog"
         
@@ -210,15 +289,22 @@ class YDialogQt(YSingleChildContainerWidget):
         except Exception:
             pass
 
-        central_widget = QtWidgets.QWidget()
-        self._qwidget.setCentralWidget(central_widget)
-        
-        if self.child():
-            layout = QtWidgets.QVBoxLayout(central_widget)
-            layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
-            layout.addWidget(self.child().get_backend_widget())
-            # If the child is a layout box with a menubar as first child, Qt can display QMenuBar inline.
-            # Alternatively, backends may add YMenuBarQt directly to layout.
+        if self._dialog_type == YDialogType.YPopupDialog:
+            # QDialog: set the layout directly on the dialog widget.
+            # There is no central widget or menu bar; all content goes in one VBox.
+            if self.child():
+                layout = QtWidgets.QVBoxLayout(self._qwidget)
+                layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
+                layout.addWidget(self.child().get_backend_widget())
+        else:
+            # QMainWindow: content lives inside a central widget so that the menu
+            # bar and status bar are properly separated from the content area.
+            central_widget = QtWidgets.QWidget()
+            self._qwidget.setCentralWidget(central_widget)
+            if self.child():
+                layout = QtWidgets.QVBoxLayout(central_widget)
+                layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
+                layout.addWidget(self.child().get_backend_widget())
 
         try:
             self._apply_initial_size()
@@ -227,7 +313,13 @@ class YDialogQt(YSingleChildContainerWidget):
         
         self._backend_widget = self._qwidget
         self._qwidget.closeEvent = self._on_close_event
-        self._backend_widget.setEnabled(bool(self._enabled))
+        # Use _set_backend_enabled instead of calling setEnabled() directly on
+        # _backend_widget.  For YMainDialog, _set_backend_enabled only touches
+        # centralWidget()/menuBar() and never disables the QMainWindow itself.
+        # Calling QMainWindow.setEnabled(False) here would prevent later calls
+        # to centralWidget().setEnabled(True) from making the window interactive
+        # again, because Qt keeps the parent's disabled state as a hard block.
+        self._set_backend_enabled(bool(self._enabled))
         try:
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
@@ -252,6 +344,26 @@ class YDialogQt(YSingleChildContainerWidget):
             # sizes the window to at least the layout's minimumSizeHint().
             return
 
+        # Popup: if a MinSize alignment exists in the logical child tree,
+        # treat it as a lower bound (minimum), not as a forced fixed size.
+        # This prevents clipping controls in dialogs whose natural size is
+        # larger than the declared minimum.
+        declared_w = 0
+        declared_h = 0
+        try:
+            declared = self._find_declared_min_size(self.child())
+        except Exception:
+            declared = None
+        if declared:
+            try:
+                w, h = int(declared[0]), int(declared[1])
+                if w > 0 and h > 0:
+                    declared_w, declared_h = w, h
+                    self._qwidget.setMinimumSize(w, h)
+                    self._logger.debug("Applied popup minimum from declared MinSize: %sx%s", w, h)
+            except Exception:
+                self._logger.exception("Failed to apply declared popup MinSize", exc_info=True)
+
         # Popup: derive initial size from content to better match GTK behavior.
         try:
             self._qwidget.adjustSize()
@@ -259,27 +371,68 @@ class YDialogQt(YSingleChildContainerWidget):
             self._logger.exception("adjustSize failed for popup dialog", exc_info=True)
 
         try:
-            hint = self._qwidget.sizeHint()
+            hint = self._qwidget.minimumSizeHint()
             if hint is not None and hint.isValid():
-                self._qwidget.resize(hint)
-                self._logger.debug("Applied popup size from sizeHint: %sx%s", hint.width(), hint.height())
+                target_w = max(int(hint.width()), int(declared_w))
+                target_h = max(int(hint.height()), int(declared_h))
+                self._qwidget.resize(target_w, target_h)
+                self._logger.debug("Applied popup size from sizeHint/min: %sx%s", target_w, target_h)
         except Exception:
             self._logger.exception("Failed to apply popup sizeHint", exc_info=True)
+
+    def _find_declared_min_size(self, root):
+        """Return the largest declared MinSize (width, height) in logical subtree.
+
+        Alignment widgets created by createMinSize carry `_min_width_px` and
+        `_min_height_px`. For popups we treat these as an explicit caller hint.
+        """
+        if root is None:
+            return None
+
+        best_w = 0
+        best_h = 0
+        stack = [root]
+        while stack:
+            node = stack.pop()
+            try:
+                mw = int(getattr(node, "_min_width_px", 0) or 0)
+            except Exception:
+                mw = 0
+            try:
+                mh = int(getattr(node, "_min_height_px", 0) or 0)
+            except Exception:
+                mh = 0
+
+            if mw > 0 and mh > 0:
+                best_w = max(best_w, mw)
+                best_h = max(best_h, mh)
+
+            try:
+                if node.hasChildren():
+                    for ch in node.childrenBegin():
+                        stack.append(ch)
+            except Exception:
+                continue
+
+        if best_w > 0 and best_h > 0:
+            return (best_w, best_h)
+        return None
     
     def setVisible(self, visible: bool = True):
         """Show or hide the dialog window.
 
-        Delegates to the Qt QMainWindow show/hide machinery and keeps the
-        YWidget logical visibility flag in sync via the base-class call.
-        If the backend window has not been created yet the flag is stored
-        and will be applied the next time the window is realised.
+        Delegates to the underlying Qt widget (QMainWindow for main dialogs,
+        QDialog for popups) and keeps the YWidget logical visibility flag in
+        sync via the base-class call.  If the backend window has not been
+        created yet the flag is stored and applied the next time the window
+        is realised.
         """
         super().setVisible(visible)
         try:
             if getattr(self, "_qwidget", None) is not None:
                 self._qwidget.setVisible(bool(visible))
                 self._logger.debug(
-                    "setVisible(%s) applied to QMainWindow <%s>",
+                    "setVisible(%s) applied to dialog <%s>",
                     visible, self.debugLabel())
         except Exception:
             self._logger.exception(
@@ -287,13 +440,39 @@ class YDialogQt(YSingleChildContainerWidget):
                 visible, self.debugLabel())
 
     def _set_backend_enabled(self, enabled):
-        """Enable/disable the dialog window and propagate to logical child widgets."""
+        """Enable/disable the dialog window and propagate to logical child widgets.
+
+        For main dialogs the Qt window is disabled by acting on its parts
+        (central widget and menu bar) rather than on the QMainWindow itself.
+        Calling QMainWindow.setEnabled() propagates the state to *every*
+        descendant widget including child QDialog windows, which would
+        inadvertently disable any open popup.  Targeting only the central widget
+        and the menu bar achieves the same visible effect (greyed-out content,
+        non-interactive menus) without touching sibling dialog windows.
+
+        For popup dialogs (QDialog) setEnabled() is called directly on the
+        widget, so an explicit setEnabled(False) on the popup always works.
+        """
         try:
-            if getattr(self, "_qwidget", None) is not None:
-                try:
-                    self._qwidget.setEnabled(bool(enabled))
-                except Exception:
-                    pass
+            qw = getattr(self, "_qwidget", None)
+            if qw is not None:
+                if self._dialog_type == YDialogType.YMainDialog:
+                    # Disable/enable only the parts owned by this window so that
+                    # child QDialog windows are never touched by the propagation.
+                    try:
+                        central = qw.centralWidget()
+                        if central is not None:
+                            central.setEnabled(bool(enabled))
+                    except Exception:
+                        pass
+                    try:
+                        mb = qw.menuBar()
+                        if mb:
+                            mb.setEnabled(bool(enabled))
+                    except Exception:
+                        pass
+                else:
+                    qw.setEnabled(bool(enabled))
         except Exception:
             pass
         # propagate logical enabled state to contained YWidget(s)
@@ -313,8 +492,10 @@ class YDialogQt(YSingleChildContainerWidget):
             self._post_event(YCancelEvent())
         except Exception:
             pass
-        # Ensure dialog is destroyed and accept the close
-        self.destroy()
+        # Do not call destroy() from closeEvent: destroy() itself calls
+        # QMainWindow.close(), which re-enters Qt close/hide handling and can
+        # crash on popup teardown. The caller that receives YCancelEvent is
+        # responsible for invoking destroy()/close() once the event loop exits.
         event.accept()
     
     def _post_event(self, event):

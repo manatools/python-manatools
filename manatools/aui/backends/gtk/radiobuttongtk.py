@@ -19,11 +19,12 @@ import threading
 import os
 import logging
 from ...yui_common import *
+from .commongtk import _convert_mnemonic_to_gtk
 
 class YRadioButtonGtk(YWidget):
     def __init__(self, parent=None, label="", isChecked=False):
         super().__init__(parent)
-        self._label = label
+        self._label = _convert_mnemonic_to_gtk(label)
         self._is_checked = bool(isChecked)
         self._backend_widget = None
         # determine radio-group membership among siblings
@@ -59,10 +60,11 @@ class YRadioButtonGtk(YWidget):
 
     def setLabel(self, newLabel):
         try:
-            self._label = str(newLabel)
+            self._label = _convert_mnemonic_to_gtk(str(newLabel))
             if getattr(self, "_backend_widget", None) is not None:
                 try:
                     self._backend_widget.set_label(self._label)
+                    self._backend_widget.set_use_underline(True)
                 except Exception:
                     pass
         except Exception:
@@ -87,12 +89,20 @@ class YRadioButtonGtk(YWidget):
         except Exception:
             pass
 
+    # Compatibility with other widgets: provide value()/setValue()
+    def value(self):
+        return self.isChecked()
+
+    def setValue(self, checked):
+        return self.setChecked(checked)
+
     def _create_backend_widget(self):
         # Create a check-like radio using Gtk.CheckButton (GTK4 bindings may
         # not provide Gtk.RadioButton reliably). If a sibling group's backend
         # widget exists, try to join its GTK group via `set_group`.
         try:
             self._backend_widget = Gtk.CheckButton(label=self._label)
+            self._backend_widget.set_use_underline(True)
             if getattr(self, '_group', None) is not None and self._group is not self:
                 ref_w = getattr(self._group, '_backend_widget', None)
                 if ref_w is not None:
@@ -107,6 +117,7 @@ class YRadioButtonGtk(YWidget):
         except Exception:
             try:
                 self._backend_widget = Gtk.CheckButton(label=self._label)
+                self._backend_widget.set_use_underline(True)
             except Exception:
                 self._backend_widget = None
  
@@ -123,6 +134,8 @@ class YRadioButtonGtk(YWidget):
                 self._backend_widget.set_sensitive(self._enabled)
                 self._backend_widget.connect("toggled", self._on_toggled)
                 self._backend_widget.set_active(self._is_checked)
+                if self._help_text:
+                    self._backend_widget.set_tooltip_text(self._help_text)
         except Exception:
             try:
                 self._logger.error("_create_backend_widget failed to finalize", exc_info=True)
@@ -132,6 +145,14 @@ class YRadioButtonGtk(YWidget):
             self._logger.debug("_create_backend_widget: <%s>", self.debugLabel())
         except Exception:
             pass
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_backend_widget", None) is not None:
+                self._backend_widget.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _on_toggled(self, button):
         try:

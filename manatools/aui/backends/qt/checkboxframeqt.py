@@ -128,6 +128,8 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._content_widget = content
             self._content_layout = content_layout
             self._backend_widget.setEnabled(bool(self._enabled))
+            if self._help_text:
+                self._checkbox.setToolTip(self._help_text)
 
             # QGroupBox.toggled(bool) fires whenever the checkable group changes state.
             try:
@@ -200,6 +202,22 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
         except Exception as exc:
             self._logger.error("_on_checkbox_toggled: unexpected error: %s", exc)
 
+    def showContent(self, visible: bool = True):
+        """Show or hide the content area of the frame without affecting the checkbox."""
+        try:
+            self._show_content = bool(visible)
+            if getattr(self, '_content_widget', None) is not None:
+                self._content_widget.setVisible(bool(visible))
+                # Ask the top-level window to resize itself to fit the updated layout.
+                try:
+                    top = self._content_widget.window()
+                    if top is not None:
+                        top.adjustSize()
+                except Exception:
+                    pass
+        except Exception as exc:
+            self._logger.debug("showContent failed: %s", exc)
+
     # ------------------------------------------------------------------
     # Children enablement helper
     # ------------------------------------------------------------------
@@ -246,6 +264,14 @@ class YCheckBoxFrameQt(YSingleChildContainerWidget):
             self._logger.debug("addChild: _attach_child_backend failed: %s", exc)
 
     # ------------------------------------------------------------------
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_checkbox", None) is not None:
+                self._checkbox.setToolTip(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
+
     # Backend enable/disable
     # ------------------------------------------------------------------
 

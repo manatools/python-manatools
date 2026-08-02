@@ -114,6 +114,8 @@ class YTreeGtk(YSelectionWidget):
         self._backend_widget = vbox
         self._listbox = listbox
         self._backend_widget.set_sensitive(self._enabled)
+        if self._help_text:
+            listbox.set_tooltip_text(self._help_text)
 
         try:
             vbox.append(sw)
@@ -966,6 +968,14 @@ class YTreeGtk(YSelectionWidget):
                 self._backend_widget.set_visible(bool(visible))
         except Exception:
             self._logger.exception("setVisible failed")
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_listbox", None) is not None:
+                self._listbox.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled):
         try:

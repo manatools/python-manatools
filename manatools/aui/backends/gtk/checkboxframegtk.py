@@ -18,6 +18,7 @@ import cairo
 import threading
 import os
 from ...yui_common import *
+from .commongtk import _convert_mnemonic_to_gtk
 
 class YCheckBoxFrameGtk(YSingleChildContainerWidget):
     """
@@ -28,7 +29,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
     """
     def __init__(self, parent=None, label: str = "", checked: bool = False):
         super().__init__(parent)
-        self._label = label or ""
+        self._label = _convert_mnemonic_to_gtk(label or "")
         self._checked = bool(checked)
         self._auto_enable = True
         self._invert_auto = False
@@ -47,12 +48,13 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
 
     def setLabel(self, new_label: str):
         try:
-            self._label = new_label or ""
+            self._label = _convert_mnemonic_to_gtk(new_label or "")
             if getattr(self, "_checkbox", None) is not None:
                 try:
                     # Gtk.CheckButton uses set_label via property or set_text
                     if hasattr(self._checkbox, "set_label"):
                         self._checkbox.set_label(self._label)
+                        self._checkbox.set_use_underline(True)
                     elif hasattr(self._checkbox, "set_text"):
                         self._checkbox.set_text(self._label)
                     else:
@@ -137,6 +139,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
 
                 # Create checkbutton and try to set it as the frame's label widget
                 check = Gtk.CheckButton(label=self._label)
+                check.set_use_underline(True)
                 check.set_active(self._checked)
                 self._checkbox = check
 
@@ -167,6 +170,7 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
                 # Fallback: container with top CheckButton and then content box
                 container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
                 check = Gtk.CheckButton(label=self._label)
+                check.set_use_underline(True)
                 check.set_active(self._checked)
                 container.append(check)
                 content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -195,6 +199,11 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
                 pass
 
             # Connect toggled handler
+            if self._help_text:
+                try:
+                    self._checkbox.set_tooltip_text(self._help_text)
+                except Exception:
+                    pass
             try:
                 self._checkbox.connect("toggled", self._on_toggled)
             except Exception:
@@ -307,6 +316,15 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
         except Exception:
             pass
 
+    def showContent(self, visible: bool = True):
+        """Show or hide the content area of the frame without affecting the checkbox."""
+        try:
+            self._show_content = bool(visible)
+            if getattr(self, '_content_box', None) is not None:
+                self._content_box.set_visible(bool(visible))
+        except Exception:
+            pass
+
     def _apply_children_enablement(self, isChecked: bool):
         try:
             if not self._auto_enable:
@@ -332,6 +350,14 @@ class YCheckBoxFrameGtk(YSingleChildContainerWidget):
     def addChild(self, child):
         super().addChild(child)
         self._attach_child_backend()
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        try:
+            if getattr(self, "_checkbox", None) is not None:
+                self._checkbox.set_tooltip_text(help_text)
+        except Exception:
+            self._logger.exception("setHelpText failed", exc_info=True)
 
     def _set_backend_enabled(self, enabled: bool):
         try:
