@@ -376,7 +376,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
         elif msg_type == "ready":
-            self._push_deferred_tables()
+            self._handle_browser_ready()
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
@@ -513,6 +513,40 @@ class YDialogWeb(YSingleChildContainerWidget):
             widget._last_url = url
         if hasattr(widget, 'notify') and widget.notify():
             self._post_event(YMenuEvent(item=None, id=url))
+
+    def _handle_browser_ready(self):
+        """Bring a freshly connected browser up to date.
+
+        A popup opened before any browser was connected broadcasts its
+        ``show_modal`` message to nobody: the application then blocks in
+        waitForEvent() on a dialog the user cannot see or dismiss.  Replaying
+        the open popups here makes the modal appear as soon as the page
+        connects, whatever the order was on the Python side.
+        """
+        self._replay_open_modals()
+        self._push_deferred_tables()
+
+    def _replay_open_modals(self):
+        """Re-send ``show_modal`` for every open popup dialog.
+
+        Sent in stack order so the topmost popup is the one left visible (the
+        browser only keeps a single modal element).
+        """
+        with YDialogWeb._open_dialogs_lock:
+            popups = [
+                d for d in YDialogWeb._open_dialogs
+                if d._is_open and d._dialog_type != YDialogType.YMainDialog
+            ]
+
+        for popup in popups:
+            try:
+                self._broadcast({
+                    "type": "show_modal",
+                    "dialog_id": popup.id(),
+                    "html": popup.render_modal_html(),
+                })
+            except Exception:
+                logger.exception("Failed to replay modal for %s", popup.debugLabel())
 
     def _push_deferred_tables(self):
         """Push table row content to all connected clients.
