@@ -136,10 +136,10 @@
                 initMenuBehavior();
                 break;
             case 'show_modal':
-                showModal(message.dialog_id, message.html);
+                showModal(message.dialog_id, message.html, message.element_id);
                 break;
             case 'hide_modal':
-                hideModal(message.dialog_id);
+                hideModal(message.dialog_id, message.element_id);
                 break;
             case 'busy':
                 setBusy(message.state);
@@ -170,19 +170,34 @@
         overlay.hidden = false;
     }
 
-    function showModal(dialogId, html) {
-        // Remove any existing popup modal first.
-        const existing = document.getElementById('mana-popup-modal');
+    function findModal(dialogId, elementId) {
+        if (elementId) {
+            const byId = document.getElementById(elementId);
+            if (byId) return byId;
+        }
+        if (dialogId) {
+            return document.querySelector(
+                '.mana-popup-overlay[data-dialog-id="' + CSS.escape(dialogId) + '"]');
+        }
+        return null;
+    }
+
+    function showModal(dialogId, html, elementId) {
+        // Modals stack: a dialog opened from a popup (e.g. a file chooser) must
+        // not evict the popup that opened it. Only replace this dialog's own
+        // overlay, which is how a replay after reconnect refreshes the stack.
+        const existing = findModal(dialogId, elementId);
         if (existing) existing.remove();
 
         document.body.insertAdjacentHTML('beforeend', html);
 
-        const modal = document.getElementById('mana-popup-modal');
+        const modal = findModal(dialogId, elementId);
         if (!modal) return;
 
         attachEventListenersToElement(modal);
 
         // Close modal on backdrop click (click outside the container).
+        // Only the topmost overlay is clickable, so this always targets it.
         modal.addEventListener('click', function (e) {
             if (e.target === modal) {
                 sendEvent({ type: 'close', data: {} });
@@ -190,8 +205,8 @@
         });
     }
 
-    function hideModal(dialogId) {
-        const modal = document.getElementById('mana-popup-modal');
+    function hideModal(dialogId, elementId) {
+        const modal = findModal(dialogId, elementId);
         if (modal) modal.remove();
     }
 

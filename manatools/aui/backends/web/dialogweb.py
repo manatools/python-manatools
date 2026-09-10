@@ -31,7 +31,7 @@ from ...yui_common import (
     YEventReason,
     YUINoDialogException,
 )
-from .commonweb import escape_html
+from .commonweb import escape_html, escape_attr
 
 if TYPE_CHECKING:
     from .server import WebSocketHandler, WebServer
@@ -139,13 +139,37 @@ class YDialogWeb(YSingleChildContainerWidget):
         with YDialogWeb._open_dialogs_lock:
             return YDialogWeb._open_dialogs[-1] == self if YDialogWeb._open_dialogs else False
 
-    def render_modal_html(self) -> str:
-        """Render dialog content as a modal overlay fragment (no full page)."""
+    def render_modal_html(self, depth: int = 0) -> str:
+        """Render dialog content as a modal overlay fragment (no full page).
+
+        The overlay id is derived from the dialog id so that several popups can
+        coexist in the DOM: a file dialog opened from a popup must not evict the
+        popup that opened it.  *depth* raises the stacking order so the newest
+        overlay sits above the ones already shown.
+        """
         content = self.child().render() if self.child() else ""
+        overlay_id = escape_attr(self._modal_element_id())
+        style = f' style="z-index: {1050 + depth}"' if depth else ""
         return (
-            f'<div id="mana-popup-modal" class="mana-popup-overlay" data-dialog-id="{self.id()}">'
+            f'<div id="{overlay_id}" class="mana-popup-overlay"'
+            f' data-dialog-id="{escape_attr(self.id())}"{style}>'
             f'<div class="mana-popup-container">{content}</div>'
             f'</div>'
+        )
+
+    def _modal_element_id(self) -> str:
+        """Return the DOM id of this dialog's modal overlay."""
+        return f"mana-popup-modal-{self.id()}"
+
+    def _modal_depth(self) -> int:
+        """Return how many popups are already open below this one.
+
+        Callers must already hold _open_dialogs_lock.
+        """
+        return sum(
+            1 for d in YDialogWeb._open_dialogs
+            if d is not self and d._is_open
+            and d._dialog_type != YDialogType.YMainDialog
         )
 
     def open(self):
@@ -164,12 +188,14 @@ class YDialogWeb(YSingleChildContainerWidget):
         if self._dialog_type != YDialogType.YMainDialog:
             with YDialogWeb._open_dialogs_lock:
                 root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
+                depth = self._modal_depth()
             if root is not None:
                 self._is_open = True
                 self._broadcast({
                     "type": "show_modal",
                     "dialog_id": self.id(),
-                    "html": self.render_modal_html(),
+                    "element_id": self._modal_element_id(),
+                    "html": self.render_modal_html(depth),
                 })
                 return
 
@@ -244,6 +270,7 @@ class YDialogWeb(YSingleChildContainerWidget):
                 self._broadcast({
                     "type": "hide_modal",
                     "dialog_id": self.id(),
+                    "element_id": self._modal_element_id(),
                 })
             except Exception:
                 pass
@@ -529,8 +556,8 @@ class YDialogWeb(YSingleChildContainerWidget):
     def _replay_open_modals(self):
         """Re-send ``show_modal`` for every open popup dialog.
 
-        Sent in stack order so the topmost popup is the one left visible (the
-        browser only keeps a single modal element).
+        Sent in stack order, so a browser that connects (or reconnects) while
+        several popups are open rebuilds the whole stack, not just its top.
         """
         with YDialogWeb._open_dialogs_lock:
             popups = [
@@ -538,12 +565,13 @@ class YDialogWeb(YSingleChildContainerWidget):
                 if d._is_open and d._dialog_type != YDialogType.YMainDialog
             ]
 
-        for popup in popups:
+        for depth, popup in enumerate(popups):
             try:
                 self._broadcast({
                     "type": "show_modal",
                     "dialog_id": popup.id(),
-                    "html": popup.render_modal_html(),
+                    "element_id": popup._modal_element_id(),
+                    "html": popup.render_modal_html(depth),
                 })
             except Exception:
                 logger.exception("Failed to replay modal for %s", popup.debugLabel())

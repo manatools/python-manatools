@@ -148,6 +148,14 @@ body {
     justify-content: center;
 }
 
+/* Stacked modals: only the topmost overlay paints a backdrop, otherwise each
+   extra layer darkens the page again. Inline z-index keeps the newest on top.
+   The rule re-evaluates when a modal is removed, so the one below darkens
+   again on its own. Browsers without :has() just show a darker stack. */
+.mana-popup-overlay:has(~ .mana-popup-overlay) {
+    background: transparent;
+}
+
 .mana-popup-container {
     background: var(--mana-bg-secondary);
     border-radius: var(--mana-radius);
