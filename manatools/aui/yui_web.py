@@ -7,8 +7,6 @@ User interaction is handled via WebSocket for real-time communication.
 
 import logging
 import os
-import shutil
-import subprocess
 from .yui_common import (
     YDialogType,
     YDialogColorMode,
@@ -18,6 +16,7 @@ from .yui_common import (
     YCancelEvent,
     YWidgetEvent,
     YEventReason,
+    documents_dir,
     list_entries,
     parse_filter_patterns,
 )
@@ -203,18 +202,7 @@ class YApplicationWeb:
 
     def _documents_dir(self) -> str:
         """Return the user's documents directory, falling back to home."""
-        try:
-            xdg = shutil.which("xdg-user-dir")
-            if xdg:
-                out = subprocess.run(
-                    [xdg, "DOCUMENTS"],
-                    capture_output=True, text=True, timeout=2,
-                ).stdout.strip()
-                if out and os.path.isdir(out):
-                    return out
-        except Exception:
-            self._logger.debug("xdg-user-dir lookup failed", exc_info=True)
-        return os.path.expanduser("~")
+        return documents_dir()
 
     def _start_dir(self, start_with: str):
         """Resolve the directory a chooser should open at, plus a default name."""

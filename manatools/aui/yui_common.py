@@ -5,6 +5,8 @@ Common base classes and definitions shared across all backends
 from enum import Enum
 import fnmatch
 import os
+import shutil
+import subprocess
 import uuid
 from typing import Optional
 
@@ -24,6 +26,48 @@ def parse_filter_patterns(filter_str: str):
         return [p.strip() for p in filter_str.split(';') if p.strip()]
     except Exception:
         return []
+
+
+def documents_dir() -> str:
+    """Return the user's XDG documents directory, falling back to home.
+
+    The name is locale-dependent (Documents, Documenti, Dokumente, …), so it
+    must be resolved at runtime rather than hardcoded.  ``xdg-user-dir`` is
+    tried first; if the binary is missing, ~/.config/user-dirs.dirs is parsed
+    directly.  Home is returned whenever the lookup fails or names a directory
+    that does not exist.
+    """
+    try:
+        xdg = shutil.which("xdg-user-dir")
+        if xdg:
+            out = subprocess.run(
+                [xdg, "DOCUMENTS"],
+                capture_output=True, text=True, timeout=2,
+            ).stdout.strip()
+            if out and os.path.isdir(out):
+                return out
+    except Exception:
+        pass
+
+    # No xdg-user-dir binary (minimal installs): read the config it would.
+    try:
+        config = os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+            "user-dirs.dirs")
+        with open(config, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line.startswith("XDG_DOCUMENTS_DIR"):
+                    continue
+                _, _, value = line.partition("=")
+                path = value.strip().strip('"').replace(
+                    "$HOME", os.path.expanduser("~"))
+                if path and os.path.isdir(path):
+                    return path
+    except Exception:
+        pass
+
+    return os.path.expanduser("~")
 
 
 def list_entries(current_dir: str, select_file: bool, patterns):

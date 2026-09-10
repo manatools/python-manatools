@@ -103,11 +103,9 @@ class YApplicationCurses:
         self._logo = ""
         # Wayland: no-op for ncurses (terminal has no window manager class)
         self._desktop_file_name = ""
-        # Default directories
-        try:
-            self._default_documents_dir = os.path.expanduser('~/Documenti')
-        except Exception:
-            self._default_documents_dir = os.path.expanduser('~')
+        # Default directories: resolved via XDG, since the documents directory
+        # name is locale-dependent and must not be hardcoded.
+        self._default_documents_dir = documents_dir()
 
     def iconBasePath(self):
         return self._icon_base_path
