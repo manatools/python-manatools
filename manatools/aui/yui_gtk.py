@@ -44,6 +44,21 @@ class YUIGtk:
     def yApp(self):
         return self._application
 
+    def shutdown(self):
+        """Release UI resources on application exit.
+
+        Provided for parity with the other backends (applications call it
+        unconditionally); GTK tears itself down, so only pending main-loop
+        iterations are drained here.
+        """
+        try:
+            from gi.repository import GLib
+            context = GLib.MainContext.default()
+            while context.pending():
+                context.iteration(False)
+        except Exception:
+            self._logger.debug("shutdown: main context drain failed", exc_info=True)
+
 class YApplicationGtk:
     def __init__(self):
         self._application_title = "manatools GTK Application"

@@ -33,6 +33,26 @@ class YUIWeb:
     def yApp(self):
         return self._application
 
+    def shutdown(self):
+        """Close every open dialog and stop the HTTP/WebSocket server.
+
+        Applications call this on exit; the ncurses backend uses it to restore
+        the terminal.  Here it notifies connected browsers and releases the
+        listening socket so the process can terminate cleanly.
+        """
+        try:
+            from .backends.web.dialogweb import YDialogWeb
+            with YDialogWeb._open_dialogs_lock:
+                dialogs = list(YDialogWeb._open_dialogs)
+            # Destroy popups first, main dialog (which owns the server) last.
+            for dialog in reversed(dialogs):
+                try:
+                    dialog.destroy()
+                except Exception:
+                    self._logger.debug("shutdown: failed to destroy %s", dialog, exc_info=True)
+        except Exception:
+            self._logger.debug("shutdown: no dialogs to close", exc_info=True)
+
 
 class YApplicationWeb:
     """Web backend application settings."""

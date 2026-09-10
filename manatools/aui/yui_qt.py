@@ -40,6 +40,19 @@ class YUIQt:
     def yApp(self):
         return self._application
 
+    def shutdown(self):
+        """Release UI resources on application exit.
+
+        Provided for parity with the other backends (applications call it
+        unconditionally); Qt tears itself down, so only pending events are
+        flushed here.
+        """
+        try:
+            if self._qapp:
+                self._qapp.processEvents()
+        except Exception:
+            self._logger.debug("shutdown: processEvents failed", exc_info=True)
+
 class YApplicationQt:
     def __init__(self):
         self._application_title = "manatools Qt Application"
