@@ -45,4 +45,5 @@ class YTimeFieldWeb(YWidget):
             html += f'<label class="mana-timefield-label">{label_html}</label>'
         
         html += f'<input {attrs}>'
-        return f'<div class="mana-timefield-container">{html}</div>'
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-timefield-container">{html}</div>')

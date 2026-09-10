@@ -86,4 +86,5 @@ class YSelectionBoxWeb(YSelectionWidget):
         
         html += f'<select {attrs}>{options_html}</select>'
         
-        return f'<div class="mana-selectionbox-container">{html}</div>'
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-selectionbox-container">{html}</div>')

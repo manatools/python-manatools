@@ -51,4 +51,5 @@ class YMultiLineEditWeb(YWidget):
             html += f'<label class="mana-multilineedit-label">{label_html}</label>'
         
         html += f'<textarea {attrs}>{escape_html(self._value)}</textarea>'
-        return f'<div class="mana-multilineedit-container">{html}</div>'
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-multilineedit-container">{html}</div>')

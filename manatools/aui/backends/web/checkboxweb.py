@@ -65,7 +65,7 @@ class YCheckBoxWeb(YWidget):
         
         label_html = format_label_with_shortcut(self._label)
         
-        return f'''<label class="mana-checkbox-wrapper">
+        return f'''<label data-container-for="{self.id()}" class="mana-checkbox-wrapper">
     <input {attrs}>
     <span class="mana-checkbox-label">{label_html}</span>
 </label>'''

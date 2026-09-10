@@ -45,4 +45,5 @@ class YDateFieldWeb(YWidget):
             html += f'<label class="mana-datefield-label">{label_html}</label>'
         
         html += f'<input {attrs}>'
-        return f'<div class="mana-datefield-container">{html}</div>'
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-datefield-container">{html}</div>')

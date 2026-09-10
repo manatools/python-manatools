@@ -57,4 +57,5 @@ class YSliderWeb(YWidget):
         
         html += f'<input {attrs}>'
         html += f'<span class="mana-slider-value">{self._value}</span>'
-        return f'<div class="mana-slider-container">{html}</div>'
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-slider-container">{html}</div>')

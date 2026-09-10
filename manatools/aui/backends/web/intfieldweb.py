@@ -56,4 +56,8 @@ class YIntFieldWeb(YWidget):
             html += f'<label class="mana-intfield-label">{label_html}</label>'
         
         html += f'<input {attrs}>'
-        return f'<div class="mana-intfield-container">{html}</div>'
+        # data-container-for marks the wrapper as the update target, so a
+        # re-render replaces label+input together instead of nesting a fresh
+        # copy inside the old input (which duplicated the label).
+        return (f'<div data-container-for="{self.id()}" '
+                f'class="mana-intfield-container">{html}</div>')

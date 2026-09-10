@@ -58,7 +58,7 @@ class YRadioButtonWeb(YWidget):
         attrs = widget_attrs(self.id(), "YRadioButton", self._enabled, self._visible, extra_attrs=extra_attrs)
         label_html = format_label_with_shortcut(self._label)
         
-        return f'''<label class="mana-radiobutton-wrapper">
+        return f'''<label data-container-for="{self.id()}" class="mana-radiobutton-wrapper">
     <input {attrs}>
     <span class="mana-radiobutton-label">{label_html}</span>
 </label>'''
