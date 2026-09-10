@@ -12,6 +12,7 @@ WebSocket connections, and the event loop for user interaction.
 
 import queue
 import threading
+import time
 import logging
 import json
 from typing import Optional, List, TYPE_CHECKING
@@ -92,6 +93,9 @@ class YDialogWeb(YSingleChildContainerWidget):
 
     _open_dialogs: List["YDialogWeb"] = []
     _open_dialogs_lock: threading.RLock = threading.RLock()
+
+    # Polling slice used by waitForEvent() so Ctrl-C stays deliverable.
+    _WAIT_SLICE = 0.2
 
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
         super().__init__()
@@ -193,6 +197,12 @@ class YDialogWeb(YSingleChildContainerWidget):
         """
         Block until an event is received from the browser.
 
+        The wait is performed in short slices rather than one blocking get():
+        a plain ``queue.get()`` with no timeout parks in ``not_empty.wait()``,
+        where Ctrl-C surfaces as a bare KeyboardInterrupt traceback through the
+        whole application stack.  Polling lets the interrupt be turned into a
+        YCancelEvent, which applications already handle as "close the dialog".
+
         Args:
             timeout_millisec: Timeout in milliseconds (0 = no timeout)
 
@@ -202,13 +212,27 @@ class YDialogWeb(YSingleChildContainerWidget):
         if not self._is_open:
             self.open()
 
-        timeout = timeout_millisec / 1000.0 if timeout_millisec > 0 else None
+        deadline = (
+            time.monotonic() + timeout_millisec / 1000.0
+            if timeout_millisec > 0 else None
+        )
 
-        try:
-            event = self._event_queue.get(timeout=timeout)
-            return event
-        except queue.Empty:
-            return YTimeoutEvent()
+        while True:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return YTimeoutEvent()
+                slice_timeout = min(self._WAIT_SLICE, remaining)
+            else:
+                slice_timeout = self._WAIT_SLICE
+
+            try:
+                return self._event_queue.get(timeout=slice_timeout)
+            except queue.Empty:
+                continue
+            except KeyboardInterrupt:
+                logger.info("Interrupted while waiting for events, cancelling dialog")
+                return YCancelEvent()
 
     def destroy(self, doThrow=True) -> bool:
         """Close the dialog and stop the server (or hide the modal overlay)."""
