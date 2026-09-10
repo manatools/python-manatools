@@ -218,33 +218,44 @@ def build_style(**styles) -> str:
     return "; ".join(parts) if parts else ""
 
 
-def widget_attrs(widget_id: str, widget_class: str, enabled: bool = True, 
+def escape_attr(text: str) -> str:
+    """Escape a value for use inside a double-quoted HTML attribute.
+
+    Unlike escape_html(), quotes are escaped too: an attribute value carrying a
+    literal '"' would otherwise close the attribute and let the rest of the
+    string be parsed as further markup.  Widget values round-trip from the
+    browser, so this is reachable with attacker-influenced content.
+    """
+    return html.escape(str(text), quote=True) if text else ""
+
+
+def widget_attrs(widget_id: str, widget_class: str, enabled: bool = True,
                  visible: bool = True, extra_classes: str = "",
                  extra_attrs: dict = None) -> str:
     """
     Build common HTML attributes for a widget element.
-    
+
     Returns a string like: id="..." class="..." data-widget-class="..." [disabled] [hidden]
     """
     classes = build_css_classes(f"mana-{widget_class.lower()}", extra_classes)
-    
+
     attrs = [
-        f'id="{escape_html(widget_id)}"',
-        f'class="{classes}"',
-        f'data-widget-class="{escape_html(widget_class)}"',
+        f'id="{escape_attr(widget_id)}"',
+        f'class="{escape_attr(classes)}"',
+        f'data-widget-class="{escape_attr(widget_class)}"',
     ]
-    
+
     if not enabled:
         attrs.append('disabled')
-    
+
     if not visible:
         attrs.append('style="display: none"')
-    
+
     if extra_attrs:
         for key, value in extra_attrs.items():
             if value is True:
                 attrs.append(key)
             elif value is not None and value is not False:
-                attrs.append(f'{key}="{escape_html(str(value))}"')
-    
+                attrs.append(f'{key}="{escape_attr(str(value))}"')
+
     return " ".join(attrs)
