@@ -6,7 +6,21 @@ User interaction is handled via WebSocket for real-time communication.
 """
 
 import logging
-from .yui_common import YDialogType, YDialogColorMode, YUIDimension, YTableHeader
+import os
+import shutil
+import subprocess
+from .yui_common import (
+    YDialogType,
+    YDialogColorMode,
+    YUIDimension,
+    YTableHeader,
+    YTableItem,
+    YCancelEvent,
+    YWidgetEvent,
+    YEventReason,
+    list_entries,
+    parse_filter_patterns,
+)
 
 
 class YUIWeb:
@@ -177,20 +191,199 @@ class YApplicationWeb:
         except Exception:
             pass
 
+    # --- File and directory choosers ---
+    #
+    # The browser's own file picker cannot be used here: it yields a sandboxed
+    # File object and a fake path, while callers expect a real path they open
+    # themselves server-side (see test/test_file_dialogs.py).  So, like the
+    # ncurses backend, the web backend renders its own browser from AUI widgets
+    # and lists the server's filesystem.  Server and browser are the same
+    # machine (the server binds 127.0.0.1 only), so this exposes nothing the
+    # Qt/GTK/ncurses backends do not.
+
+    def _documents_dir(self) -> str:
+        """Return the user's documents directory, falling back to home."""
+        try:
+            xdg = shutil.which("xdg-user-dir")
+            if xdg:
+                out = subprocess.run(
+                    [xdg, "DOCUMENTS"],
+                    capture_output=True, text=True, timeout=2,
+                ).stdout.strip()
+                if out and os.path.isdir(out):
+                    return out
+        except Exception:
+            self._logger.debug("xdg-user-dir lookup failed", exc_info=True)
+        return os.path.expanduser("~")
+
+    def _start_dir(self, start_with: str):
+        """Resolve the directory a chooser should open at, plus a default name."""
+        if start_with and os.path.isfile(start_with):
+            return os.path.dirname(start_with), os.path.basename(start_with)
+        if start_with and os.path.isdir(start_with):
+            return start_with, ""
+        return self._documents_dir(), ""
+
     def askForExistingDirectory(self, startDir: str, headline: str):
-        """Not supported in web backend - returns empty string."""
-        self._logger.warning("askForExistingDirectory not supported in web backend")
-        return ""
+        """Prompt for an existing directory. Returns its path, or "" if cancelled."""
+        try:
+            start = startDir if startDir and os.path.isdir(startDir) else self._documents_dir()
+            return self._browse_paths(
+                start, select_file=False,
+                headline=headline or "Select Directory", reason='directory')
+        except Exception:
+            self._logger.exception("askForExistingDirectory failed")
+            return ""
 
     def askForExistingFile(self, startWith: str, filter: str, headline: str):
-        """Not supported in web backend - returns empty string."""
-        self._logger.warning("askForExistingFile not supported in web backend")
-        return ""
+        """Prompt for an existing file. Returns its path, or "" if cancelled."""
+        try:
+            start, _name = self._start_dir(startWith)
+            return self._browse_paths(
+                start, select_file=True, headline=headline or "Open File",
+                filter_str=filter, reason='file')
+        except Exception:
+            self._logger.exception("askForExistingFile failed")
+            return ""
 
     def askForSaveFileName(self, startWith: str, filter: str, headline: str):
-        """Not supported in web backend - returns empty string."""
-        self._logger.warning("askForSaveFileName not supported in web backend")
-        return ""
+        """Prompt for a filename to save to. Returns its path, or "" if cancelled."""
+        try:
+            start, default_name = self._start_dir(startWith)
+            return self._browse_paths(
+                start, select_file=True, headline=headline or "Save File",
+                filter_str=filter, reason='save', default_name=default_name)
+        except Exception:
+            self._logger.exception("askForSaveFileName failed")
+            return ""
+
+    def _browse_paths(self, start_dir: str, select_file: bool, headline: str,
+                      filter_str: str = "", reason: str = "file",
+                      default_name: str = ""):
+        """Modal filesystem browser shared by the three chooser entry points.
+
+        Mirrors the ncurses browser: a single-column table of entries where
+        selecting a directory row navigates into it (the web table has no
+        double-click, only single-click SelectionChanged) and selecting a file
+        row updates the preview.  *reason* decides what the Select/Save button
+        returns; see the branches below.
+        """
+        from .yui import YUI
+
+        factory = YUI.widgetFactory()
+        current_dir = start_dir if os.path.isdir(start_dir) else os.path.expanduser('~')
+        patterns = parse_filter_patterns(filter_str)
+
+        dlg = factory.createPopupDialog()
+        result = ""
+        try:
+            root = factory.createVBox(dlg)
+            factory.createHeading(root, headline)
+            # Path labels are output fields: filenames are data, so a literal
+            # '&' must not be read as shortcut notation and underline a letter.
+            path_lbl = factory.createLabel(
+                root, f"Current: {current_dir}", isOutputField=True)
+
+            header = YTableHeader()
+            header.addColumn("Name")
+            sized = factory.createMinSize(root, 60, 16)
+            table = factory.createTable(sized, header)
+
+            selected_lbl = factory.createLabel(root, "Selected: ", isOutputField=True)
+            filename_input = None
+            if reason == 'save':
+                filename_input = factory.createInputField(root, "Filename:")
+                if default_name:
+                    filename_input.setValue(default_name)
+
+            buttons = factory.createHBox(root)
+            factory.createHStretch(buttons)
+            btn_select = factory.createPushButton(
+                buttons, "&Save" if reason == 'save' else "&Select")
+            btn_cancel = factory.createPushButton(buttons, "&Cancel")
+
+            selected_item_data = None
+
+            def refresh_listing(dir_path):
+                nonlocal selected_item_data
+                table.deleteAllItems()
+                for (label, path, typ) in list_entries(dir_path, select_file, patterns):
+                    item = YTableItem(label)
+                    item.addCell(label)
+                    item.setData({'path': path, 'type': typ})
+                    table.addItem(item)
+                selected_item_data = None
+                selected_lbl.setText("Selected: ")
+
+            refresh_listing(current_dir)
+            dlg.open()
+
+            while True:
+                ev = dlg.waitForEvent()
+                if isinstance(ev, YCancelEvent):
+                    result = ""
+                    break
+
+                if not isinstance(ev, YWidgetEvent):
+                    continue
+
+                widget = ev.widget()
+
+                if widget == btn_cancel and ev.reason() == YEventReason.Activated:
+                    result = ""
+                    break
+
+                if widget == btn_select and ev.reason() == YEventReason.Activated:
+                    if reason == 'save':
+                        name = filename_input.value() if filename_input else ""
+                        if not name and selected_item_data \
+                                and selected_item_data.get('type') == 'file':
+                            name = os.path.basename(selected_item_data['path'])
+                        if not name:
+                            continue  # nothing to save as: ignore the press
+                        result = os.path.join(current_dir, name)
+                        break
+
+                    if reason == 'directory':
+                        result = current_dir
+                        break
+
+                    # reason == 'file': require an actual file selection
+                    if selected_item_data and selected_item_data.get('type') == 'file':
+                        result = selected_item_data['path']
+                        break
+                    continue
+
+                if widget == table and ev.reason() == YEventReason.SelectionChanged:
+                    selected = table.selectedItems()
+                    if not selected:
+                        selected_item_data = None
+                        selected_lbl.setText("Selected: ")
+                        continue
+
+                    data = selected[0].data()
+                    if not data or 'path' not in data:
+                        selected_item_data = None
+                        selected_lbl.setText("Selected: ")
+                        continue
+
+                    if data.get('type') == 'dir':
+                        current_dir = data['path']
+                        path_lbl.setText(f"Current: {current_dir}")
+                        refresh_listing(current_dir)
+                        continue
+
+                    selected_item_data = data
+                    selected_lbl.setText(f"Selected: {data['path']}")
+                    if reason == 'save' and filename_input is not None:
+                        filename_input.setValue(os.path.basename(data['path']))
+        finally:
+            try:
+                dlg.destroy()
+            except Exception:
+                self._logger.debug("file chooser: destroy failed", exc_info=True)
+
+        return result
 
 
 class YWidgetFactoryWeb:
