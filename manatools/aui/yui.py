@@ -80,14 +80,6 @@ class YUI:
         if backend_env == 'web':
             return Backend.WEB
 
-        # Auto-detect based on available imports
-        # Require PySide6 (Qt6)
-        try:
-            import PySide6.QtWidgets
-            return Backend.QT
-        except ImportError:
-            pass
-
         # ── 2. Desktop session present ─────────────────────────────────────
         xdg = os.environ.get('XDG_CURRENT_DESKTOP', '')
         if xdg:
