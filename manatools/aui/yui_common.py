@@ -3,8 +3,120 @@ Common base classes and definitions shared across all backends
 """
 
 from enum import Enum
+import fnmatch
+import os
+import shutil
+import subprocess
 import uuid
 from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Filesystem helpers for the backends' file/directory choosers
+# ---------------------------------------------------------------------------
+
+def parse_filter_patterns(filter_str: str):
+    """Split a libyui-style filter string into a list of glob patterns.
+
+    ``"*.txt;*.md"`` becomes ``["*.txt", "*.md"]``.  An empty or unparseable
+    filter yields an empty list, which callers treat as "accept every file".
+    """
+    try:
+        if not filter_str:
+            return []
+        return [p.strip() for p in filter_str.split(';') if p.strip()]
+    except Exception:
+        return []
+
+
+def documents_dir() -> str:
+    """Return the user's XDG documents directory, falling back to home.
+
+    The name is locale-dependent (Documents, Documenti, Dokumente, …), so it
+    must be resolved at runtime rather than hardcoded.  ``xdg-user-dir`` is
+    tried first; if the binary is missing, ~/.config/user-dirs.dirs is parsed
+    directly.  Home is returned whenever the lookup fails or names a directory
+    that does not exist.
+    """
+    try:
+        xdg = shutil.which("xdg-user-dir")
+        if xdg:
+            out = subprocess.run(
+                [xdg, "DOCUMENTS"],
+                capture_output=True, text=True, timeout=2,
+            ).stdout.strip()
+            if out and os.path.isdir(out):
+                return out
+    except Exception:
+        pass
+
+    # No xdg-user-dir binary (minimal installs): read the config it would.
+    try:
+        config = os.path.join(
+            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+            "user-dirs.dirs")
+        with open(config, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line.startswith("XDG_DOCUMENTS_DIR"):
+                    continue
+                _, _, value = line.partition("=")
+                path = value.strip().strip('"').replace(
+                    "$HOME", os.path.expanduser("~"))
+                if path and os.path.isdir(path):
+                    return path
+    except Exception:
+        pass
+
+    return os.path.expanduser("~")
+
+
+def list_entries(current_dir: str, select_file: bool, patterns):
+    """List *current_dir* for a file chooser.
+
+    Returns ``(label, path, type)`` triples where *type* is ``'dir'`` or
+    ``'file'``: the parent entry ``".."`` first (unless already at the root),
+    then directories (labelled with a trailing ``/``), then files, each group
+    sorted case-insensitively.  Files are omitted entirely when *select_file*
+    is False, and otherwise kept only if they match one of *patterns*.
+
+    Symlinks are resolved, so a symlinked directory such as /media/… is listed
+    as a directory rather than silently dropped.  Unreadable entries and an
+    unreadable directory are skipped rather than raising, so a chooser never
+    dies on a permission error.
+    """
+    entries = []
+    try:
+        parent = os.path.dirname(current_dir.rstrip(os.sep)) or current_dir
+        if parent and parent != current_dir:
+            entries.append(("..", parent, 'dir'))
+
+        with os.scandir(current_dir) as it:
+            dirs = []
+            files = []
+            for e in it:
+                try:
+                    if e.is_dir():
+                        dirs.append((e.name + '/', e.path, 'dir'))
+                    elif e.is_file():
+                        if not select_file:
+                            continue
+                        if not patterns or any(
+                                fnmatch.fnmatch(e.name, pat) for pat in patterns):
+                            files.append((e.name, e.path, 'file'))
+                except OSError:
+                    # Broken symlink or unreadable entry: skip it.
+                    continue
+
+        dirs.sort(key=lambda x: x[0].lower())
+        files.sort(key=lambda x: x[0].lower())
+        entries.extend(dirs)
+        entries.extend(files)
+    except OSError:
+        # Unreadable directory: offer the parent entry alone so the user can
+        # navigate back out.
+        pass
+    return entries
+
 
 # Enums
 # Backwards-compatible aliases: allow using `YUIDimension.Horizontal` / `Vertical`

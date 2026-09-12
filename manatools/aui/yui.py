@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified YUI implementation that automatically selects the best available backend.
-Priority: Qt > GTK > NCurses
+Priority: Qt > GTK > NCurses > Web (Web requires explicit selection)
 """
 
 import os
@@ -12,6 +12,7 @@ class Backend(Enum):
     QT = "qt"
     GTK = "gtk" 
     NCURSES = "ncurses"
+    WEB = "web"
 
 class YUI:
     _instance = None
@@ -76,6 +77,16 @@ class YUI:
             return Backend.GTK
         if backend_env == 'ncurses':
             return Backend.NCURSES
+        if backend_env == 'web':
+            return Backend.WEB
+
+        # Auto-detect based on available imports
+        # Require PySide6 (Qt6)
+        try:
+            import PySide6.QtWidgets
+            return Backend.QT
+        except ImportError:
+            pass
 
         # ── 2. Desktop session present ─────────────────────────────────────
         xdg = os.environ.get('XDG_CURRENT_DESKTOP', '')
@@ -262,6 +273,7 @@ class YUI:
                 Backend.QT:      ('.yui_qt',     'YUIQt'),
                 Backend.GTK:     ('.yui_gtk',    'YUIGtk'),
                 Backend.NCURSES: ('.yui_curses', 'YUICurses'),
+                Backend.WEB:     ('.yui_web',    'YUIWeb'),
             }
             if cls._backend not in _backend_map:
                 raise RuntimeError(f"Unknown backend: {cls._backend}")

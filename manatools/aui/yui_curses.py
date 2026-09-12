@@ -7,7 +7,6 @@ import curses.ascii
 import sys
 import os
 import time
-import fnmatch
 import logging
 from .yui_common import *
 from .backends.curses import *
@@ -104,11 +103,9 @@ class YApplicationCurses:
         self._logo = ""
         # Wayland: no-op for ncurses (terminal has no window manager class)
         self._desktop_file_name = ""
-        # Default directories
-        try:
-            self._default_documents_dir = os.path.expanduser('~/Documenti')
-        except Exception:
-            self._default_documents_dir = os.path.expanduser('~')
+        # Default directories: resolved via XDG, since the documents directory
+        # name is locale-dependent and must not be hardcoded.
+        self._default_documents_dir = documents_dir()
 
     def iconBasePath(self):
         return self._icon_base_path
@@ -296,54 +293,13 @@ class YApplicationCurses:
         pass
 
     # --- Internal helpers for ncurses file/directory chooser ---
+    # The listing and filter logic is backend-agnostic and lives in yui_common
+    # so every backend's chooser behaves identically.
     def _parse_filter_patterns(self, filter_str: str):
-        try:
-            if not filter_str:
-                return []
-            parts = [p.strip() for p in filter_str.split(';') if p.strip()]
-            return parts
-        except Exception:
-            return []
+        return parse_filter_patterns(filter_str)
 
     def _list_entries(self, current_dir: str, select_file: bool, patterns):
-        """Return list of (label, path, type) for entries under current_dir.
-        type is 'dir' or 'file'. If select_file is True, apply patterns to files.
-        """
-        entries = []
-        try:
-            # Add parent directory entry
-            parent = os.path.dirname(current_dir.rstrip(os.sep)) or current_dir
-            if parent and parent != current_dir:
-                entries.append(("..", parent, 'dir'))
-            # List directory contents
-            with os.scandir(current_dir) as it:
-                dirs = []
-                files = []
-                for e in it:
-                    try:
-                        if e.is_dir(follow_symlinks=False):
-                            dirs.append((e.name + '/', e.path, 'dir'))
-                        elif e.is_file(follow_symlinks=False):
-                            if not select_file:
-                                continue
-                            if not patterns:
-                                files.append((e.name, e.path, 'file'))
-                            else:
-                                for pat in patterns:
-                                    if fnmatch.fnmatch(e.name, pat):
-                                        files.append((e.name, e.path, 'file'))
-                                        break
-                    except Exception:
-                        pass
-            # Sort directories and files separately
-            dirs.sort(key=lambda x: x[0].lower())
-            files.sort(key=lambda x: x[0].lower())
-            entries.extend(dirs)
-            entries.extend(files)
-        except Exception:
-            # On failure, just return parent
-            pass
-        return entries
+        return list_entries(current_dir, select_file, patterns)
 
     def _browse_paths(self, start_dir: str, select_file: bool, headline: str, filter_str: str = "", reason: str = "file", default_name: str = ""):
         """
