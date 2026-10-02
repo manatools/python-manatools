@@ -436,8 +436,11 @@ class YDialogWeb(YSingleChildContainerWidget):
                 widget._value = event_data["value"]
 
         if "checked" in event_data:
+            # YCheckBoxFrame has no setChecked(): setValue() is its boolean setter.
             if hasattr(widget, "setChecked"):
                 widget.setChecked(event_data["checked"])
+            elif hasattr(widget, "setValue"):
+                widget.setValue(bool(event_data["checked"]))
 
         # Tree item selection ? uses a stable item id instead of a
         # flat index because tree items are nested.
