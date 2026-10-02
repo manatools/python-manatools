@@ -58,6 +58,9 @@ class YInputFieldWeb(YSimpleInputField):
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
     
+    def _set_backend_enabled(self, enabled: bool):
+        self._notify_update()
+
     def render(self) -> str:
         """Render the input field to HTML."""
         input_type = "password" if self._password_mode else "text"

@@ -38,6 +38,9 @@ class YMultiLineEditWeb(YWidget):
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
     
+    def _set_backend_enabled(self, enabled: bool):
+        self._notify_update()
+
     def render(self) -> str:
         extra_attrs = {}
         if self._input_max_length > 0:
