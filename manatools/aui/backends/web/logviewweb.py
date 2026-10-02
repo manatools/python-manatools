@@ -3,7 +3,7 @@ Web backend LogView implementation.
 Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 """
-from ...yui_common import YWidget, YLogViewFocus
+from ...yui_common import YWidget, YLogViewFocus, YUIDimension
 from .commonweb import widget_attrs, escape_html
 
 
@@ -18,6 +18,14 @@ class YLogViewWeb(YWidget):
         self._log_entries = []
         self._focus = YLogViewFocus.HEAD
         self._reverse = False
+        # A log view is the canonical "expand to fill" widget: grow in both
+        # dimensions like the qt/gtk/curses backends, so a button bar placed
+        # after it stays pinned at the bottom instead of overlapping it.
+        try:
+            self.setStretchable(YUIDimension.YD_HORIZ, True)
+            self.setStretchable(YUIDimension.YD_VERT, True)
+        except Exception:
+            pass
 
     def widgetClass(self):
         return "YLogView"
@@ -104,7 +112,7 @@ class YLogViewWeb(YWidget):
         height = self._visible_lines * 1.5
 
         extra_attrs = {
-            "style": f"height:{height}em; overflow-y:auto;",
+            "style": f"flex:1; min-height:{height}em; overflow-y:auto;",
         }
         # widget_attrs puts id="{widget_id}" on the element � that id lives on
         # the inner div so _flush_update's #id selector lands here, not on the
