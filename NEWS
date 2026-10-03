@@ -2,6 +2,9 @@ Python-manatools
 ================
 0.99.4
    - Added web backend (Matteo Pasotti)
+   - Fixed web CheckBoxFrame: added showContent, autoEnable and property API (issue #8)
+   - Fixed web widgets not returning to enabled state after setEnabled(True) (issue #9)
+   - Fixed web LogView not stretchable, overlapping a trailing button bar (issue #10)
 
 0.99.3
    - Fixed paned multi-layout (Gtk, ncurses and Qt)
