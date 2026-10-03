@@ -2,7 +2,9 @@
 
 ![logo](https://avatars3.githubusercontent.com/u/19332721?v=3&s=200 "Python ManaTools")
 
-Python ManaTools builds on the original Perl-based ManaTools idea, keeping the same goal of a shared toolkit and consistent UX while moving to Python to match systemd and D-Bus APIs. We are grateful to libyui for the foundation it provided, but this project now ships its own AUI layer and keeps evolving independently. Today it focuses on a backend-agnostic UI abstraction for GTK, Qt, and ncurses, plus the services and helpers needed by ManaTools.
+Python ManaTools builds on the original Perl-based ManaTools idea, keeping the same goal of a shared toolkit and consistent UX while moving to Python to match systemd and D-Bus APIs. We are grateful to libyui for the foundation it provided, but this project now ships its own AUI layer and keeps evolving independently. Today it focuses on a backend-agnostic UI abstraction for GTK, Qt, ncurses, and the web, plus the services and helpers needed by ManaTools.
+
+One application source tree runs unchanged on any of the four backends: a single `MUI_BACKEND` environment variable picks Qt, GTK 4, ncurses, or a browser UI served by a pure standard-library HTTP/WebSocket server — no extra dependency needed for the web backend.
 
 See the AUI API documentation for details: [manatools AUI API](docs/manatools_aui_api.md).
 
@@ -29,6 +31,19 @@ See the AUI API documentation for details: [manatools AUI API](docs/manatools_au
 
 #### ncurses backend
 * **curses** — included in the Python standard library (no extra install needed)
+
+#### web backend
+* No extra dependency — pure Python standard library (`http.server` + a hand-rolled WebSocket server). Runs in any modern browser; the server binds `127.0.0.1` only.
+
+## SELECTING A BACKEND
+
+Set `MUI_BACKEND` before the first call to `YUI.ui()`:
+
+```
+MUI_BACKEND=web python3 your_app.py
+```
+
+Accepted values: `qt`, `gtk`, `ncurses`, `web` (case-insensitive). Without it, Qt, GTK, and ncurses are auto-detected in that order — `web` is never auto-detected and must be requested explicitly.
 
 ## INSTALLATION
 
