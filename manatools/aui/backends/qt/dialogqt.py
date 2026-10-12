@@ -245,6 +245,10 @@ class YDialogQt(YSingleChildContainerWidget):
             # Popup: transient child window; see docstring for the crash rationale.
             parent_widget = self._get_parent_qwidget()
             self._qwidget = QtWidgets.QDialog(parent_widget)
+            # ESC on QDialog triggers reject(), which may not pass through
+            # closeEvent on all Qt/WM combinations. Hook rejected() directly
+            # so waitForEvent() always receives a YCancelEvent.
+            self._qwidget.rejected.connect(self._on_popup_rejected)
         else:
             self._qwidget = QtWidgets.QMainWindow()
         # Determine window title:from YApplicationQt instance stored on the YUI backend
@@ -486,6 +490,7 @@ class YDialogQt(YSingleChildContainerWidget):
             pass
 
     def _on_close_event(self, event):
+        self._is_open = False
         # Post a cancel event so waitForEvent returns a YCancelEvent when the user
         # closes the window with the window manager 'X' button.
         try:
@@ -497,6 +502,14 @@ class YDialogQt(YSingleChildContainerWidget):
         # crash on popup teardown. The caller that receives YCancelEvent is
         # responsible for invoking destroy()/close() once the event loop exits.
         event.accept()
+
+    def _on_popup_rejected(self):
+        """Handle QDialog reject path (typically ESC key on popup dialogs)."""
+        self._is_open = False
+        try:
+            self._post_event(YCancelEvent())
+        except Exception:
+            pass
     
     def _post_event(self, event):
         """Internal: post an event to this dialog and quit local event loop if running."""
