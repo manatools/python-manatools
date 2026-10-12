@@ -1,6 +1,8 @@
 Python-manatools
 ================
 0.99.4
+   - Fixed issue #11: Qt backend - pressing ESC in Find Packages no longer leaves the main window
+     permanently inactive.
    - Added web backend (Matteo Pasotti)
    - Fixed web CheckBoxFrame: added showContent, autoEnable and property API (issue #8)
    - Fixed web widgets not returning to enabled state after setEnabled(True) (issue #9)
