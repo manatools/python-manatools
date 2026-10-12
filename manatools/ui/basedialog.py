@@ -139,27 +139,42 @@ class BaseDialog :
     run the Dialog
     '''
     self._setupUI()
-    
-    self.backupTitle = yui.YUI.app().applicationTitle()
-    yui.YUI.app().setApplicationTitle(self._title)
-    backupIcon = None
+
+    app = yui.YUI.app()
+    backup_title = app.applicationTitle()
+    backup_icon = None
     if self._icon:
       try:
-        backupIcon = yui.YUI.app().applicationIcon()
+        backup_icon = app.applicationIcon()
       except Exception:
         pass
-      yui.YUI.app().setApplicationIcon(self._icon)
-    
-    self._running = True
-    self._handleEvents()
 
-    #restore old application title
-    yui.YUI.app().setApplicationTitle(self.backupTitle)
-    if self._icon and backupIcon is not None:
-      yui.YUI.app().setApplicationIcon(backupIcon)
-    if self.dialog is not None:
-      self.dialog.destroy()
-      self.dialog = None
+    app.setApplicationTitle(self._title)
+    if self._icon:
+      app.setApplicationIcon(self._icon)
+
+    self._running = True
+    try:
+      self._handleEvents()
+    finally:
+      self._running = False
+      # Restore title/icon even if _handleEvents raised.
+      try:
+        app.setApplicationTitle(backup_title)
+      except Exception:
+        logger.exception("Failed to restore application title")
+      if self._icon and backup_icon is not None:
+        try:
+          app.setApplicationIcon(backup_icon)
+        except Exception:
+          logger.exception("Failed to restore application icon")
+      # Always destroy the dialog to avoid leaked modal windows.
+      if self.dialog is not None:
+        try:
+          self.dialog.destroy()
+        except Exception:
+          logger.exception("Failed to destroy dialog during cleanup")
+        self.dialog = None
 
   @property
   def eventManager(self):
@@ -220,7 +235,13 @@ class BaseDialog :
           item = event.item()
           self.eventManager.menuEvent(item, event)
         elif (eventType == yui.YEventType.CancelEvent) :
-          self.eventManager.cancelEvent()
+          # ESC/close must always terminate the loop even if a cancel handler
+          # raises; otherwise popup dialogs can remain logically running.
+          try:
+            self.eventManager.cancelEvent()
+          except Exception:
+            logger.exception("Unhandled exception in cancel event handler")
+          self._running = False
           break
         elif (eventType == yui.YEventType.TimeoutEvent) :
           self.eventManager.timeoutEvent()
