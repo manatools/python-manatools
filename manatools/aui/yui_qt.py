@@ -17,6 +17,12 @@ class YUIQt:
         # Ensure QApplication exists
         self._qapp = QtWidgets.QApplication.instance()
         if not self._qapp:
+            # QtWebEngine (YHtmlView) can only be loaded lazily if contexts
+            # are shared before the application object exists.
+            try:
+                QtCore.QCoreApplication.setAttribute(QtCore.Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+            except Exception:
+                pass
             self._qapp = QtWidgets.QApplication(sys.argv)
         self._application = YApplicationQt()
         # logger for the backend manager
@@ -478,6 +484,10 @@ class YWidgetFactoryQt:
     def createRichText(self, parent, text: str = "", plainTextMode: bool = False):
         """Create a RichText widget (Qt backend)."""
         return YRichTextQt(parent, text, plainTextMode)
+
+    def createHtmlView(self, parent, html: str = ""):
+        """Create a read-only, hardened HTML view (Qt backend)."""
+        return YHtmlViewQt(parent, html)
 
     def createMenuBar(self, parent):
         """Create a MenuBar widget (Qt backend)."""
