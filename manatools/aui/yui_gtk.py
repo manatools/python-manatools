@@ -977,6 +977,11 @@ class YWidgetFactoryGtk:
         from .backends.gtk.richtextgtk import YRichTextGtk
         return YRichTextGtk(parent, text, plainTextMode)
 
+    def createHtmlView(self, parent, html: str = ""):
+        """Create a read-only, hardened HTML view (GTK backend)."""
+        from .backends.gtk.htmlviewgtk import YHtmlViewGtk
+        return YHtmlViewGtk(parent, html)
+
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)
