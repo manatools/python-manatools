@@ -31,6 +31,9 @@ from ...yui_common import *
 
 _webkit_module = None
 
+# Minimum height in pixels, for both the WebView and the label fallback.
+_MIN_HEIGHT = 120
+
 
 def _webkit():
     """Return the WebKit 6.0 gi module, or False if unavailable."""
@@ -75,7 +78,6 @@ class YHtmlViewGtk(YHtmlViewBase):
                             ("enable-html5-local-storage", False),
                             ("enable-page-cache", False),
                             ("enable-developer-extras", False),
-                            ("enable-hyperlink-auditing", False),
                             ("enable-dns-prefetching", False),
                             ("allow-file-access-from-file-urls", False),
                             ("allow-universal-access-from-file-urls", False),
@@ -89,6 +91,9 @@ class YHtmlViewGtk(YHtmlViewBase):
 
         view.connect("decide-policy", self._on_decide_policy, WebKit)
         view.connect("context-menu", lambda *_args: True)
+        # A WebView has no natural height: keep it visible in layouts that
+        # do not expand it (the label fallback gets the same minimum).
+        view.set_size_request(-1, _MIN_HEIGHT)
         return view
 
     def _on_decide_policy(self, _view, decision, decision_type, WebKit):
@@ -117,7 +122,7 @@ class YHtmlViewGtk(YHtmlViewBase):
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         try:
-            sw.set_min_content_height(120)
+            sw.set_min_content_height(_MIN_HEIGHT)
         except Exception:
             pass
         lbl = Gtk.Label()
