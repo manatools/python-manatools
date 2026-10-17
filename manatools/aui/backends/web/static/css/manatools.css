@@ -717,6 +717,36 @@ body {
 }
 
 /* ============================================
+   HTML View (sandboxed iframe, see htmlviewweb.py)
+   ============================================ */
+
+.mana-yhtmlview {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 12rem;
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    overflow: hidden;
+    /* Mail HTML assumes a light page: keep it readable in dark mode too. */
+    background: #fff;
+}
+
+.mana-htmlview-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 12rem;
+    border: 0;
+    background: #fff;
+}
+
+.mana-yhtmlview.mana-disabled .mana-htmlview-frame {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+/* ============================================
    Menu Bar
    ============================================ */
 .mana-ymenubar {

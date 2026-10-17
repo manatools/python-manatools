@@ -544,6 +544,10 @@ class YWidgetFactoryWeb:
         from .backends.web import YRichTextWeb
         return YRichTextWeb(parent, text, plainTextMode)
 
+    def createHtmlView(self, parent, html: str = ""):
+        from .backends.web import YHtmlViewWeb
+        return YHtmlViewWeb(parent, html)
+
     def createMenuBar(self, parent):
         from .backends.web import YMenuBarWeb
         return YMenuBarWeb(parent)
