@@ -10,7 +10,7 @@ See the AUI API documentation for details: [manatools AUI API](docs/manatools_au
 
 ## REQUIREMENTS
 
-### Python >= 3.6
+### Python >= 3.9
 ### Poetry >= 1.2.0
 
 ### Core dependencies (always required)
@@ -25,15 +25,19 @@ See the AUI API documentation for details: [manatools AUI API](docs/manatools_au
 * **GTK 4** — the GTK 4 toolkit libraries (`gtk4`)
 * **GdkPixbuf 2** — image loading for icons (`gdk-pixbuf2`)
 * **pycairo** — Cairo drawing context used by GTK widgets (`python3-cairo`)
+* *Optional:* **WebKitGTK 6.0** introspection data (gi namespace `WebKit` 6.0) — HTML engine for `YHtmlView`; without it the widget falls back to a text rendering in a `Gtk.Label` (Mageia: `lib64webkitgtk-gir6.0`). The WebKit2 4.x bindings target GTK 3 and are not used.
 
 #### Qt backend
 * **PySide6 >= 6.5.0** — Qt 6 Python bindings
+* *Optional:* **QtWebEngine** bindings (`PySide6.QtWebEngineWidgets`) — HTML engine for `YHtmlView`; without them the widget falls back to `QTextBrowser`. The PyPI `PySide6` package already includes them; distributions often ship them separately (Mageia: `python3-pyside6-webenginewidgets`, which also needs `python3-pyside6-network`, `python3-pyside6-webchannel` and `python3-pyside6-printsupport`).
 
 #### ncurses backend
 * **curses** — included in the Python standard library (no extra install needed)
+* `YHtmlView` renders HTML as navigable text; no extra dependency.
 
 #### web backend
 * No extra dependency — pure Python standard library (`http.server` + a hand-rolled WebSocket server). Runs in any modern browser; the server binds `127.0.0.1` only.
+* `YHtmlView` is served into a sandboxed `<iframe>` by the same server; no extra dependency.
 
 ## SELECTING A BACKEND
 

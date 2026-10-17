@@ -105,6 +105,7 @@ All standard ManaTools widgets are supported:
 | YTable | ✅ | |
 | YTree | ✅ | |
 | YRichText | ✅ | HTML content |
+| YHtmlView | ✅ | Untrusted HTML, sanitized, in a sandboxed iframe served from `/htmlview/<token>` |
 | YMenuBar | ✅ | |
 | YImage | ✅ | |
 | YIntField | ✅ | Number input |
@@ -146,6 +147,7 @@ manatools/aui/
         ├── treeweb.py
         ├── tableweb.py
         ├── richtextweb.py
+        ├── htmlviewweb.py
         ├── menubarweb.py
         ├── replacepointweb.py
         ├── checkboxframeweb.py
