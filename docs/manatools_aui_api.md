@@ -141,6 +141,16 @@ class YLogViewFocus(Enum):
 | `HEAD` | The viewport stays where it is when `appendLines()` is called. The user must scroll manually to see new content. |
 | `TAIL` | After every `appendLines()` call the widget automatically scrolls to the **end of the rendered text**. In **normal order** (oldest-at-top) the end is the newest line; in **reverse order** (newest-at-top) the end is the oldest line. The same scroll is applied when the widget is first shown if lines were added before the dialog was displayed. |
 
+### YHtmlBasePolicy
+
+How a `YHtmlView` treats relative URLs (see §8.14b).
+
+```python
+class YHtmlBasePolicy(Enum):
+    NoBase       = 0   # <base href> ignored; relative links reported verbatim (default)
+    DocumentBase = 1   # relative links resolved against the document's <base href>
+```
+
 ---
 
 ## 3. Exception Classes
@@ -677,6 +687,55 @@ w.setValue(text: str)       # update content
 w.value()     -> str
 ```
 
+### 8.14b HtmlView
+
+```python
+factory.createHtmlView(parent, html: str = "") -> YWidget
+```
+
+Read-only view for **untrusted** HTML (e.g. mail bodies). Unlike `RichText`,
+content is always sanitized before any engine sees it (`manatools/aui/yui_html.py`):
+scripts, event handlers, frames, plugins, forms, SVG/MathML and `javascript:`
+links are removed; CSS is kept but filtered (`@import`, `expression()`,
+bindings, escapes and remote `url()` dropped); remote images are blocked
+unless allowed; `cid:` images are inlined through an application resolver.
+Links **never navigate**: activating one stores its original target and posts
+a `YWidgetEvent` with reason `Activated` (when `notify()` is on).
+
+```python
+w.setHtml(html: str, base_policy: YHtmlBasePolicy = YHtmlBasePolicy.NoBase)
+w.html()        -> str                  # as passed, before sanitizing
+w.basePolicy()  -> YHtmlBasePolicy
+w.setValue(html: str)                   # alias of setHtml(), keeps the base policy
+w.value()       -> str
+w.setAllowRemote(allow: bool = True)    # default False: remote images/CSS blocked
+w.allowRemote() -> bool
+w.remoteContentBlocked() -> bool        # current content tried to load remote resources
+w.setCidResolver(resolver)              # resolver(content_id) -> (bytes, mime) | None
+w.cidResolver()
+w.lastActivatedUrl() -> str | None      # original href of the last activated link
+```
+
+```python
+view = factory.createHtmlView(vbox)
+view.setCidResolver(lambda cid: parts.get(cid))       # {cid: (bytes, "image/png")}
+view.setHtml(message_html)
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == view:
+    open_externally(view.lastActivatedUrl())          # the app decides, never the view
+```
+
+| Backend | Engine | Fallback |
+|---|---|---|
+| Qt | QtWebEngine (JS/plugins off, off-the-record profile, request interceptor, no navigation/new windows) | QTextBrowser (inline `data:` images only) |
+| GTK | WebKitGTK 6.0 (JS off, ephemeral session, `decide-policy` refuses navigation) | Pango markup in a selectable `Gtk.Label` |
+| NCurses | — | Flattened text (lists, quotes, table rows) with link navigation (arrows + Enter) |
+| Web | Sandboxed `<iframe sandbox="">` served from `/htmlview/<token>` with its own CSP; links answer 204 | — |
+
+Only raster `data:`/`cid:` images (png, jpeg, gif, webp, bmp) are displayed.
+Input past 8 MB is truncated; element nesting is capped at 256 levels.
+
 ### 8.15 LogView
 
 ```python
@@ -1151,6 +1210,7 @@ if app.isTextMode():
 | `createPaned` divider | Gtk.Paned (idle-deferred) | QSplitter | Simulated in chars |
 | `createImage` | Full image rendering (GdkPixbuf; scales on size-allocate when stretchable) | Full image rendering (QLabel+QPixmap; scales on resizeEvent when stretchable) | Unicode box frame with `fallBackName` text |
 | `createRichText` | HTML via WebKit / Gtk.Label | QTextBrowser | Plain text fallback |
+| `createHtmlView` | WebKitGTK 6.0, else Pango label | QtWebEngine, else QTextBrowser | Flattened text with link navigation |
 | Scrollbar auto-scroll | Supported | Supported | Limited |
 | `shutdown()` required | No | No | Yes |
 
