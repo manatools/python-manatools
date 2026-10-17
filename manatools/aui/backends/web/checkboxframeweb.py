@@ -53,6 +53,10 @@ class YCheckBoxFrameWeb(YSingleChildContainerWidget):
         self._show_content = bool(visible)
         self._notify_update()
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def addChild(self, child):
         super().addChild(child)
         self._notify_update()
@@ -100,7 +104,8 @@ class YCheckBoxFrameWeb(YSingleChildContainerWidget):
             dialog._schedule_update(self)
 
     def render(self) -> str:
-        attrs = widget_attrs(self.id(), "YCheckBoxFrame", self._enabled, self._visible)
+        attrs = widget_attrs(self.id(), "YCheckBoxFrame", self._enabled, self._visible,
+                             extra_attrs={"title": self.helpText() or None})
 
         checked_attr = " checked" if self._checked else ""
         label_html = format_label_with_shortcut(self._label)

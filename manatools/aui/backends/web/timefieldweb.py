@@ -25,6 +25,10 @@ class YTimeFieldWeb(YWidget):
     def setValue(self, val: str):
         self._value = str(val) if val else ""
         self._notify_update()
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _notify_update(self):
         dialog = self.findDialog()
@@ -38,6 +42,7 @@ class YTimeFieldWeb(YWidget):
         extra_attrs = {
             "type": "time",
             "value": self._value,
+            "title": self.helpText() or None,
         }
         
         attrs = widget_attrs(self.id(), "YTimeField", self._enabled, self._visible, extra_attrs=extra_attrs)

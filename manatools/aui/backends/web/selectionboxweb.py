@@ -48,6 +48,10 @@ class YSelectionBoxWeb(YSelectionWidget):
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def setVisible(self, visible: bool = True):
         self._visible = bool(visible)
         self._notify_update()
@@ -70,6 +74,7 @@ class YSelectionBoxWeb(YSelectionWidget):
         if self._multi_selection:
             extra_attrs["multiple"] = True
         extra_attrs["size"] = "8"  # Default visible rows
+        extra_attrs["title"] = self.helpText() or None
         
         attrs = widget_attrs(
             self.id(),

@@ -12,7 +12,7 @@ the public YUI API.
 """
 import logging
 from ...yui_common import YSelectionWidget, YTreeItem
-from .commonweb import widget_attrs, escape_html
+from .commonweb import widget_attrs, escape_html, escape_attr
 
 
 class YTreeWeb(YSelectionWidget):
@@ -161,6 +161,10 @@ class YTreeWeb(YSelectionWidget):
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
@@ -186,6 +190,10 @@ class YTreeWeb(YSelectionWidget):
         # Outer wrapper: carries widget identity; adding mana-ytable activates
         # the shared table pagination/search JavaScript automatically.
         attrs = widget_attrs(self.id(), "YTree", True, self._visible, "mana-ytable")
+        # Tooltip on the wrapper: rows are rebuilt by JS (deferred push,
+        # pagination), so a per-row title would be lost.
+        if self.helpText():
+            attrs += f' title="{escape_attr(self.helpText())}"'
         disabled_attr = ' disabled' if not self._enabled else ''
 
         # Controls bar: search input only (page-size selector omitted)

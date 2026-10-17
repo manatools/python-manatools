@@ -94,6 +94,10 @@ class YComboBoxWeb(YSelectionWidget):
         super().setLabel(new_label)
         self._notify_update()
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def deleteAllItems(self):
         """Clear all items and push a re-render to the browser."""
         super().deleteAllItems()
@@ -126,6 +130,8 @@ class YComboBoxWeb(YSelectionWidget):
         # inheriting border/background CSS rules intended for the <select>.
         disabled_attr = ' disabled' if not self._enabled else ''
         hidden_style = ' style="display:none"' if not self._visible else ''
+        help_title = ' title="%s"' % _html.escape(self.helpText(), quote=True) \
+            if self.helpText() else ''
 
         inner = ""
 
@@ -152,7 +158,7 @@ class YComboBoxWeb(YSelectionWidget):
             f' class="mana-ycombobox"'
             f' data-widget-class="YComboBox"'
             f' data-widget-id="{self.id()}"'
-            f'{disabled_attr}>'
+            f'{disabled_attr}{help_title}>'
             f'{options_html}'
             f'</select>'
         )

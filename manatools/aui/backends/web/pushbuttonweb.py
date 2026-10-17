@@ -55,6 +55,10 @@ class YPushButtonWeb(YWidget):
     
     def icon(self) -> Optional[str]:
         return self._icon_name
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
@@ -79,6 +83,7 @@ class YPushButtonWeb(YWidget):
         
         extra_attrs = {
             "data-shortcut": self._shortcut if self._shortcut else None,
+            "title": self.helpText() or None,
         }
         
         attrs = widget_attrs(

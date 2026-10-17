@@ -4,7 +4,7 @@ Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 """
 from ...yui_common import YWidget
-from .commonweb import escape_html
+from .commonweb import escape_attr, escape_html
 
 
 class YProgressBarWeb(YWidget):
@@ -40,6 +40,10 @@ class YProgressBarWeb(YWidget):
         self._max_value = max(1, int(max_val))
         self._notify_update()
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
 
@@ -67,6 +71,7 @@ class YProgressBarWeb(YWidget):
 
         visible_style = "" if self._visible else ' style="display:none"'
         enabled_attr = "" if self._enabled else " disabled"
+        help_title = ' title="%s"' % escape_attr(self.helpText()) if self.helpText() else ''
 
         inner_html = (
             f'<div id="{widget_id}"'
@@ -74,6 +79,7 @@ class YProgressBarWeb(YWidget):
             f' data-widget-class="YProgressBar"'
             f' data-value="{self._value}"'
             f' data-max="{self._max_value}"'
+            f'{help_title}'
             f'{visible_style}>'
             f'<progress value="{self._value}" max="{self._max_value}"'
             f'{enabled_attr}>{percent:.0f}%</progress>'

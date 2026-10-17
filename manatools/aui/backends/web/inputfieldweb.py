@@ -51,6 +51,10 @@ class YInputFieldWeb(YSimpleInputField):
     
     def isPasswordMode(self) -> bool:
         return self._password_mode
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _notify_update(self):
         """Notify dialog that this widget needs re-render."""
@@ -76,6 +80,8 @@ class YInputFieldWeb(YSimpleInputField):
         if self._valid_chars:
             # Create pattern from valid chars
             extra_attrs["pattern"] = f"[{escape_html(self._valid_chars)}]*"
+
+        extra_attrs["title"] = self.helpText() or None
         
         attrs = widget_attrs(
             self.id(),

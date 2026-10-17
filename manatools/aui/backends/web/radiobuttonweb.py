@@ -32,6 +32,10 @@ class YRadioButtonWeb(YWidget):
     
     def setValue(self, checked: bool):
         self.setChecked(checked)
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _get_group_name(self) -> str:
         """Get radio group name (based on parent container)."""
@@ -56,6 +60,7 @@ class YRadioButtonWeb(YWidget):
             "type": "radio",
             "name": group_name,
             "checked": self._checked,
+            "title": self.helpText() or None,
         }
         
         attrs = widget_attrs(self.id(), "YRadioButton", self._enabled, self._visible, extra_attrs=extra_attrs)

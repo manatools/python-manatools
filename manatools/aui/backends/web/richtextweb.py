@@ -25,6 +25,10 @@ class YRichTextWeb(YWidget):
 
     def lastActivatedUrl(self) -> str:
         return self._last_url
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _notify_update(self):
         dialog = self.findDialog()
@@ -45,6 +49,7 @@ class YRichTextWeb(YWidget):
         return f'#{self.id()}', content, 'html'
 
     def render(self) -> str:
-        attrs = widget_attrs(self.id(), "YRichText", self._enabled, self._visible)
+        attrs = widget_attrs(self.id(), "YRichText", self._enabled, self._visible,
+                             extra_attrs={"title": self.helpText() or None})
         content = escape_html(self._text) if self._plain_text_mode else self._text
         return f'<div {attrs}>{content}</div>'

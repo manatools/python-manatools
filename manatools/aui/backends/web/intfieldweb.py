@@ -34,6 +34,10 @@ class YIntFieldWeb(YWidget):
     
     def maxValue(self) -> int:
         return self._max_val
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _notify_update(self):
         dialog = self.findDialog()
@@ -49,6 +53,7 @@ class YIntFieldWeb(YWidget):
             "min": str(self._min_val),
             "max": str(self._max_val),
             "value": str(self._value),
+            "title": self.helpText() or None,
         }
         
         attrs = widget_attrs(self.id(), "YIntField", self._enabled, self._visible, extra_attrs=extra_attrs)

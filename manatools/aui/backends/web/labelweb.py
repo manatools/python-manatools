@@ -64,6 +64,10 @@ class YLabelWeb(YWidget):
     def isOutputField(self) -> bool:
         return self._is_output_field
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
 
@@ -93,6 +97,7 @@ class YLabelWeb(YWidget):
             self._enabled,
             self._visible,
             extra_classes,
+            extra_attrs={"title": self.helpText() or None},
         )
 
         # Static UI labels (e.g. field captions) may carry &X shortcut notation

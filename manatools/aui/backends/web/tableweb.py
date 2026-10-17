@@ -1,7 +1,7 @@
 """Web backend Table implementation."""
 from ...yui_common import (YSelectionWidget, YTableHeader, YTableItem,
                             YAlignmentType, YWidgetEvent, YEventReason)
-from .commonweb import widget_attrs, escape_html, is_initial_render
+from .commonweb import widget_attrs, escape_html, escape_attr, is_initial_render
 
 class YTableWeb(YSelectionWidget):
     """Table view widget."""
@@ -96,6 +96,10 @@ class YTableWeb(YSelectionWidget):
         if dialog and hasattr(dialog, '_schedule_update'):
             dialog._schedule_update(self)
 
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def _column_align_style(self, col: int) -> str:
         """Return an inline style attribute string for column alignment, or ''."""
         try:
@@ -146,6 +150,11 @@ class YTableWeb(YSelectionWidget):
             f' placeholder="Search\u2026" aria-label="Search"{disabled_attr}>'
             '</div>'
         )
+        # Tooltip goes on the wrapper: the table body is rebuilt by JS
+        # (deferred rows, pagination), so a per-row title would be lost.
+        help_title = self.helpText()
+        if help_title:
+            attrs = attrs + f' title="{escape_attr(help_title)}"'
 
         # Inner <table> — Bootstrap styled; intentionally has no widget id
         thead = '<thead><tr>'

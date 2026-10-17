@@ -32,6 +32,10 @@ class YMultiLineEditWeb(YWidget):
     
     def inputMaxLength(self) -> int:
         return self._input_max_length
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
     
     def _notify_update(self):
         dialog = self.findDialog()
@@ -45,6 +49,7 @@ class YMultiLineEditWeb(YWidget):
         extra_attrs = {}
         if self._input_max_length > 0:
             extra_attrs["maxlength"] = str(self._input_max_length)
+        extra_attrs["title"] = self.helpText() or None
         
         attrs = widget_attrs(self.id(), "YMultiLineEdit", self._enabled, self._visible, extra_attrs=extra_attrs)
         

@@ -43,7 +43,11 @@ class YCheckBoxWeb(YWidget):
         else:
             self._checked = bool(state)
         self._notify_update()
-    
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        self._notify_update()
+
     def _notify_update(self):
         dialog = self.findDialog()
         if dialog and hasattr(dialog, '_schedule_update'):
@@ -56,6 +60,7 @@ class YCheckBoxWeb(YWidget):
         extra_attrs = {
             "type": "checkbox",
             "checked": self._checked,
+            "title": self.helpText() or None,
         }
         
         attrs = widget_attrs(
