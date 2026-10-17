@@ -608,6 +608,10 @@ class YWidgetFactoryCurses:
         """Create a RichText widget (curses backend)."""
         return YRichTextCurses(parent, text, plainTextMode)
 
+    def createHtmlView(self, parent, html: str = ""):
+        """Create a read-only HTML view rendered as text (curses backend)."""
+        return YHtmlViewCurses(parent, html)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (curses backend)."""
         return YMenuBarCurses(parent)
