@@ -10,6 +10,8 @@ import subprocess
 import uuid
 from typing import Optional
 
+from . import yui_html as _yui_html
+
 # ---------------------------------------------------------------------------
 # Filesystem helpers for the backends' file/directory choosers
 # ---------------------------------------------------------------------------
@@ -184,6 +186,21 @@ class YLogViewFocus(Enum):
     """
     HEAD = 0   # anchor at first line (default)
     TAIL = 1   # follow last line on every append
+
+class YHtmlBasePolicy(Enum):
+    """How YHtmlView treats relative URLs and the document's own ``<base>``.
+
+    NoBase
+        ``<base href>`` is ignored.  Relative links are reported to the
+        application verbatim; relative resources never load.  Default.
+
+    DocumentBase
+        Relative links are resolved against the document's ``<base href>``
+        (http/https only) before being reported.  Relative images resolve
+        too, and then follow the remote-content rule (setAllowRemote).
+    """
+    NoBase = 0
+    DocumentBase = 1
 
 # Exceptions
 class YUIException(Exception):
@@ -568,6 +585,149 @@ class YSimpleInputField(YWidget):
     
     def setLabel(self, label):
         self._label = label
+
+class YHtmlViewBase(YWidget):
+    """Shared model of the read-only YHtmlView widget.
+
+    Every backend subclasses this and only implements how sanitized content is
+    shown (``_apply_content``) and, if needed, how links are encoded
+    (``_link_href``).  Hardening is never left to a backend: content always
+    goes through ``yui_html.sanitize_html()`` first, so scripts, active
+    content and (by default) remote loads are gone before any engine sees it.
+
+    Links never navigate.  Activating one stores its original target, readable
+    with lastActivatedUrl(), and posts a YWidgetEvent with reason Activated
+    (when notify() is on).
+    """
+
+    def __init__(self, parent=None, html: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._html = html or ""
+        self._base_policy = YHtmlBasePolicy.NoBase
+        self._allow_remote = False
+        self._cid_resolver = None
+        self._last_url = None
+        self._rendered = None
+        super().__init__(parent)
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
+
+    def widgetClass(self):
+        return "YHtmlView"
+
+    def setHtml(self, html: str, base_policy: YHtmlBasePolicy = YHtmlBasePolicy.NoBase):
+        """Show *html* (untrusted).  *base_policy* is a YHtmlBasePolicy."""
+        self._html = html or ""
+        self._base_policy = base_policy if isinstance(base_policy, YHtmlBasePolicy) else YHtmlBasePolicy.NoBase
+        self._content_changed()
+
+    def html(self) -> str:
+        """The HTML last passed to setHtml(), before sanitizing."""
+        return self._html
+
+    def basePolicy(self) -> YHtmlBasePolicy:
+        return self._base_policy
+
+    def setValue(self, html: str):
+        """Alias of setHtml() keeping the current base policy."""
+        self.setHtml(html, self._base_policy)
+
+    def value(self) -> str:
+        return self._html
+
+    def setAllowRemote(self, allow: bool = True):
+        """Allow (True) or block (False, default) remote images and CSS."""
+        allow = bool(allow)
+        if allow != self._allow_remote:
+            self._allow_remote = allow
+            self._content_changed()
+
+    def allowRemote(self) -> bool:
+        return self._allow_remote
+
+    def remoteContentBlocked(self) -> bool:
+        """True if the current content tried to load remote resources that
+        were blocked (lets an application offer "show remote content")."""
+        return self._sanitized().remote_blocked > 0
+
+    def setCidResolver(self, resolver):
+        """Set callable(content_id) -> (bytes, mime) | None for ``cid:`` images.
+
+        Only raster image types are inlined; None removes the resolver.
+        """
+        self._cid_resolver = resolver if callable(resolver) else None
+        self._content_changed()
+
+    def cidResolver(self):
+        return self._cid_resolver
+
+    def lastActivatedUrl(self):
+        """Original target of the last activated link, or None."""
+        return self._last_url
+
+    # -- backend hooks ------------------------------------------------------
+
+    def _apply_content(self):
+        """Push the (re)sanitized content to the backend widget."""
+        pass
+
+    def _link_href(self, index: int) -> str:
+        """href written into the rendered HTML for the index-th link."""
+        return f"{_yui_html.LINK_PREFIX}{index}"
+
+    @staticmethod
+    def _link_index(url) -> Optional[int]:
+        """Link index encoded in an activated URL, or None."""
+        return _yui_html.link_index_from_url(url)
+
+    def _text_lines(self) -> list:
+        """Current content flattened to lines of styled runs (engine-less
+        backends); see yui_html.html_to_lines()."""
+        return _yui_html.html_to_lines(self._sanitized().body)
+
+    def _text_pango(self) -> str:
+        """Current content as Pango markup with ``<a href>`` links."""
+        return _yui_html.lines_to_pango(self._text_lines(), self._link_href)
+
+    def _text_simple_html(self, href=None) -> str:
+        """Current content as minimal b/i/u/a/br HTML."""
+        return _yui_html.lines_to_simple_html(self._text_lines(), href or self._link_href)
+
+    # -- shared internals ---------------------------------------------------
+
+    def _content_changed(self):
+        self._rendered = None
+        self._apply_content()
+
+    def _sanitized(self):
+        """Current yui_html.SanitizedHtml, computed on first use."""
+        rendered = self._rendered
+        if rendered is None:
+            rendered = _yui_html.sanitize_html(
+                self._html,
+                allow_remote=self._allow_remote,
+                cid_resolver=self._cid_resolver,
+                link_href=self._link_href,
+                resolve_base=self._base_policy == YHtmlBasePolicy.DocumentBase,
+            )
+            self._rendered = rendered
+        return rendered
+
+    def _activate_link(self, index) -> bool:
+        """Report the index-th link of the current content as activated."""
+        rendered = self._rendered
+        try:
+            index = int(index)
+        except (TypeError, ValueError):
+            return False
+        if rendered is None or not 0 <= index < len(rendered.links):
+            return False
+        self._last_url = rendered.links[index]
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        return True
 
 class YItem:
     def __init__(self, label, selected=False, icon_name=""):
