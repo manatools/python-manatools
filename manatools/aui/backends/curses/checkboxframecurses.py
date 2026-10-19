@@ -16,6 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 from .commoncurses import _curses_recursive_min_height
 import gettext
 _ = gettext.gettext
@@ -59,6 +60,10 @@ class YCheckBoxFrameCurses(YSingleChildContainerWidget):
 
     def widgetClass(self):
         return "YCheckBoxFrame"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def label(self):
         return self._label

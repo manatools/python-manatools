@@ -14,6 +14,7 @@ import curses.ascii
 import logging
 import locale
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 
 def _locale_date_order():
@@ -71,6 +72,10 @@ class YDateFieldCurses(YWidget):
 
     def widgetClass(self):
         return "YDateField"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def value(self) -> str:
         return f"{self._y:04d}-{self._m:02d}-{self._d:02d}"

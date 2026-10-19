@@ -12,6 +12,7 @@ import re
 from html.parser import HTMLParser
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 _mod_logger = logging.getLogger("manatools.aui.curses.richtext.module")
 if not logging.getLogger().handlers:
@@ -55,6 +56,10 @@ class YRichTextCurses(YWidget):
 
     def widgetClass(self):
         return "YRichText"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def _create_backend_widget(self):
         try:

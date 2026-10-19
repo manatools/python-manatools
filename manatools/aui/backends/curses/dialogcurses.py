@@ -333,6 +333,12 @@ class YDialogCurses(YSingleChildContainerWidget):
                     widget_hints = getattr(self._focused_widget, "key_hints", lambda: "")() or ""
                 except Exception:
                     widget_hints = ""
+                # Advertise F1 only when the focused widget has help to show.
+                try:
+                    if self._focused_widget.helpText():
+                        fixed_hints += " | " + _("F1=Help")
+                except Exception:
+                    pass
             if widget_hints:
                 footer_text = " " + fixed_hints + " | " + widget_hints + " "
             else:
