@@ -21,6 +21,7 @@ from .spacingweb import YSpacingWeb
 from .treeweb import YTreeWeb
 from .tableweb import YTableWeb
 from .richtextweb import YRichTextWeb
+from .htmlviewweb import YHtmlViewWeb
 from .menubarweb import YMenuBarWeb
 from .replacepointweb import YReplacePointWeb
 from .checkboxframeweb import YCheckBoxFrameWeb
@@ -52,6 +53,7 @@ __all__ = [
     "YTreeWeb",
     "YTableWeb",
     "YRichTextWeb",
+    "YHtmlViewWeb",
     "YMenuBarWeb",
     "YReplacePointWeb",
     "YCheckBoxFrameWeb",
