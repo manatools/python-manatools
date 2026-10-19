@@ -150,9 +150,10 @@ class YDialogWeb(YSingleChildContainerWidget):
         content = self.child().render() if self.child() else ""
         overlay_id = escape_attr(self._modal_element_id())
         style = f' style="z-index: {1050 + depth}"' if depth else ""
+        hidden = "" if self._visible else " hidden"
         return (
             f'<div id="{overlay_id}" class="mana-popup-overlay"'
-            f' data-dialog-id="{escape_attr(self.id())}"{style}>'
+            f' data-dialog-id="{escape_attr(self.id())}"{style}{hidden}>'
             f'<div class="mana-popup-container">{content}</div>'
             f'</div>'
         )
@@ -417,7 +418,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         reason_str = data.get("reason", "Activated")
         event_data = data.get("data", {})
 
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if not widget:
             logger.warning("Widget not found: %s", widget_id)
             return
@@ -505,7 +506,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         key = data.get("key", "")
         widget_id = data.get("widget_id", "")
 
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         event = YKeyEvent(key, widget)
         self._post_event(event)
 
@@ -516,7 +517,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         _handle_checkbox_change so it can update the cell model and fire events.
         """
         widget_id = data.get("widget_id", "")
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if widget is None:
             logger.warning("table_checkbox: widget not found: %s", widget_id)
             return
@@ -535,7 +536,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         """
         widget_id = data.get("widget_id", "")
         url = data.get("url", "")
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if widget is None:
             logger.warning("link_activated: widget not found: %s", widget_id)
             return
@@ -609,6 +610,18 @@ class YDialogWeb(YSingleChildContainerWidget):
         """Build a mapping of widget IDs to widget objects."""
         self._widget_registry.clear()
         self._register_widget_tree(self)
+
+    def _lookup_widget(self, widget_id):
+        """Return the widget with *widget_id*, or None.
+
+        The registry is built at open(); widgets created afterwards (e.g. new
+        children of a YReplacePoint) are picked up by rebuilding it on a miss.
+        """
+        widget = self._widget_registry.get(widget_id)
+        if widget is None and widget_id:
+            self._build_widget_registry()
+            widget = self._widget_registry.get(widget_id)
+        return widget
 
     def _register_widget_tree(self, widget):
         """Recursively register all widgets in the tree."""
@@ -730,9 +743,25 @@ class YDialogWeb(YSingleChildContainerWidget):
             classes += f" mana-dialog-{color_class}"
 
         content = self.child().render() if self.child() else ""
-        return PageBuilder.build(
+        html = PageBuilder.build(
             _id=self.id(),
             title=escape_html(title),
             classes=classes,
             content=content,
         )
+        if not self._visible:
+            html = html.replace(f'<div id="{self.id()}"', f'<div hidden id="{self.id()}"', 1)
+        return html
+
+    def setVisible(self, visible: bool = True):
+        """Show or hide the dialog (main page content, or a popup overlay)."""
+        self._visible = bool(visible)
+        if not self._is_open:
+            return
+        target = (f"#{self.id()}" if self._dialog_type == YDialogType.YMainDialog
+                  else f"#{self._modal_element_id()}")
+        self._broadcast({
+            "type": "update",
+            "updates": [{"action": "attr", "target": target,
+                         "attr": "hidden", "value": None if self._visible else True}],
+        })

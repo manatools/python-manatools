@@ -2,8 +2,8 @@
 Web backend Alignment implementation.
 """
 
-from ...yui_common import YSingleChildContainerWidget, YAlignmentType
-from .commonweb import widget_attrs
+from ...yui_common import YSingleChildContainerWidget, YAlignmentType, YUIDimension
+from .commonweb import widget_attrs, schedule_update_if_open
 
 
 class YAlignmentWeb(YSingleChildContainerWidget):
@@ -18,6 +18,10 @@ class YAlignmentWeb(YSingleChildContainerWidget):
     
     def widgetClass(self):
         return "YAlignment"
+
+    def addChild(self, child):
+        super().addChild(child)
+        schedule_update_if_open(self)
     
     def setMinWidth(self, min_width: int):
         self._min_width = max(0, int(min_width))
@@ -28,6 +32,33 @@ class YAlignmentWeb(YSingleChildContainerWidget):
     def setMinSize(self, min_width: int, min_height: int):
         self.setMinWidth(min_width)
         self.setMinHeight(min_height)
+
+    def setAlignment(self, horAlign=YAlignmentType.YAlignUnchanged,
+                     vertAlign=YAlignmentType.YAlignUnchanged):
+        self._hor_align = horAlign
+        self._vert_align = vertAlign
+        self._notify_update()
+
+    def stretchable(self, dim):
+        """Same rule as the Qt backend: centering or end alignment needs the
+        free space, otherwise follow the child's stretch or weight."""
+        if dim == YUIDimension.YD_HORIZ and self._hor_align in (
+                YAlignmentType.YAlignEnd, YAlignmentType.YAlignCenter):
+            return True
+        if dim == YUIDimension.YD_VERT and self._vert_align == YAlignmentType.YAlignCenter:
+            return True
+        child = self.child()
+        if child is None:
+            return False
+        try:
+            return bool(child.stretchable(dim) or child.weight(dim))
+        except Exception:
+            return False
+
+    def _notify_update(self):
+        dialog = self.findDialog()
+        if dialog and hasattr(dialog, '_schedule_update'):
+            dialog._schedule_update(self)
     
     def render(self) -> str:
         # Map alignment to CSS

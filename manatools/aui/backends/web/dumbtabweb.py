@@ -11,8 +11,9 @@ Tab switching is driven server-side: clicking a tab sends a
 SelectionChanged event; the application (e.g. via YReplacePoint) is
 responsible for updating the content area.
 """
-from ...yui_common import YSelectionWidget, YItem, YWidgetEvent, YEventReason
-from .commonweb import widget_attrs, escape_html
+from ...yui_common import (YSelectionWidget, YItem, YWidgetEvent, YEventReason,
+                           YUIInvalidWidgetException)
+from .commonweb import widget_attrs, escape_html, schedule_update_if_open
 
 
 class YDumbTabWeb(YSelectionWidget):
@@ -23,6 +24,17 @@ class YDumbTabWeb(YSelectionWidget):
 
     def widgetClass(self):
         return "YDumbTab"
+
+    def addChild(self, child):
+        """Set the content child; like the other backends, only one is allowed."""
+        if self.hasChildren():
+            raise YUIInvalidWidgetException("YDumbTab can only have one child")
+        super().addChild(child)
+        schedule_update_if_open(self)
+
+    def deleteAllItems(self):
+        super().deleteAllItems()
+        self._notify_update()
 
     # ------------------------------------------------------------------
     # yui API

@@ -268,6 +268,14 @@
         if (app) attachEventListenersToElement(app);
     }
 
+    // Widgets rendered with data-autoscroll (YRichText.setAutoScrollDown) stay
+    // scrolled to the bottom whenever they are rendered or updated.
+    function scrollAutoScrollViews(root) {
+        const views = Array.from(root.querySelectorAll('[data-autoscroll]'));
+        if (root.matches && root.matches('[data-autoscroll]')) views.unshift(root);
+        views.forEach(el => { el.scrollTop = el.scrollHeight; });
+    }
+
     function attachEventListenersToElement(root) {
         // Include root itself when it matches the selector (e.g. when a button
         // or input is the element that was just replaced in the DOM — it is not
@@ -280,6 +288,8 @@
                 el.addEventListener(evt, fn);
             });
         };
+
+        scrollAutoScrollViews(root);
 
         on('.mana-ypushbutton', 'click', handleButtonClick);
 
