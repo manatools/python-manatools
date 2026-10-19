@@ -12,6 +12,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import curses
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 _mod_logger = logging.getLogger("manatools.aui.curses.multiline.module")
 if not logging.getLogger().handlers:
@@ -45,6 +46,10 @@ class YMultiLineEditCurses(YWidget):
 
     def widgetClass(self):
         return "YMultiLineEdit"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def minWidth(self):
         """Return minimal preferred width in columns when not horizontally stretchable.

@@ -12,6 +12,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 import curses
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 import gettext
 _ = gettext.gettext
 
@@ -44,6 +45,10 @@ class YIntFieldCurses(YWidget):
 
     def widgetClass(self):
         return "YIntField"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def value(self):
         return int(self._value)

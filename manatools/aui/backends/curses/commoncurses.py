@@ -144,7 +144,8 @@ def split_mnemonic(label: Optional[str]) -> Tuple[Optional[str], Optional[int], 
     return mn, idx, ''.join(out)
  
 
-__all__ = ["pixels_to_chars", "_curses_recursive_min_height", "_curses_recursive_min_width"]
+__all__ = ["pixels_to_chars", "_curses_recursive_min_height", "_curses_recursive_min_width",
+           "_curses_help_text_changed"]
 
 # Module-level logger for common curses helpers
 _mod_logger = logging.getLogger("manatools.aui.curses.common")
@@ -302,3 +303,29 @@ def _curses_recursive_min_width(widget):
             return max(1, int(getattr(widget, "_width", 10)))
         except Exception:
             return 10
+
+
+def _curses_help_text_changed(widget):
+    """Reflect a setHelpText() call on screen.
+
+    Help text is shown on demand: F1 opens an overlay with the focused
+    widget's helpText(), and the footer advertises F1 only when there is
+    something to show.  Update an overlay already open for *widget* and ask
+    its dialog to redraw so the footer hint follows the new text.
+    """
+    try:
+        dialog = widget.findDialog()
+        if dialog is None:
+            return
+        if getattr(dialog, "_focused_widget", None) is widget and \
+                getattr(dialog, "_help_overlay_text", None) is not None:
+            text = widget.helpText()
+            if text:
+                dialog._help_overlay_text = str(text)
+            else:
+                dialog._help_overlay_text = None
+                dialog._help_overlay_until = 0.0
+                dialog._help_overlay_pos = None
+        dialog._needs_redraw = True
+    except Exception:
+        _mod_logger.debug("_curses_help_text_changed failed", exc_info=True)

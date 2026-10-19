@@ -16,6 +16,7 @@ import os
 import time
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 # Module-level logger for progressbar curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.progressbar.module")
@@ -46,6 +47,10 @@ class YProgressBarCurses(YWidget):
 
     def widgetClass(self):
         return "YProgressBar"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def label(self):
         return self._label

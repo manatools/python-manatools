@@ -13,6 +13,7 @@ import curses
 import curses.ascii
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 import gettext
 _ = gettext.gettext
 
@@ -80,6 +81,10 @@ class YTableCurses(YSelectionWidget):
 
     def widgetClass(self):
         return "YTable"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def _first_checkbox_col(self):
         try:

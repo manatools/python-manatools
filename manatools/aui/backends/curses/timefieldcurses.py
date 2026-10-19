@@ -13,6 +13,7 @@ import curses
 import curses.ascii
 import logging
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 
 class YTimeFieldCurses(YWidget):
@@ -39,6 +40,10 @@ class YTimeFieldCurses(YWidget):
 
     def widgetClass(self):
         return "YTimeField"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
 
     def value(self) -> str:
         return f"{self._h:02d}:{self._m:02d}:{self._s:02d}"

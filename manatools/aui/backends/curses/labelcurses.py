@@ -17,6 +17,7 @@ import time
 import logging
 import textwrap
 from ...yui_common import *
+from .commoncurses import _curses_help_text_changed
 
 # Module-level logger for label curses backend
 _mod_logger = logging.getLogger("manatools.aui.curses.label.module")
@@ -48,6 +49,10 @@ class YLabelCurses(YWidget):
     
     def widgetClass(self):
         return "YLabel"
+
+    def setHelpText(self, help_text: str):
+        super().setHelpText(help_text)
+        _curses_help_text_changed(self)
     
     def text(self):
         return self._text
