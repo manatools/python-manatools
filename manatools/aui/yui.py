@@ -24,6 +24,9 @@ class YUI:
 
         Priority:
         1. MUI_BACKEND environment variable (user override).
+        1b. Windows: there is no XDG/X11/Wayland environment to inspect and a
+           desktop is always present, so try Qt, then GTK4, then NCurses
+           (windows-curses).
         2. XDG_CURRENT_DESKTOP present → desktop session:
            - Known GTK desktops  → try GTK4, warn + try Qt if unavailable.
            - Everything else     → try Qt, warn + try GTK4 if unavailable.
@@ -79,6 +82,22 @@ class YUI:
             return Backend.NCURSES
         if backend_env == 'web':
             return Backend.WEB
+
+        # ── 1b. Windows — none of the Linux session probes below apply ─────
+        if sys.platform == 'win32':
+            if _try_qt():
+                return Backend.QT
+            if _try_gtk():
+                return Backend.GTK
+            _log.warning(
+                "Neither PySide6 (Qt) nor GTK4 is available — falling back to NCurses."
+            )
+            if _try_ncurses():
+                return Backend.NCURSES
+            raise RuntimeError(
+                "No UI backend available: Qt and GTK4 are both missing, "
+                "and curses is not installed (pip install windows-curses)."
+            )
 
         # ── 2. Desktop session present ─────────────────────────────────────
         xdg = os.environ.get('XDG_CURRENT_DESKTOP', '')
