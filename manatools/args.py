@@ -10,6 +10,7 @@ Author:  Papoteur
 import argparse
 import gettext
 import os
+import sys
 
 class AppArgs :
     '''
@@ -21,7 +22,10 @@ class AppArgs :
 
         # We need to call this as early as possible because
         # command-line help strings are translated
-        gettext.install(command, localedir='/usr/share/locale', names=('ngettext',))
+        # Windows has no /usr/share/locale; None selects gettext's default,
+        # <sys.base_prefix>/share/locale
+        localedir = None if sys.platform == 'win32' else '/usr/share/locale'
+        gettext.install(command, localedir=localedir, names=('ngettext',))
         self.parser = argparse.ArgumentParser(prog=command, usage='%(prog)s [options]')
         ui_select_parser = self.parser.add_mutually_exclusive_group()
         # force manatools aui backend
