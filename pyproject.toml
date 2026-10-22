@@ -63,7 +63,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.9"
-dbus-python = "*"
+dbus-python = { version = "*", markers = "sys_platform == 'linux'" }
+# Python on Windows ships no curses module; the NCurses backend needs this port
+windows-curses = { version = "*", markers = "sys_platform == 'win32'" }
 python-gettext = "*"
 PyYAML = "*"
 

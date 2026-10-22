@@ -13,8 +13,13 @@ Author:  Angelo Naselli <anaselli@linux.it>
 @package manatools.services
 '''
 
-import dbus
 import os.path
+
+try:
+    import dbus
+except ImportError:
+    # dbus-python is installed on Linux only; systemd has no Windows equivalent
+    dbus = None
 
 class Services() :
     '''
@@ -24,6 +29,9 @@ class Services() :
         '''
         Services constructor
         '''
+        if dbus is None:
+            raise RuntimeError(
+                "manatools.services needs dbus-python and systemd (Linux only)")
         self._bus = dbus.SystemBus()
         self._systemd = self._bus.get_object('org.freedesktop.systemd1',
                                  '/org/freedesktop/systemd1')
