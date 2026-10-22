@@ -26,6 +26,8 @@ from typing import Optional, TYPE_CHECKING, Callable
 from urllib.parse import urlparse, parse_qs
 from importlib.resources import files
 
+from ...yui_common import icon_theme_dirs
+
 if TYPE_CHECKING:
     from .dialogweb import YDialogWeb
 
@@ -312,13 +314,7 @@ class PageBuilder:
 
 _ICON_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
 
-_ICON_SEARCH_DIRS = [
-    "/usr/share/icons/hicolor",
-    "/usr/share/icons/breeze",
-    "/usr/share/icons/Adwaita",
-    "/usr/share/icons/breeze-dark",
-    "/usr/local/share/icons/hicolor",
-]
+_ICON_THEMES = ["hicolor", "breeze", "Adwaita", "breeze-dark"]
 
 _ICON_SIZES = ["22x22", "24x24", "22", "24", "scalable", "16x16", "32x32", "48x48"]
 _ICON_CATEGORIES = ["actions", "apps", "emblems", "status", "places", "mimetypes"]
@@ -328,12 +324,15 @@ _ICON_EXTENSIONS = [(".svg", "image/svg+xml"), (".png", "image/png")]
 def _find_icon_file(icon_name: str) -> Optional[tuple]:
     """Return (filepath, mimetype) for a named XDG icon, or None if not found.
 
-    Searches standard system icon theme directories for the given icon name.
+    Searches the icon theme roots from :func:`icon_theme_dirs` for the given
+    icon name.
     The icon_name must contain only [a-zA-Z0-9_-] characters (validated by caller).
     Prefers SVG (scalable) over PNG; prefers 22px over other sizes.
     """
-    # Structured search: known roots × sizes × categories
-    for root in _ICON_SEARCH_DIRS:
+    roots = icon_theme_dirs()
+
+    # Structured search: known themes × sizes × categories
+    for root in (os.path.join(base, theme) for base in roots for theme in _ICON_THEMES):
         if not os.path.isdir(root):
             continue
         for size in _ICON_SIZES:
@@ -349,10 +348,7 @@ def _find_icon_file(icon_name: str) -> Optional[tuple]:
                         return path, mime
 
     # Broader glob over all installed icon themes
-    for root in ["/usr/share/icons", "/usr/local/share/icons",
-                 os.path.expanduser("~/.local/share/icons")]:
-        if not os.path.isdir(root):
-            continue
+    for root in roots:
         for ext, mime in _ICON_EXTENSIONS:
             matches = _glob.glob(
                 os.path.join(root, "**", icon_name + ext), recursive=True

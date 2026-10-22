@@ -28,6 +28,18 @@ class YUIGtk:
             self._logger = logging.getLogger(f"manatools.aui.gtk.{self.__class__.__name__}")
         except Exception:
             self._logger = logging.getLogger("manatools.aui.gtk.YUIGtk")
+        # GTK already searches its own prefix; add MANATOOLS_ICON_PATH and, on
+        # Windows, the Python prefix when GTK is installed elsewhere.
+        try:
+            display = Gdk.Display.get_default()
+            if display is not None:
+                theme = Gtk.IconTheme.get_for_display(display)
+                current = theme.get_search_path() or []
+                for d in icon_theme_dirs():
+                    if d not in current:
+                        theme.add_search_path(d)
+        except Exception:
+            self._logger.debug("icon theme search path setup failed", exc_info=True)
     
     def widgetFactory(self):
         return self._widget_factory

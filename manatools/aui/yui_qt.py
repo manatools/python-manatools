@@ -8,7 +8,7 @@ import os
 import logging
 from .yui_common import *
 from .backends.qt import *
-from .backends.qt.commonqt import _resolve_icon
+from .backends.qt.commonqt import _resolve_icon, _setup_icon_theme
 
 class YUIQt:
     def __init__(self):
@@ -18,6 +18,7 @@ class YUIQt:
         self._qapp = QtWidgets.QApplication.instance()
         if not self._qapp:
             self._qapp = QtWidgets.QApplication(sys.argv)
+        _setup_icon_theme()
         self._application = YApplicationQt()
         # logger for the backend manager
         try:

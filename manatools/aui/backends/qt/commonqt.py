@@ -11,11 +11,29 @@ Author:  Angelo Naselli <anaselli@linux.it>
 '''
 from PySide6 import QtWidgets, QtGui
 import os
+import sys
 import logging
 from ...yui_common import *
 
 
-__all__ = ["_resolve_icon"]
+__all__ = ["_resolve_icon", "_setup_icon_theme"]
+
+def _setup_icon_theme():
+    """Make the icon themes under icon_theme_dirs() visible to QIcon.fromTheme.
+
+    Windows has no system icon theme, so there the first of breeze, Adwaita
+    and hicolor found in the search paths is selected.
+    """
+    paths = list(QtGui.QIcon.themeSearchPaths())
+    extra = [d for d in icon_theme_dirs() if d not in paths]
+    if extra:
+        paths += extra
+        QtGui.QIcon.setThemeSearchPaths(paths)
+    if sys.platform == 'win32':
+        for theme in ('breeze', 'Adwaita', 'hicolor'):
+            if any(os.path.isfile(os.path.join(d, theme, 'index.theme')) for d in paths):
+                QtGui.QIcon.setThemeName(theme)
+                break
 
 def _resolve_icon(icon_name):
     """Resolve an icon name to a QtGui.QIcon or None.

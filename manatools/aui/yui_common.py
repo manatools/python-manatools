@@ -84,6 +84,27 @@ def documents_dir() -> str:
     return os.path.expanduser("~")
 
 
+def icon_theme_dirs():
+    """Return the existing icon theme roots (directories holding hicolor/, …).
+
+    ``MANATOOLS_ICON_PATH`` (``os.pathsep``-separated) comes first, so users
+    can point at an icon theme of their choice.  Windows has no system icon
+    themes; there ``<prefix>/share/icons`` is searched, which is where MSYS2
+    and conda install them.  Elsewhere the XDG system and user roots are used.
+    """
+    dirs = [d for d in os.environ.get("MANATOOLS_ICON_PATH", "").split(os.pathsep) if d]
+    if sys.platform == "win32":
+        dirs += [os.path.join(p, "share", "icons") for p in (sys.prefix, sys.base_prefix)]
+    else:
+        dirs += ["/usr/share/icons", "/usr/local/share/icons",
+                 os.path.expanduser("~/.local/share/icons")]
+    found = []
+    for d in dirs:
+        if d not in found and os.path.isdir(d):
+            found.append(d)
+    return found
+
+
 def list_entries(current_dir: str, select_file: bool, patterns):
     """List *current_dir* for a file chooser.
 
