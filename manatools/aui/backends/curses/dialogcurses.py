@@ -29,6 +29,12 @@ if not logging.getLogger().handlers:
     _mod_logger.addHandler(_h)
     _mod_logger.setLevel(logging.INFO)
 
+# Enter arrives as '\r' or KEY_ENTER on some terminals and as PADENTER from
+# the numeric keypad under PDCurses (windows-curses); widgets only handle '\n'.
+_ENTER_KEYS = {ord('\r'), curses.KEY_ENTER}
+if hasattr(curses, 'PADENTER'):
+    _ENTER_KEYS.add(curses.PADENTER)
+
 class YDialogCurses(YSingleChildContainerWidget):
     """Ncurses dialog container with focus, help, and default button support."""
     _open_dialogs = []
@@ -621,6 +627,9 @@ class YDialogCurses(YSingleChildContainerWidget):
                         break
                     time.sleep(0.01)
                     continue
+
+                if key in _ENTER_KEYS:
+                    key = ord('\n')
                 
                 #any key received, clear help overlay if active
                 self._help_overlay_text = None
@@ -631,6 +640,13 @@ class YDialogCurses(YSingleChildContainerWidget):
                     self._post_event(YCancelEvent())
                     break
                 elif key == curses.KEY_RESIZE:
+                    # PDCurses (Windows) only picks up the new console size
+                    # after resize_term(0, 0)
+                    if sys.platform == 'win32':
+                        try:
+                            curses.resize_term(0, 0)
+                        except Exception:
+                            pass
                     # Debounce resize; do not redraw immediately to avoid flicker
                     try:
                         new_h, new_w = ui._stdscr.getmaxyx()

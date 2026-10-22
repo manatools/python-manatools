@@ -241,6 +241,14 @@ class YApplicationCurses:
     def setApplicationTitle(self, title):
         """Set the application title."""
         self._application_title = title
+        if sys.platform == 'win32':
+            # The legacy Windows console prints OSC sequences verbatim
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetConsoleTitleW(str(title))
+            except Exception:
+                pass
+            return
         # Update terminal/window title for xterm-like terminals when stdout is a TTY
         escape_sequences = [
             f"\033]0;{title}\007",   # Standard
