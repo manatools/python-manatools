@@ -29,7 +29,7 @@ from ... import yui as yui_mod
 import os
 import logging
 import signal
-import fcntl
+import socket
 
 class YDialogQt(YSingleChildContainerWidget):
     """Qt6 main window wrapper that manages dialog state and default buttons."""
@@ -568,22 +568,19 @@ class YDialogQt(YSingleChildContainerWidget):
     def _setup_sigint_notifier(self, loop):
         """Install a wakeup fd and QSocketNotifier to gracefully quit on Ctrl-C."""
         try:
-            # create non-blocking pipe
-            rfd, wfd = os.pipe()
-            for fd in (rfd, wfd):
-                try:
-                    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
-                    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-                except Exception:
-                    pass
+            # non-blocking socket pair rather than a pipe: on Windows both
+            # signal.set_wakeup_fd and QSocketNotifier only accept sockets
+            rsock, wsock = socket.socketpair()
+            rsock.setblocking(False)
+            wsock.setblocking(False)
             prev = None
             try:
                 # store previous wakeup fd to restore later
-                prev = signal.set_wakeup_fd(wfd)
+                prev = signal.set_wakeup_fd(wsock.fileno())
             except Exception:
                 prev = None
-            self._sigint_r = rfd
-            self._sigint_w = wfd
+            self._sigint_r = rsock
+            self._sigint_w = wsock
             self._prev_wakeup_fd = prev
             # install a noop SIGINT handler to prevent KeyboardInterrupt
             try:
@@ -598,13 +595,14 @@ class YDialogQt(YSingleChildContainerWidget):
             except Exception:
                 pass
             # notifier to watch read end
-            notifier = QtCore.QSocketNotifier(self._sigint_r, QtCore.QSocketNotifier.Read)
+            notifier = QtCore.QSocketNotifier(self._sigint_r.fileno(), QtCore.QSocketNotifier.Read)
             def _on_readable():
                 try:
                     # drain bytes written by signal module
                     while True:
                         try:
-                            os.read(self._sigint_r, 1024)
+                            if not self._sigint_r.recv(1024):
+                                break
                         except BlockingIOError:
                             break
                         except KeyboardInterrupt:
@@ -657,13 +655,13 @@ class YDialogQt(YSingleChildContainerWidget):
         try:
             if self._sigint_r is not None:
                 try:
-                    os.close(self._sigint_r)
+                    self._sigint_r.close()
                 except Exception:
                     pass
                 self._sigint_r = None
             if self._sigint_w is not None:
                 try:
-                    os.close(self._sigint_w)
+                    self._sigint_w.close()
                 except Exception:
                     pass
                 self._sigint_w = None
