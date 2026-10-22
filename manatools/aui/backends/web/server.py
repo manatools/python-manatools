@@ -341,6 +341,10 @@ def _find_icon_file(icon_name: str) -> Optional[tuple]:
                     path = os.path.join(root, size, category, icon_name + ext)
                     if os.path.isfile(path):
                         return path, mime
+                    # Breeze nests the other way round: actions/22/
+                    path = os.path.join(root, category, size, icon_name + ext)
+                    if os.path.isfile(path):
+                        return path, mime
                 # Also try "scalable" subfolder under size (some themes)
                 for ext, mime in _ICON_EXTENSIONS:
                     path = os.path.join(root, "scalable", category, icon_name + ext)
