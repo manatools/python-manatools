@@ -23,9 +23,9 @@ class AppConfig() :
     which is searched in these places and order:
     1. from environment variable $'AppNme'
     2. current directory
-    3. /etc/'AppName'/
+    3. /etc/'AppName'/ (%PROGRAMDATA%\\'AppName'\\ on Windows)
     Application user preferences are loaded and saved into
-    ~/.config/'appName'.yaml
+    ~/.config/'appName'.yaml (%APPDATA%\\'appName'\\'appName'.yaml on Windows)
     '''
     def __init__(self, appName) :
         self._systemSettings = None
@@ -33,8 +33,12 @@ class AppConfig() :
         self.project    = appName
         self.variable   = appName.upper() + "_CONF"
         self._fileName   = appName + ".yaml"
-        self.systemDir  = "/etc/" + appName
-        pathdir = os.path.expanduser("~") + "/.config/"
+        if sys.platform == 'win32':
+            self.systemDir = os.path.join(os.environ.get('PROGRAMDATA') or r'C:\ProgramData', appName)
+            pathdir = os.path.join(os.environ.get('APPDATA') or os.path.expanduser("~"), appName)
+        else:
+            self.systemDir  = "/etc/" + appName
+            pathdir = os.path.expanduser("~") + "/.config/"
         self._userPrfesPathName  = os.path.join(pathdir, self._fileName)
 
     def _load(self) :
@@ -104,6 +108,7 @@ class AppConfig() :
         '''
         write user preferences into the related configuration file
         '''
+        os.makedirs(os.path.dirname(self._userPrfesPathName), exist_ok=True)
         with open(self._userPrfesPathName, 'w') as outfile:
             yaml.dump(self._userPrefs, outfile, default_flow_style=False)
 

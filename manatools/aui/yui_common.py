@@ -7,6 +7,7 @@ import fnmatch
 import os
 import shutil
 import subprocess
+import sys
 import uuid
 from typing import Optional
 
@@ -34,9 +35,22 @@ def documents_dir() -> str:
     The name is locale-dependent (Documents, Documenti, Dokumente, …), so it
     must be resolved at runtime rather than hardcoded.  ``xdg-user-dir`` is
     tried first; if the binary is missing, ~/.config/user-dirs.dirs is parsed
-    directly.  Home is returned whenever the lookup fails or names a directory
-    that does not exist.
+    directly.  On Windows the shell is asked instead, which also follows a
+    Documents folder redirected to OneDrive.  Home is returned whenever the
+    lookup fails or names a directory that does not exist.
     """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(260)
+            # CSIDL_PERSONAL (5) is the Documents folder
+            if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0 \
+                    and os.path.isdir(buf.value):
+                return buf.value
+        except Exception:
+            pass
+        return os.path.expanduser("~")
+
     try:
         xdg = shutil.which("xdg-user-dir")
         if xdg:
