@@ -24,7 +24,7 @@ ngettext = t.ngettext
 logger = logging.getLogger("manatools.ui.helpdialog")
 
 class HelpDialog(basedialog.BaseDialog):
-  """Simple rich-text help browser dialog with internal navigation."""
+  """Help browser dialog showing sanitized HTML with internal navigation."""
   def __init__(self, info, title=_("Help dialog"), icon="", minWidth=320, minHeight=200):
     '''
     HelpDialog constructor
@@ -60,8 +60,6 @@ class HelpDialog(basedialog.BaseDialog):
     '''
     layout implementation called in base class to setup UI
     '''
-    # URL events may be sent as MenuEvent by backends that support it
-    self.eventManager.addMenuEvent(None, self.onURLEvent, False)
     content_parent = layout
     if self._minWidthHint and self._minHeightHint:
       try:
@@ -75,12 +73,15 @@ class HelpDialog(basedialog.BaseDialog):
       except Exception as exc:
         content_parent = layout
         logger.debug("Unable to apply min-size hint: %s", exc)    
-    self.text = self.factory.createRichText(content_parent, "", False)
+    self.text = self.factory.createHtmlView(content_parent)
+    self.text.setNotify(True)
     self.text.setStretchable(yui.YUIDimension.YD_HORIZ, True)
     self.text.setStretchable(yui.YUIDimension.YD_VERT, True)
     self.text.setWeight(yui.YUIDimension.YD_HORIZ, 1)
     self.text.setWeight(yui.YUIDimension.YD_VERT, 1)
     self.text.setValue(self.info.home())
+    # Links never navigate: activation posts a WidgetEvent on the view
+    self.eventManager.addWidgetEvent(self.text, self.onURLEvent)
     logger.debug("Initial help content loaded")
 
     button_row = self.factory.createHBox(content_parent)
@@ -97,9 +98,9 @@ class HelpDialog(basedialog.BaseDialog):
     logger.debug("Quit event triggered")
     self.ExitLoop()
 
-  def onURLEvent(self, mEvent):
-    """Handle rich text URL activations and navigate or open links."""
-    url = mEvent.id()
+  def onURLEvent(self, wEvent):
+    """Handle help link activations and navigate or open links."""
+    url = self.text.lastActivatedUrl()
     if url:
       text = self.info.show(url)
       if text:

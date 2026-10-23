@@ -13,11 +13,10 @@ Author:  Angelo Naselli <anaselli@linux.it>
 
 import os
 import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import manatools.basehelpinfo as helpdata
 import manatools.ui.helpdialog as helpdialog
 
-import yui
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import logging
 
 logger = logging.getLogger("manatools.test.helpdialog")
@@ -72,9 +71,9 @@ class HelpInfo(helpdata.HelpInfoBase):
         "<p>This is a paragraph with <b>bold</b>, <i>italic</i>, and <u>underlined</u> text.</p>"
         "<p>Click the <a href='https://github.com/manatools/'>Manatools</a> or <a href='home'>go home</a> link to emit an activation event.</p>"
         "<p>Colored text:</p>"
-        "<ul><li><span foreground=\"red\"><a href='red'>Red element</a></span></li>"
-        "<li><span foreground=\"green\"><a href='green'>Green element</a></span></li>"
-        "<li><span foreground=\"purple\"><a href='purple'>Purple element</a></span></li></ul>"
+        "<ul><li><span style=\"color:red\"><a href='red'>Red element</a></span></li>"
+        "<li><span style=\"color:green\"><a href='green'>Green element</a></span></li>"
+        "<li><span style=\"color:purple\"><a href='purple'>Purple element</a></span></li></ul>"
         "<p>Lists:</p>"
         "<ul><li>Alpha</li><li>Beta</li><li>Gamma</li></ul>"
     )
