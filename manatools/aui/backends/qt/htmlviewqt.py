@@ -135,7 +135,7 @@ class YHtmlViewQt(YHtmlViewBase):
         Profile = QtWebEngineCore.QWebEngineProfile
 
         view = QtWebEngineWidgets.QWebEngineView()
-        profile = Profile(view)  # no storage name: off-the-record
+        profile = Profile()  # no storage name: off-the-record
         for name, value in (("setHttpCacheType", getattr(Profile.HttpCacheType, "NoCache", None)),
                             ("setPersistentCookiesPolicy",
                              getattr(Profile.PersistentCookiesPolicy, "NoPersistentCookies", None))):
@@ -148,6 +148,9 @@ class YHtmlViewQt(YHtmlViewBase):
         profile.setUrlRequestInterceptor(interceptor)
 
         page = Page(profile, self, view)
+        # Qt deletes children in insertion order and a profile must outlive
+        # its pages: parent the profile only now, after the page.
+        profile.setParent(view)
         settings = page.settings()
         for attr, on in (("JavascriptEnabled", False),
                          ("JavascriptCanOpenWindows", False),
