@@ -12,7 +12,7 @@ Author:  Angelo Naselli <anaselli@linux.it>
 from PySide6 import QtWidgets, QtGui
 import logging
 from ...yui_common import *
-from .commonqt import _resolve_icon
+from .commonqt import _resolve_icon, _install_context_menu_filter
 
 class YTreeQt(YSelectionWidget):
     """
@@ -68,6 +68,7 @@ class YTreeQt(YSelectionWidget):
         tree.setSelectionMode(mode)
         tree.itemSelectionChanged.connect(self._on_selection_changed)
         tree.itemActivated.connect(self._on_item_activated)
+        _install_context_menu_filter(self, tree)
 
         layout.addWidget(tree)
         self._backend_widget = container
