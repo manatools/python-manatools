@@ -14,7 +14,7 @@ import logging
 import os
 from typing import Optional
 from ...yui_common import *
-from .commonqt import _resolve_icon
+from .commonqt import _resolve_icon, _install_context_menu_filter
 
 class YSelectionBoxQt(YSelectionWidget):
     def __init__(self, parent=None, label="", multi_selection: Optional[bool] = False):
@@ -185,6 +185,7 @@ class YSelectionBoxQt(YSelectionWidget):
             pass
 
         list_widget.itemSelectionChanged.connect(self._on_selection_changed)
+        _install_context_menu_filter(self, list_widget)
         layout.addWidget(list_widget)
         
         self._backend_widget = container

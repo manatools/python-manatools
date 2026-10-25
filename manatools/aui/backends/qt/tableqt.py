@@ -22,6 +22,7 @@ Sorting is handled inside _YTableModel.sort(), triggered by a header click.
 from PySide6 import QtWidgets, QtCore, QtGui
 import logging
 from ...yui_common import *
+from .commonqt import _install_context_menu_filter
 
 
 class _YTableModel(QtCore.QAbstractTableModel):
@@ -481,6 +482,7 @@ class YTableQt(YSelectionWidget):
             view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         except Exception as exc:
             self._logger.debug("_create_backend_widget: selectionChanged connect failed: %s", exc)
+        _install_context_menu_filter(self, view)
 
         # Apply initial state.
         try:

@@ -8,7 +8,7 @@ import os
 import logging
 from .yui_common import *
 from .backends.qt import *
-from .backends.qt.commonqt import _resolve_icon
+from .backends.qt.commonqt import _resolve_icon, _open_context_menu
 
 class YUIQt:
     def __init__(self):
@@ -268,8 +268,10 @@ class YApplicationQt:
         arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
         ContextMenuCancelled. Returns False if no menu was shown.
         """
-        # Not implemented on this backend yet
-        return False
+        dlg = YDialogQt.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _open_context_menu(dlg, items)
 
     def busyCursor(self):
         """Set busy cursor (Qt backend)."""

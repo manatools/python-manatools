@@ -728,6 +728,19 @@ def context_menu_items(items) -> list:
     except TypeError:
         return []
 
+def context_menu_item_path(item, top_items) -> str:
+    """Return the '/'-joined labels from the top-level entry down to item.
+
+    Used as YMenuEvent.id() for context menu picks; equals the label for
+    top-level entries.
+    """
+    labels = [item.label()]
+    cur = item
+    while not any(cur is top for top in top_items) and cur._parent is not None:
+        cur = cur._parent
+        labels.append(cur.label())
+    return "/".join(reversed(labels))
+
 def has_selectable_item(items) -> bool:
     """Return True if any item, at any depth, can be activated."""
     for it in items:
