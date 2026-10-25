@@ -202,6 +202,19 @@ def merge_inline_style(html: str, style: str) -> str:
     return html[:match.start()] + new_tag + html[match.end():]
 
 
+def schedule_update_if_open(widget):
+    """Re-render *widget* if its dialog is already showing.
+
+    Containers call this from addChild(): children added after open() must
+    reach the browser, while the many addChild() calls made while a dialog
+    is being built must not each schedule a render.
+    """
+    dialog = widget.findDialog()
+    if dialog is not None and getattr(dialog, "isOpen", lambda: False)() \
+            and hasattr(dialog, "_schedule_update"):
+        dialog._schedule_update(widget)
+
+
 def build_css_classes(*classes: str) -> str:
     """Build a CSS class string from multiple class names, filtering empty."""
     return " ".join(c for c in classes if c)

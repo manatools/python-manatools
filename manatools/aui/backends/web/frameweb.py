@@ -2,8 +2,9 @@
 Web backend Frame implementation.
 """
 
-from ...yui_common import YSingleChildContainerWidget
-from .commonweb import widget_attrs, escape_html, format_label_with_shortcut
+from ...yui_common import (YSingleChildContainerWidget, YProperty, YPropertySet,
+                           YPropertyType)
+from .commonweb import widget_attrs, escape_html, format_label_with_shortcut, schedule_update_if_open
 
 
 class YFrameWeb(YSingleChildContainerWidget):
@@ -15,6 +16,10 @@ class YFrameWeb(YSingleChildContainerWidget):
     
     def widgetClass(self):
         return "YFrame"
+
+    def addChild(self, child):
+        super().addChild(child)
+        schedule_update_if_open(self)
     
     def label(self) -> str:
         return self._label
@@ -45,6 +50,21 @@ class YFrameWeb(YSingleChildContainerWidget):
         if propertyName == "label":
             return self._label
         return None
+
+    def propertySet(self):
+        props = YPropertySet()
+        props.add(YProperty("label", YPropertyType.YStringProperty))
+        return props
+
+    def stretchable(self, dim):
+        """Stretch when the child stretches or carries a weight in *dim*."""
+        child = self.child()
+        if child is None:
+            return False
+        try:
+            return bool(child.stretchable(dim) or child.weight(dim))
+        except Exception:
+            return False
 
     def render(self) -> str:
         attrs = widget_attrs(

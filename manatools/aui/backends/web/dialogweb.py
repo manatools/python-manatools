@@ -6,8 +6,10 @@ Author: Matteo Pasotti <xquiet@coriolite.com>
 
 License: LGPLv2+
 
-YDialogWeb is the main container for web-based UI. It manages an HTTP server,
-WebSocket connections, and the event loop for user interaction.
+YDialogWeb is the main container for web-based UI.  Every dialog runs on the
+one process-wide HTTP/WebSocket server (see server.get_server()), so the URL
+the browser was given stays valid while dialogs come and go; each dialog owns
+its event queue and the event loop for user interaction.
 """
 
 import queue
@@ -34,7 +36,7 @@ from ...yui_common import (
 from .commonweb import escape_html, escape_attr
 
 if TYPE_CHECKING:
-    from .server import WebSocketHandler, WebServer
+    from .server import WebServer
 
 logger = logging.getLogger("manatools.aui.web.YDialogWeb")
 
@@ -93,6 +95,8 @@ class YDialogWeb(YSingleChildContainerWidget):
 
     _open_dialogs: List["YDialogWeb"] = []
     _open_dialogs_lock: threading.RLock = threading.RLock()
+    # Bumped on every open(); orders main dialogs by when they were opened.
+    _open_counter = 0
 
     # Polling slice used by waitForEvent() so Ctrl-C stays deliverable.
     _WAIT_SLICE = 0.2
@@ -103,10 +107,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         self._color_mode = color_mode
         self._is_open = False
         self._event_queue: queue.Queue = queue.Queue()
-        self._server: Optional["WebServer"] = None
-        self._server_thread: Optional[threading.Thread] = None
-        self._websockets: List["WebSocketHandler"] = []
-        self._websocket_lock = threading.Lock()
+        self._server: Optional["WebServer"] = None  # the shared server, once open
+        self._open_seq = 0
         self._default_button = None
         self._widget_registry: dict = {}  # id -> widget mapping
         self._pending_updates: dict = {}  # widget_id -> threading.Timer
@@ -134,6 +136,20 @@ class YDialogWeb(YSingleChildContainerWidget):
         """Same as currentDialog."""
         return YDialogWeb.currentDialog(doThrow=doThrow)
 
+    @staticmethod
+    def _root_dialog() -> Optional["YDialogWeb"]:
+        """Return the most recently opened main dialog still open, or None.
+
+        It is the dialog the browser page shows; popups sit over it as modal
+        overlays.
+        """
+        with YDialogWeb._open_dialogs_lock:
+            mains = [
+                d for d in YDialogWeb._open_dialogs
+                if d._is_open and d._dialog_type == YDialogType.YMainDialog
+            ]
+        return max(mains, key=lambda d: d._open_seq) if mains else None
+
     def isTopmostDialog(self) -> bool:
         """Return whether this dialog is the topmost."""
         with YDialogWeb._open_dialogs_lock:
@@ -150,9 +166,10 @@ class YDialogWeb(YSingleChildContainerWidget):
         content = self.child().render() if self.child() else ""
         overlay_id = escape_attr(self._modal_element_id())
         style = f' style="z-index: {1050 + depth}"' if depth else ""
+        hidden = "" if self._visible else " hidden"
         return (
             f'<div id="{overlay_id}" class="mana-popup-overlay"'
-            f' data-dialog-id="{escape_attr(self.id())}"{style}>'
+            f' data-dialog-id="{escape_attr(self.id())}"{style}{hidden}>'
             f'<div class="mana-popup-container">{content}</div>'
             f'</div>'
         )
@@ -174,47 +191,38 @@ class YDialogWeb(YSingleChildContainerWidget):
 
     def open(self):
         """
-        Start the HTTP server (main dialog) or push a modal overlay (popup).
+        Show the dialog on the process-wide server, starting it if needed.
 
-        This is non-blocking - call waitForEvent() to process events.
+        A popup is pushed as a modal overlay over whatever the page shows.  A
+        main dialog becomes the page itself: connected browsers are told to
+        reload.  This is non-blocking - call waitForEvent() to process events.
         """
         if self._is_open:
             return
 
         self._build_widget_registry()
 
-        # Popup dialogs share the root dialog's server; they are rendered as
-        # modal overlays pushed via the existing WebSocket connection.
+        from .server import get_server
+        server = get_server()
+        self._server = server
+
+        with YDialogWeb._open_dialogs_lock:
+            YDialogWeb._open_counter += 1
+            self._open_seq = YDialogWeb._open_counter
+            depth = self._modal_depth()
+            self._is_open = True
+
         if self._dialog_type != YDialogType.YMainDialog:
-            with YDialogWeb._open_dialogs_lock:
-                root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
-                depth = self._modal_depth()
-            if root is not None:
-                self._is_open = True
-                self._broadcast({
-                    "type": "show_modal",
-                    "dialog_id": self.id(),
-                    "element_id": self._modal_element_id(),
-                    "html": self.render_modal_html(depth),
-                })
-                return
+            self._broadcast({
+                "type": "show_modal",
+                "dialog_id": self.id(),
+                "element_id": self._modal_element_id(),
+                "html": self.render_modal_html(depth),
+            })
+        elif server.has_clients():
+            self._broadcast({"type": "reload"})
 
-        from .server import WebServer
-        self._server = WebServer(self)
-        self._server_thread = threading.Thread(target=self._server.start, daemon=True)
-        self._server_thread.start()
-
-        import time
-        for _ in range(50):
-            if self._server.is_running():
-                break
-            time.sleep(0.1)
-
-        self._is_open = True
-        print(f"\n{'='*50}")
-        print(f"  Dialog available at: {self._server.get_url()}")
-        print(f"  Open this URL in your web browser")
-        print(f"{'='*50}\n")
+        server.announce()
 
     def isOpen(self) -> bool:
         return self._is_open
@@ -261,51 +269,51 @@ class YDialogWeb(YSingleChildContainerWidget):
                 return YCancelEvent()
 
     def destroy(self, doThrow=True) -> bool:
-        """Close the dialog and stop the server (or hide the modal overlay)."""
+        """Close the dialog; the server and the browser connections stay.
+
+        A popup hides its modal overlay.  A main dialog that the page was
+        showing makes the browser reload onto what is left, or wait idle for
+        the application's next dialog.  Only YUIWeb.shutdown() (or interpreter
+        exit) tells the browser the application has gone.
+        """
         logger.debug("Destroying dialog: %s", self.debugLabel())
 
-        if self._server is None and self._is_open:
-            # Popup dialog: just hide the modal overlay in the browser.
-            try:
+        with self._pending_lock:
+            pending = list(self._pending_updates.values())
+            self._pending_updates.clear()
+        for timer in pending:
+            timer.cancel()
+
+        was_open = self._is_open
+        was_root = was_open and YDialogWeb._root_dialog() is self
+        self._is_open = False
+        with YDialogWeb._open_dialogs_lock:
+            if self in YDialogWeb._open_dialogs:
+                YDialogWeb._open_dialogs.remove(self)
+            popups_left = any(
+                d._is_open and d._dialog_type != YDialogType.YMainDialog
+                for d in YDialogWeb._open_dialogs
+            )
+
+        if not was_open:
+            return True
+
+        try:
+            if self._dialog_type != YDialogType.YMainDialog:
                 self._broadcast({
                     "type": "hide_modal",
                     "dialog_id": self.id(),
                     "element_id": self._modal_element_id(),
                 })
-            except Exception:
-                pass
-            self._is_open = False
-            with YDialogWeb._open_dialogs_lock:
-                if self in YDialogWeb._open_dialogs:
-                    YDialogWeb._open_dialogs.remove(self)
-            return True
-
-        # Main dialog: notify browsers, close connections, stop server.
-        try:
-            self._broadcast({
-                "type": "shutdown",
-                "reason": "The application has closed.",
-            })
+            elif was_root:
+                if YDialogWeb._root_dialog() is not None or popups_left:
+                    # The page re-renders the next root (or an empty shell)
+                    # and the ready replay brings the popups back.
+                    self._broadcast({"type": "reload"})
+                else:
+                    self._broadcast({"type": "idle"})
         except Exception:
-            pass
-
-        with self._websocket_lock:
-            for ws in self._websockets:
-                try:
-                    ws.close()
-                except Exception:
-                    pass
-            self._websockets.clear()
-
-        if self._server:
-            self._server.stop()
-            self._server = None
-
-        self._is_open = False
-
-        with YDialogWeb._open_dialogs_lock:
-            if self in YDialogWeb._open_dialogs:
-                YDialogWeb._open_dialogs.remove(self)
+            logger.debug("destroy: broadcast failed", exc_info=True)
 
         return True
 
@@ -358,39 +366,12 @@ class YDialogWeb(YSingleChildContainerWidget):
         """Post an event to the dialog's event queue."""
         self._event_queue.put(event)
 
-    def _register_websocket(self, ws: "WebSocketHandler"):
-        """Register a new WebSocket connection."""
-        with self._websocket_lock:
-            self._websockets.append(ws)
-        logger.debug("WebSocket connected, total: %d", len(self._websockets))
-
-    def _unregister_websocket(self, ws: "WebSocketHandler"):
-        """Unregister a WebSocket connection."""
-        with self._websocket_lock:
-            if ws in self._websockets:
-                self._websockets.remove(ws)
-        logger.debug("WebSocket disconnected, remaining: %d", len(self._websockets))
-
     def _broadcast(self, message: dict):
-        """Broadcast a message to all connected WebSocket clients.
-
-        Popup dialogs own no server; they delegate to the first open dialog
-        that does own one (the root/main dialog).
-        """
-        if self._server is None:
-            # Popup: route through the root dialog's connections.
-            with YDialogWeb._open_dialogs_lock:
-                root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
-            if root:
-                root._broadcast(message)
-            return
-        data = json.dumps(message)
-        with self._websocket_lock:
-            for ws in list(self._websockets):
-                try:
-                    ws.send(data)
-                except Exception as e:
-                    logger.debug("Failed to send to WebSocket: %s", e)
+        """Broadcast a message to every browser connected to the server."""
+        from .server import current_server
+        server = current_server()
+        if server is not None:
+            server.broadcast(message)
 
     def _handle_ws_message(self, data: dict):
         """Handle a message received via WebSocket."""
@@ -417,7 +398,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         reason_str = data.get("reason", "Activated")
         event_data = data.get("data", {})
 
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if not widget:
             logger.warning("Widget not found: %s", widget_id)
             return
@@ -505,7 +486,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         key = data.get("key", "")
         widget_id = data.get("widget_id", "")
 
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         event = YKeyEvent(key, widget)
         self._post_event(event)
 
@@ -516,7 +497,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         _handle_checkbox_change so it can update the cell model and fire events.
         """
         widget_id = data.get("widget_id", "")
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if widget is None:
             logger.warning("table_checkbox: widget not found: %s", widget_id)
             return
@@ -535,7 +516,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         """
         widget_id = data.get("widget_id", "")
         url = data.get("url", "")
-        widget = self._widget_registry.get(widget_id)
+        widget = self._lookup_widget(widget_id)
         if widget is None:
             logger.warning("link_activated: widget not found: %s", widget_id)
             return
@@ -552,9 +533,16 @@ class YDialogWeb(YSingleChildContainerWidget):
         waitForEvent() on a dialog the user cannot see or dismiss.  Replaying
         the open popups here makes the modal appear as soon as the page
         connects, whatever the order was on the Python side.
+
+        Whichever dialog receives ``ready`` (the topmost), the deferred table
+        rows belong to the root dialog: that is what the page rendered.
         """
         self._replay_open_modals()
-        self._push_deferred_tables()
+        root = YDialogWeb._root_dialog()
+        if root is not None:
+            root._push_deferred_tables()
+        elif not any(d._is_open for d in list(YDialogWeb._open_dialogs)):
+            self._broadcast({"type": "idle"})
 
     def _replay_open_modals(self):
         """Re-send ``show_modal`` for every open popup dialog.
@@ -609,6 +597,18 @@ class YDialogWeb(YSingleChildContainerWidget):
         """Build a mapping of widget IDs to widget objects."""
         self._widget_registry.clear()
         self._register_widget_tree(self)
+
+    def _lookup_widget(self, widget_id):
+        """Return the widget with *widget_id*, or None.
+
+        The registry is built at open(); widgets created afterwards (e.g. new
+        children of a YReplacePoint) are picked up by rebuilding it on a miss.
+        """
+        widget = self._widget_registry.get(widget_id)
+        if widget is None and widget_id:
+            self._build_widget_registry()
+            widget = self._widget_registry.get(widget_id)
+        return widget
 
     def _register_widget_tree(self, widget):
         """Recursively register all widgets in the tree."""
@@ -730,9 +730,25 @@ class YDialogWeb(YSingleChildContainerWidget):
             classes += f" mana-dialog-{color_class}"
 
         content = self.child().render() if self.child() else ""
-        return PageBuilder.build(
+        html = PageBuilder.build(
             _id=self.id(),
             title=escape_html(title),
             classes=classes,
             content=content,
         )
+        if not self._visible:
+            html = html.replace(f'<div id="{self.id()}"', f'<div hidden id="{self.id()}"', 1)
+        return html
+
+    def setVisible(self, visible: bool = True):
+        """Show or hide the dialog (main page content, or a popup overlay)."""
+        self._visible = bool(visible)
+        if not self._is_open:
+            return
+        target = (f"#{self.id()}" if self._dialog_type == YDialogType.YMainDialog
+                  else f"#{self._modal_element_id()}")
+        self._broadcast({
+            "type": "update",
+            "updates": [{"action": "attr", "target": target,
+                         "attr": "hidden", "value": None if self._visible else True}],
+        })

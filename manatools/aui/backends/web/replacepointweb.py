@@ -1,6 +1,6 @@
 """Web backend ReplacePoint implementation."""
 from ...yui_common import YSingleChildContainerWidget
-from .commonweb import widget_attrs
+from .commonweb import widget_attrs, schedule_update_if_open
 
 class YReplacePointWeb(YSingleChildContainerWidget):
     """Replace point - container that can swap its child dynamically."""
@@ -9,6 +9,10 @@ class YReplacePointWeb(YSingleChildContainerWidget):
     
     def widgetClass(self):
         return "YReplacePoint"
+
+    def addChild(self, child):
+        super().addChild(child)
+        schedule_update_if_open(self)
     
     def showChild(self):
         """Show the current child."""
@@ -20,6 +24,16 @@ class YReplacePointWeb(YSingleChildContainerWidget):
         """Remove all children."""
         super().deleteChildren()
         self._notify_update()
+
+    def stretchable(self, dim):
+        """Stretch when the child stretches or carries a weight in *dim*."""
+        child = self.child()
+        if child is None:
+            return False
+        try:
+            return bool(child.stretchable(dim) or child.weight(dim))
+        except Exception:
+            return False
     
     def _notify_update(self):
         dialog = self.findDialog()

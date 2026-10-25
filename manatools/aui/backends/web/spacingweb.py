@@ -23,6 +23,15 @@ class YSpacingWeb(YWidget):
     
     def widgetClass(self):
         return "YSpacing"
+
+    def dimension(self):
+        return self._dimension
+
+    def size(self) -> int:
+        return self._size_px
+
+    def sizeDim(self, dim) -> int:
+        return self._size_px if dim == self._dimension else 0
     
     def render(self) -> str:
         is_horizontal = self._dimension in (YUIDimension.YD_HORIZ, YUIDimension.Horizontal)
