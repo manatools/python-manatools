@@ -13,6 +13,50 @@ class YSelectionBoxWeb(YSelectionWidget):
         super().__init__(parent)
         self._label = label
         self._multi_selection = multi_selection
+
+    def label(self) -> str:
+        return self._label
+
+    def setLabel(self, label: str):
+        self._label = label
+        self._notify_update()
+
+    def multiSelection(self) -> bool:
+        return bool(self._multi_selection)
+
+    def setMultiSelection(self, enabled: bool):
+        """Switch between single and multi selection; leaving multi selection
+        keeps only the first selected item, as on Qt."""
+        self._multi_selection = bool(enabled)
+        if not self._multi_selection and len(self._selected_items) > 1:
+            for item in self._selected_items[1:]:
+                item.setSelected(False)
+            self._selected_items = self._selected_items[:1]
+        self._notify_update()
+
+    def selectedItems(self):
+        return self._selected_items
+
+    def selectItem(self, item, selected: bool = True):
+        """Select or deselect *item* and show it in the browser."""
+        if item not in self._items:
+            return
+        if self._multi_selection:
+            if selected and item not in self._selected_items:
+                self._selected_items.append(item)
+            elif not selected and item in self._selected_items:
+                self._selected_items.remove(item)
+        else:
+            for old in self._selected_items:
+                if old is not item:
+                    old.setSelected(False)
+            self._selected_items = [item] if selected else []
+        item.setSelected(bool(selected))
+        self._notify_update()
+
+    def deleteAllItems(self):
+        super().deleteAllItems()
+        self._notify_update()
     
     def widgetClass(self):
         return "YSelectionBox"
@@ -35,15 +79,21 @@ class YSelectionBoxWeb(YSelectionWidget):
             self._notify_update()
         return item
 
-    def _handle_selection_change(self, indices):
-        """Handle selection change from browser."""
+    def _handle_selection_change(self, indices, value=None):
+        """Handle selection change from browser.
+
+        dialogweb passes (selectedIndex, selectedValue); a selection box sends
+        the list of selected option indices and no value.
+        """
         if isinstance(indices, int):
             indices = [indices]
         
         self._selected_items = []
-        for idx in indices:
-            if 0 <= idx < len(self._items):
-                self._selected_items.append(self._items[idx])
+        for idx, item in enumerate(self._items):
+            chosen = idx in indices
+            item.setSelected(chosen)
+            if chosen:
+                self._selected_items.append(item)
     
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()

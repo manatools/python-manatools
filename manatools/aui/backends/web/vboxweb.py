@@ -3,7 +3,7 @@ Web backend VBox (vertical layout) implementation.
 """
 
 from ...yui_common import YWidget, YUIDimension
-from .commonweb import widget_attrs, layout_children_html
+from .commonweb import widget_attrs, layout_children_html, schedule_update_if_open
 
 
 class YVBoxWeb(YWidget):
@@ -15,6 +15,10 @@ class YVBoxWeb(YWidget):
 
     def widgetClass(self):
         return "YVBox"
+
+    def addChild(self, child):
+        super().addChild(child)
+        schedule_update_if_open(self)
 
     def stretchable(self, dim):
         """A box stretches if any child stretches or carries a weight in *dim*."""

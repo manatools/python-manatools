@@ -11,7 +11,7 @@ JavaScript activates automatically, with no changes to dnfdragora or
 the public YUI API.
 """
 import logging
-from ...yui_common import YSelectionWidget, YTreeItem
+from ...yui_common import YSelectionWidget, YTreeItem, YWidgetEvent, YEventReason
 from .commonweb import widget_attrs, escape_html, escape_attr
 
 
@@ -89,7 +89,7 @@ class YTreeWeb(YSelectionWidget):
         """Recursively register item and all its descendants."""
         self._item_registry[self._item_id(item)] = item
         if item.selected():
-            self.selectItem(item, True)
+            self._select_model(item, True)
         if item.hasChildren():
             for child in item.childrenBegin():
                 self._register_item_tree(child)
@@ -112,6 +112,55 @@ class YTreeWeb(YSelectionWidget):
         """Return the first selected item, or None."""
         return self._selected_items[0] if self._selected_items else None
 
+    def _select_model(self, item, selected: bool = True) -> bool:
+        """Update selection state without re-rendering; True if it changed.
+
+        Single selection replaces the current item and clears the old item's
+        flag.  The flat table shows every item, so open state is not touched.
+        """
+        before = list(self._selected_items)
+        if selected:
+            if self._multiselection:
+                if item not in self._selected_items:
+                    self._selected_items.append(item)
+            else:
+                for old in self._selected_items:
+                    if old is not item:
+                        old.setSelected(False)
+                self._selected_items = [item]
+        elif item in self._selected_items:
+            self._selected_items.remove(item)
+        try:
+            item.setSelected(bool(selected))
+        except Exception:
+            pass
+        return self._selected_items != before
+
+    def selectItem(self, item, selected: bool = True):
+        """Select or deselect *item* and show it in the browser."""
+        if self._select_model(item, selected):
+            self._notify_update()
+
+    def activate(self) -> bool:
+        """Post an Activated event for the current item, as a double click would."""
+        if self.currentItem() is None:
+            return False
+        dialog = self.findDialog()
+        if dialog is not None and self.notify():
+            dialog._post_event(YWidgetEvent(self, YEventReason.Activated))
+        return True
+
+    def setProperty(self, propertyName: str, val) -> bool:
+        if propertyName == "immediateMode":
+            self.setImmediateMode(bool(val))
+            return True
+        return False
+
+    def getProperty(self, propertyName: str):
+        if propertyName == "immediateMode":
+            return self.immediateMode()
+        return None
+
     def hasMultiSelection(self) -> bool:
         return bool(self._multiselection)
 
@@ -132,9 +181,7 @@ class YTreeWeb(YSelectionWidget):
         item = self._item_registry.get(item_id)
         if item is None:
             return None
-        if not self._multiselection:
-            self._selected_items.clear()
-        self.selectItem(item, True)
+        self._select_model(item, True)
         return item
 
     def _handle_selection_change(self, index: int, value: str = None):
@@ -144,10 +191,7 @@ class YTreeWeb(YSelectionWidget):
         which matches the position in self._flat_items built at render time.
         """
         if 0 <= index < len(self._flat_items):
-            item = self._flat_items[index]
-            if not self._multiselection:
-                self._selected_items.clear()
-            self.selectItem(item, True)
+            self._select_model(self._flat_items[index], True)
 
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
@@ -183,7 +227,7 @@ class YTreeWeb(YSelectionWidget):
             self._item_registry[item_id] = item
             self._flat_items.append(item)
             if item.selected() and item not in self._selected_items:
-                self.selectItem(item, True)
+                self._select_model(item, True)
 
         max_depth = max((d for _, d in flat), default=0) + 1  # = number of columns
 

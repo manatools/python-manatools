@@ -1,9 +1,10 @@
-﻿"""
+"""
 Web backend ProgressBar implementation.
 Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 """
-from ...yui_common import YWidget
+from ...yui_common import (YWidget, YUIDimension, YProperty, YPropertySet,
+                           YPropertyType)
 from .commonweb import escape_attr, escape_html
 
 
@@ -39,6 +40,38 @@ class YProgressBarWeb(YWidget):
     def setMaxValue(self, max_val: int):
         self._max_value = max(1, int(max_val))
         self._notify_update()
+
+    def setProperty(self, propertyName: str, val) -> bool:
+        if propertyName == "label":
+            self.setLabel(str(val))
+            return True
+        if propertyName == "value":
+            try:
+                self.setValue(int(val))
+            except (TypeError, ValueError):
+                self.setValue(int(val.integerVal()))
+            return True
+        return False
+
+    def getProperty(self, propertyName: str):
+        if propertyName == "label":
+            return self.label()
+        if propertyName == "value":
+            return self.value()
+        if propertyName == "maxValue":
+            return self.maxValue()
+        return None
+
+    def propertySet(self):
+        props = YPropertySet()
+        props.add(YProperty("label", YPropertyType.YStringProperty))
+        props.add(YProperty("value", YPropertyType.YIntegerProperty))
+        props.add(YProperty("maxValue", YPropertyType.YIntegerProperty))
+        return props
+
+    def stretchable(self, dim) -> bool:
+        """Progress bars grow horizontally, never vertically (as on Qt)."""
+        return dim == YUIDimension.YD_HORIZ
 
     def setHelpText(self, help_text: str):
         super().setHelpText(help_text)

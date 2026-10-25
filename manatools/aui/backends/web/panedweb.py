@@ -1,6 +1,9 @@
 """Web backend Paned implementation."""
+import logging
 from ...yui_common import YWidget, YUIDimension
-from .commonweb import widget_attrs
+from .commonweb import widget_attrs, schedule_update_if_open
+
+logger = logging.getLogger("manatools.aui.web.YPanedWeb")
 
 class YPanedWeb(YWidget):
     """Paned container with resizable split."""
@@ -10,6 +13,14 @@ class YPanedWeb(YWidget):
     
     def widgetClass(self):
         return "YPaned"
+
+    def addChild(self, child):
+        """Add a pane; like the Qt splitter, a paned holds two children."""
+        if len(self._children) >= 2:
+            logger.warning("YPanedWeb can only manage two children; ignoring extra child")
+            return
+        super().addChild(child)
+        schedule_update_if_open(self)
     
     def isHorizontal(self) -> bool:
         return self._dimension in (YUIDimension.YD_HORIZ, YUIDimension.Horizontal)

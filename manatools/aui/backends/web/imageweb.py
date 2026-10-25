@@ -4,8 +4,8 @@ import re
 import base64
 import mimetypes
 import logging
-from ...yui_common import YWidget
-from .commonweb import widget_attrs, escape_html
+from ...yui_common import YWidget, YUIDimension
+from .commonweb import widget_attrs, escape_html, schedule_update_if_open
 
 logger = logging.getLogger("manatools.aui.web.YImageWeb")
 
@@ -21,6 +21,7 @@ class YImageWeb(YWidget):
         self._image_file = imageFileName
         self._fallback_name = fallBackName
         self._auto_scale = False
+        self._zero_size = {YUIDimension.YD_HORIZ: False, YUIDimension.YD_VERT: False}
 
     def widgetClass(self):
         return "YImage"
@@ -38,6 +39,23 @@ class YImageWeb(YWidget):
     def setAutoScale(self, on: bool = True):
         self._auto_scale = bool(on)
         self._notify_update()
+
+    def hasZeroSize(self, dim) -> bool:
+        # getattr: a parent may render us before __init__ has finished.
+        return bool(getattr(self, "_zero_size", {}).get(dim, False))
+
+    def setZeroSize(self, dim, zeroSize: bool = True):
+        """Let the image shrink to nothing in *dim* instead of imposing its
+        natural size on the layout."""
+        if not hasattr(self, "_zero_size"):
+            self._zero_size = {}
+        self._zero_size[dim] = bool(zeroSize)
+        self._notify_update()
+
+    def setStretchable(self, dim, new_stretch: bool):
+        super().setStretchable(dim, new_stretch)
+        # Stretch is applied by the parent box's layout: re-render the parent.
+        schedule_update_if_open(self._parent if self._parent is not None else self)
 
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
@@ -99,13 +117,27 @@ class YImageWeb(YWidget):
     def render(self) -> str:
         # Wrap in a <div> so the widget has a stable container node that can be
         # replaced by _flush_update.  enabled=True: <div> must not carry disabled.
-        attrs = widget_attrs(self.id(), "YImage", True, self._visible)
+        zero_w = self.hasZeroSize(YUIDimension.YD_HORIZ)
+        zero_h = self.hasZeroSize(YUIDimension.YD_VERT)
+        box_style = "; ".join(
+            ([] if not zero_w else ["min-width: 0", "width: 0", "flex-basis: 0"])
+            + ([] if not zero_h else ["min-height: 0", "height: 0"])
+            + (["overflow: hidden"] if (zero_w or zero_h) else []))
+        attrs = widget_attrs(self.id(), "YImage", True, self._visible,
+                             extra_attrs={"style": box_style or None})
         src = self._resolve_src()
 
         if src:
             extra = ' class="mana-yimage-img"'
+            img_style = []
+            if self._auto_scale or zero_w:
+                img_style.append("max-width:100%")
+            if zero_h:
+                img_style.append("max-height:100%")
             if self._auto_scale:
-                extra += ' style="max-width:100%;height:auto"'
+                img_style.append("height:auto")
+            if img_style:
+                extra += f' style="{";".join(img_style)}"'
             img = f'<img{extra} src="{escape_html(src)}" alt="">'
         else:
             img = ""

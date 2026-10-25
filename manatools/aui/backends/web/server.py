@@ -10,6 +10,7 @@ This module provides a simple HTTP server that serves the dialog HTML
 and handles WebSocket connections for real-time event communication.
 """
 
+import atexit
 import http.server
 import socketserver
 import threading
@@ -376,8 +377,8 @@ def _find_icon_file(icon_name: str) -> Optional[tuple]:
 class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     """HTTP request handler for ManaTools web backend."""
 
-    # Injected by WebServer via a per-request subclass
-    dialog: Optional["YDialogWeb"] = None
+    # Injected by WebServer via a per-server subclass
+    web_server: Optional["WebServer"] = None
 
     def log_message(self, format, *args):
         logger.debug(format, *args)
@@ -464,18 +465,31 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             pass
         return "ManaTools"
 
+    @staticmethod
+    def _topmost_dialog() -> Optional["YDialogWeb"]:
+        """Return the dialog that receives browser events (the topmost one)."""
+        from .dialogweb import YDialogWeb
+        return YDialogWeb.currentDialog(doThrow=False)
+
     def _serve_main_page(self):
-        if not self.dialog:
-            self.send_error(500, "No dialog available")
-            return
+        """Render the root (main) dialog, or an empty shell when none is open.
+
+        Popups are not part of the page: the ``ready`` replay pushes them as
+        modal overlays, so a popup opened before any main dialog looks the
+        same as one opened over it.
+        """
         try:
             from .commonweb import set_initial_render
+            from .dialogweb import YDialogWeb
             title = self._resolve_title()
-            set_initial_render(True)
-            try:
-                dialog_html = self.dialog.render()
-            finally:
-                set_initial_render(False)
+            root = YDialogWeb._root_dialog()
+            dialog_html = ""
+            if root is not None:
+                set_initial_render(True)
+                try:
+                    dialog_html = root.render()
+                finally:
+                    set_initial_render(False)
             html = PageBuilder.build(
                 title=title,
                 app_name=title,
@@ -586,25 +600,27 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(400, "WebSocket handshake failed")
             return
 
-        if self.dialog:
-            self.dialog._register_websocket(ws)
+        server = self.web_server
+        if server:
+            server._register_websocket(ws)
 
         def on_message(message: str):
             try:
                 data = json.loads(message)
                 # Always route to the topmost open dialog so that popup
                 # dialogs receive events while they are active.
-                from .dialogweb import YDialogWeb
-                topmost = YDialogWeb.currentDialog(doThrow=False)
-                target = topmost if topmost is not None else self.dialog
+                target = self._topmost_dialog()
                 if target:
                     target._handle_ws_message(data)
+                elif data.get("type") == "ready":
+                    # No dialog at all: the application is between dialogs.
+                    ws.send(json.dumps({"type": "idle"}))
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON in WebSocket message: %s", message)
 
         def on_close():
-            if self.dialog:
-                self.dialog._unregister_websocket(ws)
+            if server:
+                server._unregister_websocket(ws)
 
         ws.on_message = on_message
         ws.on_close = on_close
@@ -732,9 +748,7 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
                 logger.warning("/event POST body too large: %d bytes", length)
                 return
             data = json.loads(self.rfile.read(length).decode("utf-8"))
-            from .dialogweb import YDialogWeb
-            topmost = YDialogWeb.currentDialog(doThrow=False)
-            target = topmost if topmost is not None else self.dialog
+            target = self._topmost_dialog()
             if target:
                 target._handle_ws_message(data)
             self.send_response(200)
@@ -774,43 +788,75 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 
+def _env_port() -> int:
+    """Return the port requested via ``MUI_WEB_PORT`` (0 = any free port)."""
+    value = os.environ.get("MUI_WEB_PORT", "").strip()
+    if not value:
+        return 0
+    try:
+        port = int(value)
+        if 0 <= port <= 65535:
+            return port
+    except ValueError:
+        pass
+    logger.warning("Ignoring invalid MUI_WEB_PORT=%r", value)
+    return 0
+
+
 class WebServer:
     """
     Main web server for the ManaTools web backend.
 
-    Manages HTTP server lifecycle, WebSocket connections, and serves the
-    dialog UI.
+    One instance serves the whole process (see :func:`get_server`): dialogs
+    come and go on it, so the URL given to the browser stays valid for the
+    life of the application.  The handler resolves the dialog to render or
+    to route events to on every request.
+
+    The browser WebSocket connections belong to the server as well, and
+    :meth:`broadcast` sends to all of them.
     """
 
-    def __init__(
-        self,
-        dialog: "YDialogWeb",
-        host: str = "127.0.0.1",
-        port: int = 0,
-    ):
-        self.dialog = dialog
+    def __init__(self, host: str = "127.0.0.1", port: Optional[int] = None):
         self.host = host
-        self.port = port
+        self.port = _env_port() if port is None else port
         self._server: Optional[ThreadedHTTPServer] = None
+        self._thread: Optional[threading.Thread] = None
         self._running = False
         self._lock = threading.Lock()
+        self._websockets: list = []
+        self._websocket_lock = threading.Lock()
+        self._announced = False
 
     def start(self):
-        """Start the HTTP server (blocking)."""
+        """Bind the listening socket and serve it from a daemon thread.
+
+        A fixed port that is already taken falls back to a free one, so a
+        second instance of an application still comes up.
+        """
         with self._lock:
             if self._running:
                 return
 
             handler_class = type(
-                "DialogRequestHandler",
+                "WebServerRequestHandler",
                 (ManaToolsRequestHandler,),
-                {"dialog": self.dialog},
+                {"web_server": self},
             )
-            self._server = ThreadedHTTPServer((self.host, self.port), handler_class)
+            try:
+                self._server = ThreadedHTTPServer((self.host, self.port), handler_class)
+            except OSError as e:
+                if not self.port:
+                    raise
+                logger.warning("Port %d unavailable (%s); using a free port", self.port, e)
+                self._server = ThreadedHTTPServer((self.host, 0), handler_class)
             self.port = self._server.server_address[1]
             self._running = True
+            self._thread = threading.Thread(target=self._serve, daemon=True)
+            self._thread.start()
 
         logger.info("Web server started at %s", self.get_url())
+
+    def _serve(self):
         try:
             self._server.serve_forever()
         except Exception as e:
@@ -819,14 +865,114 @@ class WebServer:
             self._running = False
 
     def stop(self):
-        """Stop the HTTP server."""
+        """Close every WebSocket, stop serving and release the port."""
+        with self._websocket_lock:
+            sockets = list(self._websockets)
+            self._websockets.clear()
+        for ws in sockets:
+            try:
+                ws.close()
+            except Exception:
+                pass
+
         with self._lock:
-            if self._server and self._running:
-                self._server.shutdown()
-                self._running = False
+            server, self._server = self._server, None
+            thread, self._thread = self._thread, None
+            self._running = False
+        if server:
+            # shutdown() waits for serve_forever(), which only a live
+            # thread can end.
+            if thread is not None and thread.is_alive():
+                server.shutdown()
+            server.server_close()
 
     def get_url(self) -> str:
         return f"http://{self.host}:{self.port}/"
 
     def is_running(self) -> bool:
         return self._running
+
+    def announce(self):
+        """Print the URL on the terminal, once per server."""
+        if self._announced:
+            return
+        self._announced = True
+        print(f"\n{'='*50}")
+        print(f"  Dialog available at: {self.get_url()}")
+        print(f"  Open this URL in your web browser")
+        print(f"{'='*50}\n")
+
+    # ------------------------------------------------------------------
+    # Browser connections
+    # ------------------------------------------------------------------
+
+    def _register_websocket(self, ws: WebSocketHandler):
+        """Register a new WebSocket connection."""
+        with self._websocket_lock:
+            self._websockets.append(ws)
+            count = len(self._websockets)
+        logger.debug("WebSocket connected, total: %d", count)
+
+    def _unregister_websocket(self, ws: WebSocketHandler):
+        """Unregister a WebSocket connection."""
+        with self._websocket_lock:
+            if ws in self._websockets:
+                self._websockets.remove(ws)
+            count = len(self._websockets)
+        logger.debug("WebSocket disconnected, remaining: %d", count)
+
+    def has_clients(self) -> bool:
+        """Return whether a browser is connected."""
+        with self._websocket_lock:
+            return bool(self._websockets)
+
+    def broadcast(self, message: dict):
+        """Send *message* to every connected browser."""
+        data = json.dumps(message)
+        with self._websocket_lock:
+            sockets = list(self._websockets)
+        for ws in sockets:
+            try:
+                ws.send(data)
+            except Exception as e:
+                logger.debug("Failed to send to WebSocket: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# Process-wide server
+# ---------------------------------------------------------------------------
+
+_instance: Optional[WebServer] = None
+_instance_lock = threading.Lock()
+
+
+def get_server() -> WebServer:
+    """Return the process-wide server, creating and starting it on first use."""
+    global _instance
+    with _instance_lock:
+        if _instance is None:
+            server = WebServer()
+            server.start()
+            _instance = server
+            atexit.register(shutdown_server)
+        return _instance
+
+
+def current_server() -> Optional[WebServer]:
+    """Return the running server, or None; never starts one."""
+    return _instance
+
+
+def shutdown_server(reason: str = "The application has closed."):
+    """Tell the browsers the process is exiting, then stop the server.
+
+    Called by ``YUIWeb.shutdown()`` and at interpreter exit; later calls do
+    nothing, so ``shutdown`` is sent once.
+    """
+    global _instance
+    with _instance_lock:
+        server, _instance = _instance, None
+    if server is None:
+        return
+    server.broadcast({"type": "shutdown", "reason": reason})
+    server.stop()
