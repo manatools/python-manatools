@@ -138,6 +138,12 @@ body {
     font-size: 1rem;
 }
 
+/* Same overlay while the application is between dialogs ("idle" message):
+ * the session is still alive, so no alarm colour. */
+#mana-shutdown-overlay[data-idle="true"] .mana-shutdown-icon {
+    color: var(--bs-secondary, #6c757d);
+}
+
 .mana-popup-overlay {
     position: fixed;
     inset: 0;
