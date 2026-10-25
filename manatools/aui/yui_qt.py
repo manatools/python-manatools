@@ -261,6 +261,16 @@ class YApplicationQt:
         """Indicate that this is not a text-mode (Qt) application."""
         return False
 
+    def openContextMenu(self, items) -> bool:
+        """Show a context menu for the widget that posted ContextMenuActivated.
+
+        items is a root YMenuItem or a list of YMenuItem. Non-blocking: a pick
+        arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
+        ContextMenuCancelled. Returns False if no menu was shown.
+        """
+        # Not implemented on this backend yet
+        return False
+
     def busyCursor(self):
         """Set busy cursor (Qt backend)."""
         try:

@@ -713,6 +713,30 @@ class YMenuItem:
         self._children.append(sep)
         return sep
 
+def context_menu_items(items) -> list:
+    """Return the visible top-level items of a context menu source.
+
+    items is either a root YMenuItem, whose children are the menu entries,
+    or an iterable of YMenuItem. Anything else yields an empty list.
+    """
+    if items is None:
+        return []
+    if isinstance(items, YMenuItem):
+        items = items._children
+    try:
+        return [it for it in items if isinstance(it, YMenuItem) and it.visible()]
+    except TypeError:
+        return []
+
+def has_selectable_item(items) -> bool:
+    """Return True if any item, at any depth, can be activated."""
+    for it in items:
+        if it.isSeparator() or not it.visible() or not it.enabled():
+            continue
+        if not it.isMenu() or has_selectable_item(it._children):
+            return True
+    return False
+
 class YTreeItem(YItem):
     def __init__(self, label: str, parent: Optional["YTreeItem"] = None, selected: Optional[bool] = False, is_open: bool = False, icon_name: str = ""):
         ''' YTreeItem represents an item in a tree structure.
