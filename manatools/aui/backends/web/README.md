@@ -26,16 +26,24 @@ $env:MUI_BACKEND="web"
 python your_app.py
 ```
 
-When the application starts, it will display a URL:
+When the application opens its first dialog, it will display a URL:
 
 ```
 ==================================================
-  Dialog available at: http://127.0.0.1:8080/
+  Dialog available at: http://127.0.0.1:43807/
   Open this URL in your web browser
 ==================================================
 ```
 
 Open this URL in any modern web browser to interact with the application.
+The port is picked by the system unless `MUI_WEB_PORT` is set (see
+[Configuration](#configuration)).
+
+The process runs a single server: every dialog, main or popup, is served on
+the same URL.  A popup is shown as a modal over the page, and when a main
+dialog opens or closes the browser reloads onto the new top dialog by itself.
+Between dialogs the page waits; it is told the application has closed only on
+`YUI.ui().shutdown()` or interpreter exit.
 
 ### Application Code
 
@@ -177,10 +185,20 @@ WebSocket is required for real-time updates. Falls back to HTTP POST for older b
 
 ## Configuration
 
-The web server binds to `127.0.0.1` (localhost only) by default. To allow remote access, modify `server.py`:
+The web server binds to `127.0.0.1` (localhost only).  Its port is the one
+in the `MUI_WEB_PORT` environment variable, or a free port picked by the
+system when the variable is unset or `0`.  A fixed port keeps the URL the same
+across restarts, so a bookmarked tab can simply be reloaded; if the port is
+taken, the server falls back to a free one and logs a warning.
+
+```bash
+MUI_BACKEND=web MUI_WEB_PORT=8080 python your_app.py
+```
+
+To allow remote access, change the host `get_server()` passes in `server.py`:
 
 ```python
-self._server = WebServer(self, host="0.0.0.0", port=8080)
+server = WebServer(host="0.0.0.0")
 ```
 
 ⚠️ **Security Warning**: Allowing remote access exposes your application to the network. Consider adding authentication for production use.

@@ -136,6 +136,7 @@
                 initMenuBehavior();
                 break;
             case 'show_modal':
+                hideIdle();
                 showModal(message.dialog_id, message.html, message.element_id);
                 break;
             case 'hide_modal':
@@ -143,6 +144,14 @@
                 break;
             case 'busy':
                 setBusy(message.state);
+                break;
+            case 'reload':
+                // A new root dialog: it brings its own title, menu bar and
+                // widget ids, so fetch the page again rather than patching it.
+                window.location.reload();
+                break;
+            case 'idle':
+                showIdle(message.reason || 'Waiting for the application…');
                 break;
             case 'shutdown':
                 showShutdown(message.reason || 'The application has closed.');
@@ -158,16 +167,41 @@
         overlay.hidden = !state;
     }
 
-    function showShutdown(reason) {
-        wsShutdown = true;
-        setBadge('disconnected');
-        // Hide busy overlay in case it was up when the app exited.
+    function showOverlay(reason, idle) {
+        // Hide busy overlay in case it was up when the dialog went away.
         setBusy(false);
         const overlay = document.getElementById('mana-shutdown-overlay');
         if (!overlay) return;
         const msg = overlay.querySelector('.mana-shutdown-msg');
         if (msg) msg.textContent = reason;
+        const reloadBtn = document.getElementById('mana-reload-btn');
+        if (reloadBtn) reloadBtn.hidden = idle;
+        overlay.dataset.idle = idle ? 'true' : '';
         overlay.hidden = false;
+    }
+
+    function showShutdown(reason) {
+        wsShutdown = true;
+        setBadge('disconnected');
+        showOverlay(reason, false);
+    }
+
+    function showIdle(reason) {
+        // The application is between dialogs: the process and the server are
+        // still alive, so keep the connection (no wsShutdown) and wait for the
+        // next "reload" or "show_modal".  The last dialog's widgets are gone
+        // on the Python side, so drop them here too.
+        const app = document.getElementById('mana-app');
+        if (app) app.innerHTML = '';
+        showOverlay(reason, true);
+    }
+
+    function hideIdle() {
+        const overlay = document.getElementById('mana-shutdown-overlay');
+        if (overlay && overlay.dataset.idle === 'true') {
+            overlay.hidden = true;
+            overlay.dataset.idle = '';
+        }
     }
 
     function findModal(dialogId, elementId) {

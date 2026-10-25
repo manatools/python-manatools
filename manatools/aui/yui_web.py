@@ -50,14 +50,16 @@ class YUIWeb:
         """Close every open dialog and stop the HTTP/WebSocket server.
 
         Applications call this on exit; the ncurses backend uses it to restore
-        the terminal.  Here it notifies connected browsers and releases the
-        listening socket so the process can terminate cleanly.
+        the terminal.  Here it tells connected browsers the application has
+        closed and releases the listening socket so the process can terminate
+        cleanly.  Destroying dialogs alone leaves the server running, since
+        the application may open another one.
         """
         try:
             from .backends.web.dialogweb import YDialogWeb
             with YDialogWeb._open_dialogs_lock:
                 dialogs = list(YDialogWeb._open_dialogs)
-            # Destroy popups first, main dialog (which owns the server) last.
+            # Topmost first, so popups go before the dialogs below them.
             for dialog in reversed(dialogs):
                 try:
                     dialog.destroy()
@@ -65,6 +67,11 @@ class YUIWeb:
                     self._logger.debug("shutdown: failed to destroy %s", dialog, exc_info=True)
         except Exception:
             self._logger.debug("shutdown: no dialogs to close", exc_info=True)
+        try:
+            from .backends.web.server import shutdown_server
+            shutdown_server()
+        except Exception:
+            self._logger.debug("shutdown: failed to stop the server", exc_info=True)
 
 
 class YApplicationWeb:
@@ -180,13 +187,18 @@ class YApplicationWeb:
     def _broadcast_busy(self, state: bool):
         try:
             from .backends.web.dialogweb import YDialogWeb
-            root = next((d for d in YDialogWeb._open_dialogs if d._server is not None), None)
-            if root:
-                if not state:
-                    # Flush all queued widget updates before hiding the overlay
-                    # so the browser receives and applies them first.
-                    root._flush_all_pending_updates()
-                root._broadcast({"type": "busy", "state": state})
+            from .backends.web.server import current_server
+            server = current_server()
+            if server is None:
+                return
+            if not state:
+                # Flush all queued widget updates before hiding the overlay
+                # so the browser receives and applies them first.
+                with YDialogWeb._open_dialogs_lock:
+                    dialogs = list(YDialogWeb._open_dialogs)
+                for dialog in dialogs:
+                    dialog._flush_all_pending_updates()
+            server.broadcast({"type": "busy", "state": state})
         except Exception:
             pass
 
