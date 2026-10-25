@@ -687,8 +687,16 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     """HTTP server that handles each request in a dedicated thread."""
-    allow_reuse_address = True
+    # On Windows SO_REUSEADDR lets a second process bind a port that is in
+    # use, so a taken MUI_WEB_PORT would be shared instead of falling back
+    # to a free one; the port is claimed with SO_EXCLUSIVEADDRUSE there.
+    allow_reuse_address = not hasattr(socket, "SO_EXCLUSIVEADDRUSE")
     daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def _env_port() -> int:
