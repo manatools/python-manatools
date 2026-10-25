@@ -2,6 +2,7 @@
 Qt backend implementation for YUI
 """
 
+import atexit
 import sys
 from PySide6 import QtWidgets, QtCore, QtGui
 import os
@@ -30,6 +31,18 @@ class YUIQt:
             self._logger = logging.getLogger(f"manatools.aui.qt.{self.__class__.__name__}")
         except Exception:
             self._logger = logging.getLogger("manatools.aui.qt.YUIQt")
+        # Popups are destroyed with deleteLater(): without a later event loop
+        # they would die during interpreter teardown, after QApplication,
+        # which crashes QtWebEngine (YHtmlView).
+        atexit.register(self._flush_deferred_deletes)
+
+    def _flush_deferred_deletes(self):
+        """Run pending deleteLater() deletions now."""
+        try:
+            if self._qapp:
+                QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete.value)
+        except Exception:
+            self._logger.debug("deferred deletes flush failed", exc_info=True)
 
     def widgetFactory(self):
         return self._widget_factory
@@ -50,14 +63,15 @@ class YUIQt:
         """Release UI resources on application exit.
 
         Provided for parity with the other backends (applications call it
-        unconditionally); Qt tears itself down, so only pending events are
-        flushed here.
+        unconditionally); Qt tears itself down, so only pending events and
+        deletions are flushed here.
         """
         try:
             if self._qapp:
                 self._qapp.processEvents()
         except Exception:
             self._logger.debug("shutdown: processEvents failed", exc_info=True)
+        self._flush_deferred_deletes()
 
 class YApplicationQt:
     def __init__(self):
