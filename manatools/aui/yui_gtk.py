@@ -16,6 +16,7 @@ import os
 import logging
 from .yui_common import *
 from .backends.gtk import *
+from .backends.gtk.commongtk import _open_context_menu
 
 
 class YUIGtk:
@@ -406,8 +407,10 @@ class YApplicationGtk:
         arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
         ContextMenuCancelled. Returns False if no menu was shown.
         """
-        # Not implemented on this backend yet
-        return False
+        dlg = YDialogGtk.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _open_context_menu(dlg, items)
 
     def busyCursor(self):
         """Set busy cursor (GTK implementation)."""
