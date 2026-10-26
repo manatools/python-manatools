@@ -10,6 +10,7 @@ import time
 import logging
 from .yui_common import *
 from .backends.curses import *
+from .backends.curses.commoncurses import _curses_open_context_menu
 
 class YUICurses:
     def __init__(self):
@@ -291,8 +292,10 @@ class YApplicationCurses:
         arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
         ContextMenuCancelled. Returns False if no menu was shown.
         """
-        # Not implemented on this backend yet
-        return False
+        dlg = YDialogCurses.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _curses_open_context_menu(dlg, items)
 
     def busyCursor(self):
         """Set busy cursor (not applicable in ncurses)."""
