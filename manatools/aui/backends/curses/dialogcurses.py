@@ -18,6 +18,7 @@ import time
 import logging
 from ...yui_common import *
 from ... import yui as yui_mod
+from .commoncurses import _curses_request_context_menu
 
 _ = gettext.gettext
 
@@ -59,6 +60,10 @@ class YDialogCurses(YSingleChildContainerWidget):
         self._help_overlay_until = 0.0
         self._help_overlay_pos = None  # (y, x) where to draw the overlay; None = auto fallback
         self._default_button = None
+        # Context menu: pending F2 request (source widget + anchor) and the open popup
+        self._context_menu_source = None
+        self._context_menu_anchor = None
+        self._context_menu = None
         YDialogCurses._open_dialogs.append(self)
     
     def widgetClass(self):
@@ -339,6 +344,10 @@ class YDialogCurses(YSingleChildContainerWidget):
                         fixed_hints += " | " + _("F1=Help")
                 except Exception:
                     pass
+            if self._context_menu is not None:
+                widget_hints = self._context_menu.key_hints()
+            elif self._focused_widget is not None and self._focused_widget.notifyContextMenu():
+                widget_hints = (widget_hints + " | " if widget_hints else "") + _("F2=Menu")
             if widget_hints:
                 footer_text = " " + fixed_hints + " | " + widget_hints + " "
             else:
@@ -359,6 +368,9 @@ class YDialogCurses(YSingleChildContainerWidget):
                 #ifthe focused widget has an expnded list (menus, combos,...), draw it on top
                 if hasattr(self._focused_widget, "_draw_expanded_list"):
                     self._focused_widget._draw_expanded_list(self._backend_widget)
+            # An open context menu is modal and sits above everything else
+            if self._context_menu is not None:
+                self._context_menu.draw(self._backend_widget)
             
             # Draw help overlay if active and not expired
             try:
@@ -626,6 +638,26 @@ class YDialogCurses(YSingleChildContainerWidget):
                 self._help_overlay_text = None
                 self._help_overlay_until = 0.0
                 self._help_overlay_pos = None
+                # An open context menu is modal: it gets every key but resize.
+                if self._context_menu is not None and key != curses.KEY_RESIZE:
+                    menu = self._context_menu
+                    result = menu.handle_key(key)
+                    self._needs_redraw = True
+                    if result is not None:
+                        self._context_menu = None
+                        action, item = result
+                        if action == "pick":
+                            self._post_event(YMenuEvent(item=item, id=context_menu_item_path(item, menu.top_items),
+                                                        widget=menu.source))
+                        else:
+                            self._post_event(YWidgetEvent(menu.source, YEventReason.ContextMenuCancelled))
+                    continue
+                if key == curses.KEY_F2 and self._focused_widget is not None:
+                    fw = self._focused_widget
+                    row = getattr(fw, "_context_menu_row", None)
+                    if _curses_request_context_menu(fw, row() if callable(row) else None):
+                        self._needs_redraw = True
+                        continue
                 # Global keys
                 if key == curses.KEY_F10:
                     self._post_event(YCancelEvent())
