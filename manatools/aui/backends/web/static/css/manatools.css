@@ -791,6 +791,116 @@ body {
 }
 
 /* ============================================
+   Context menu — floating, at the pointer
+   ============================================ */
+/* Catcher and menu sit above popup overlays (1050 + depth) and below the
+   busy (2000) and shutdown (2100) overlays. The catcher swallows outside
+   clicks so they dismiss the menu instead of reaching the page. */
+.mana-ctxmenu-catcher {
+    position: fixed;
+    inset: 0;
+    z-index: 1900;
+    background: transparent;
+}
+
+.mana-ctxmenu {
+    position: fixed;
+    z-index: 1901;
+    min-width: 180px;
+    max-width: calc(100vw - 8px);
+    max-height: calc(100vh - 8px);
+    overflow-y: auto;
+    padding: var(--mana-spacing-xs) 0;
+    background: var(--mana-bg-secondary);
+    color: var(--mana-text-primary);
+    border: 1px solid var(--mana-border-color);
+    border-radius: var(--mana-radius);
+    box-shadow: var(--mana-shadow-lg);
+    font-family: var(--mana-font-family);
+    font-size: var(--mana-font-size);
+    line-height: var(--mana-line-height);
+    text-align: left;
+    user-select: none;
+    -webkit-user-select: none;
+    outline: none;
+}
+
+.mana-ctxmenu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--mana-spacing-sm);
+    padding: var(--mana-spacing-xs) var(--mana-spacing-md);
+    cursor: pointer;
+    white-space: nowrap;
+    outline: none;
+}
+
+.mana-ctxmenu-item:hover,
+.mana-ctxmenu-item:focus,
+.mana-ctxmenu-item[aria-expanded="true"] {
+    background: var(--mana-bg-hover);
+}
+
+.mana-ctxmenu-item:focus-visible {
+    outline: 2px solid var(--mana-border-focus);
+    outline-offset: -2px;
+}
+
+.mana-ctxmenu-item[aria-disabled="true"] {
+    color: var(--mana-text-disabled);
+    cursor: not-allowed;
+}
+
+.mana-ctxmenu-item[aria-disabled="true"] .mana-ctxmenu-icon {
+    opacity: 0.5;
+}
+
+.mana-ctxmenu-label {
+    flex: 1 1 auto;
+}
+
+.mana-ctxmenu-icon {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
+/* Submenu marker; the second declaration hides it from screen readers
+   where alternative text for generated content is supported. */
+.mana-ctxmenu-item[aria-haspopup="menu"]::after {
+    content: "\25BA";
+    content: "\25BA" / "";
+    margin-left: var(--mana-spacing-md);
+    font-size: 0.7em;
+    color: var(--mana-text-secondary);
+}
+
+.mana-ctxmenu-item[aria-disabled="true"][aria-haspopup="menu"]::after {
+    color: var(--mana-text-disabled);
+}
+
+.mana-ctxmenu-separator {
+    margin: var(--mana-spacing-xs) 0;
+    border-top: 1px solid var(--mana-border-color);
+}
+
+/* Widgets that request a context menu: no native touch callout on
+   long-press, and a visible ring on a keyboard-focused table row. */
+[data-notify-context-menu="1"] {
+    -webkit-touch-callout: none;
+}
+
+.mana-ytable[data-notify-context-menu="1"] .mana-table-inner tbody > tr:focus {
+    outline: none;
+}
+
+.mana-ytable[data-notify-context-menu="1"] .mana-table-inner tbody > tr:focus-visible {
+    outline: 2px solid var(--mana-border-focus);
+    outline-offset: -2px;
+}
+
+/* ============================================
    Tabs (DumbTab) — Bootstrap 5.3 nav-tabs
    ============================================ */
 .mana-ydumbtab {

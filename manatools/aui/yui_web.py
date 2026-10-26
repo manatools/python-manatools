@@ -183,8 +183,11 @@ class YApplicationWeb:
         arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
         ContextMenuCancelled. Returns False if no menu was shown.
         """
-        # Not implemented on this backend yet
-        return False
+        from .backends.web.dialogweb import YDialogWeb
+        dlg = YDialogWeb.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return dlg._open_context_menu(items)
 
     def busyCursor(self):
         """Show a full-screen busy overlay in the browser."""

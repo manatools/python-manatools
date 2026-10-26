@@ -6,12 +6,12 @@ from .commonweb import widget_attrs, escape_html, escape_attr, is_initial_render
 class YTableWeb(YSelectionWidget):
     """Table view widget."""
     def __init__(self, parent=None, header: YTableHeader = None, multiSelection: bool = False):
-        super().__init__(parent)
         self._header = header or YTableHeader()
         self._multi_selection = multiSelection
         self._rows = []
         self._changed_item = None
         self._deferred_pending = False  # True while a skeleton is shown in the browser
+        super().__init__(parent)
 
     def widgetClass(self):
         return "YTable"
@@ -48,6 +48,39 @@ class YTableWeb(YSelectionWidget):
                     self._selected_items.remove(row)
                 else:
                     self._selected_items.append(row)
+
+    def _context_menu_select(self, ref):
+        """Context-menu adapter: right-click on row *ref* (absolute row index).
+
+        An unselected row becomes the only selected row, so the handler can
+        rely on selectedItem(); a row inside the selection keeps it.  Only the
+        rows are pushed, so the page/filter state in the browser is kept.
+        """
+        rows = getattr(self, "_rows", [])
+        if not isinstance(ref, int) or not (0 <= ref < len(rows)):
+            return
+        row = rows[ref]
+        if row in self._selected_items:
+            return
+        for old in self._selected_items:
+            try:
+                old.setSelected(False)
+            except Exception:
+                pass
+        try:
+            row.setSelected(True)
+        except Exception:
+            pass
+        self._selected_items = [row]
+        dialog = self.findDialog()
+        if dialog is None or getattr(self, "_deferred_pending", False) or not hasattr(dialog, "_broadcast"):
+            return
+        dialog._broadcast({"type": "update", "updates": [{
+            "action": "rows", "target": f"#{self.id()}", "html": self._render_rows_html(),
+        }]})
+
+    def _context_menu_notify_changed(self):
+        self._notify_update()
 
     def _handle_checkbox_change(self, row_index: int, col_index: int, checked: bool):
         """Handle a checkbox cell toggle from the browser.
@@ -140,7 +173,8 @@ class YTableWeb(YSelectionWidget):
         # Outer wrapper carries the widget identity (id, data-widget-class, visible).
         # enabled=True: <div> cannot carry the HTML disabled attribute; the enabled
         # state is propagated to the inner form controls manually below.
-        attrs = widget_attrs(self.id(), "YTable", True, self._visible)
+        attrs = widget_attrs(self.id(), "YTable", True, self._visible, extra_attrs={
+            "data-notify-context-menu": "1" if self.notifyContextMenu() else None})
         disabled_attr = ' disabled' if not self._enabled else ''
 
         # Controls bar: search input only (page-size selector omitted by default)
