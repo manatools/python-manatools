@@ -102,9 +102,11 @@ class YEventType(Enum):
 
 ```python
 class YEventReason(Enum):
-    Activated         = 0
-    ValueChanged      = 1
-    SelectionChanged  = 2
+    Activated            = 0
+    ValueChanged         = 1
+    SelectionChanged     = 2
+    ContextMenuActivated = 3   # right-click (F2 in NCurses) on a widget, see §7 Context menus
+    ContextMenuCancelled = 4   # a context menu was dismissed without a pick
 ```
 
 ### YCheckBoxState
@@ -191,9 +193,13 @@ ev.focusWidget() -> YWidget | None
 Generated when a menu item is activated.
 
 ```python
-ev.item()  -> YMenuItem | None
-ev.id()    -> str | None
+ev.item()    -> YMenuItem | None
+ev.id()      -> str | None
+ev.widget()  -> YWidget | None   # widget a context menu was opened on;
+                                 # None for menu bar items and rich text links
 ```
+
+For context menu picks `ev.id()` is the `/`-joined labels from the top-level entry down to the item (e.g. `"&Move to/&Trash"`), i.e. the label itself for top-level entries.
 
 ### YTimeoutEvent
 
@@ -291,6 +297,13 @@ w.notify() -> bool
 ```
 
 When `notify` is `True` (default), the widget posts a `YWidgetEvent` each time its value or selection changes.
+
+```python
+w.setNotifyContextMenu(notify: bool = True)
+w.notifyContextMenu() -> bool   # default False
+```
+
+When set, a right-click on the widget (F2 in NCurses) posts a `YWidgetEvent` with reason `ContextMenuActivated` instead of showing nothing; the application answers with `app.openContextMenu()` (see §7 Context menus). Supported by tables, trees and (multi-)selection boxes. Can be toggled at any time.
 
 ### Help text / tooltip
 
@@ -412,6 +425,56 @@ app.askForSaveFileName(startWith: str, filter: str, headline: str) -> str
 ```
 
 `filter` is a semicolon-separated list of glob patterns (e.g. `"*.txt;*.md"`). GTK uses `Gtk.FileDialog` (GTK 4.10+, portal-aware); Qt uses `QFileDialog` (synchronous); NCurses renders an in-terminal browser overlay.
+
+### Context menus
+
+```python
+app.openContextMenu(items: YMenuItem | list[YMenuItem]) -> bool
+```
+
+Opens a popup menu for the widget that just posted `ContextMenuActivated` (see `setNotifyContextMenu()` in §5). `items` is a root `YMenuItem` whose children are the entries, or a list of `YMenuItem`; separators, disabled items, icons, `&` mnemonics and nested submenus are supported, hidden items are left out. The call does not block: the outcome arrives from the next `waitForEvent()`:
+
+- a pick: `YMenuEvent` with `ev.item()` the picked `YMenuItem`, `ev.id()` its label path and `ev.widget()` the widget the menu was opened on;
+- a dismissal (Esc, click outside, …): `YWidgetEvent(widget, ContextMenuCancelled)`. Never a `YCancelEvent`, so a dismissed menu does not close the dialog.
+
+Returns `False`, showing nothing, when there is no pending context request or no item can be picked.
+
+Before posting `ContextMenuActivated` the widget selects the row under the pointer (cursor row in NCurses) if it was not selected, so `selectedItem()` / `selectedItems()` tell what the menu is about; right-clicking inside an existing multi-selection keeps it. Right-clicking an empty area keeps the selection as it is.
+
+The menu is a snapshot of the items at open time, so one menu can be built once and reused for every row and widget, adjusting it per row just before opening:
+
+```python
+menu = YMenuItem("context", is_menu=True)
+item_open   = menu.addItem("&Open", icon_name="document-open")
+menu.addSeparator()
+item_delete = menu.addItem("&Delete", icon_name="edit-delete")
+move = menu.addMenu("&Move to")
+move.addItem("&Trash")
+
+table.setNotifyContextMenu(True)
+
+while True:
+    ev = dlg.waitForEvent()
+    if ev.eventType() == YEventType.WidgetEvent:
+        if ev.reason() == YEventReason.ContextMenuActivated:
+            rows = ev.widget().selectedItems()
+            item_delete.setEnabled(bool(rows) and not any(r.label().startswith("locked") for r in rows))
+            app.openContextMenu(menu)
+        elif ev.reason() == YEventReason.ContextMenuCancelled:
+            pass                                    # nothing picked
+    elif ev.eventType() == YEventType.MenuEvent and ev.widget() is not None:
+        if ev.item() is item_delete:                # compare items, not labels
+            delete(ev.widget().selectedItems())
+```
+
+| Backend | Opens with | Rendering |
+|---------|------------|-----------|
+| Qt | right-click, Menu key | `QMenu` at the pointer (below the focused row from the keyboard) |
+| GTK | right-click, long-press, Menu key, Shift+F10 | `Gtk.PopoverMenu` with nested submenus |
+| NCurses | F2 on the cursor row (footer shows `F2=Menu`) | framed dropdown below the row, submenus to the side |
+| Web | right-click, long-press, Menu key, Shift+F10 | floating menu at the pointer; outside the enabled widgets the browser menu stays |
+
+Keyboard inside the menu: arrows move and open/close submenus, Enter picks, Esc closes one level. In NCurses and web a mnemonic letter picks its item directly; Qt and GTK follow their toolkit's menu behaviour.
 
 ### Practical examples
 
@@ -663,6 +726,8 @@ w.deleteAllItems()
 w.selectedItem()  -> YTableItem | None
 w.selectedItems() -> list[YTableItem]
 ```
+
+Tables, trees and selection boxes support right-click context menus via `setNotifyContextMenu()` (§5) and `app.openContextMenu()` (§7).
 
 ### 8.14 RichText
 
@@ -917,7 +982,7 @@ item.setData(data)
 
 ### 9.2 YMenuItem
 
-Used with `createMenuBar()`. Items can be nested arbitrarily.
+Used with `createMenuBar()` and `app.openContextMenu()` (§7). Items can be nested arbitrarily.
 
 ```python
 menu = YMenuItem(label: str, icon_name: str = "",
