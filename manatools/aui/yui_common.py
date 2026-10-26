@@ -468,6 +468,11 @@ class YWidget:
     def setNotifyContextMenu(self, notify=True):
         ''' Post a ContextMenuActivated event on right-click (or F2 in text mode). '''
         self._notify_context_menu = bool(notify)
+        self._context_menu_notify_changed()
+
+    def _context_menu_notify_changed(self):
+        ''' Backend hook: the notifyContextMenu flag changed (e.g. to re-render). '''
+        pass
 
     def notifyContextMenu(self):
         # getattr: backends may query this from _create_backend_widget() before YWidget.__init__ ran
