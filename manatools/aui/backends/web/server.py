@@ -383,7 +383,19 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         logger.debug(format, *args)
 
-    def _send_security_headers(self):
+    _DEFAULT_CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none';"
+    )
+
+    def _send_security_headers(self, csp: Optional[str] = None,
+                               frame_options: str = "DENY",
+                               referrer: str = "same-origin"):
         """Emit HTTP security headers on every successful response.
 
         * CSP: restricts scripts/fonts/images to same origin; allows inline
@@ -392,20 +404,15 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
         * X-Content-Type-Options: prevents MIME-type sniffing.
         * X-Frame-Options: prevents the page being embedded in an iframe.
         * Referrer-Policy: prevents leaking the URL to third-party requests.
+
+        The only caller overriding the defaults is the YHtmlView document
+        route, whose response must be frameable by our own page and carries a
+        far stricter CSP of its own.
         """
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'none';",
-        )
+        self.send_header("Content-Security-Policy", csp or self._DEFAULT_CSP)
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", frame_options)
+        self.send_header("Referrer-Policy", referrer)
 
     def handle_one_request(self):
         """Override to suppress flush errors after a WebSocket upgrade."""
@@ -430,6 +437,8 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self._serve_static(path[len("/static/"):])
         elif path.startswith("/icon/"):
             self._serve_icon(path[len("/icon/"):])
+        elif path.startswith("/htmlview/"):
+            self._serve_htmlview(path[len("/htmlview/"):])
         elif path == "/events":
             self._serve_sse()
         else:
@@ -629,6 +638,94 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
                 pass
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # YHtmlView documents
+    # ------------------------------------------------------------------
+
+    # <token> for the document, <token>/link/<n> for a link activation.
+    _HTMLVIEW_PATH_RE = re.compile(r"^([A-Za-z0-9_-]{16,64})(?:/link/(\d{1,6}))?$")
+
+    @staticmethod
+    def _htmlview_csp(allow_remote: bool) -> str:
+        """CSP of a YHtmlView document: no script at all, sandboxed, images
+        only inline unless the application allowed remote content."""
+        img_src = "data: http: https:" if allow_remote else "data:"
+        return (
+            "default-src 'none'; "
+            f"img-src {img_src}; "
+            "style-src 'unsafe-inline'; "
+            "font-src data:; "
+            "base-uri 'none'; "
+            "form-action 'none'; "
+            "frame-ancestors 'self'; "
+            "sandbox"
+        )
+
+    def _is_local_host(self) -> bool:
+        """True if the Host header names this machine (DNS-rebinding guard)."""
+        try:
+            hostname = urlparse("//" + self.headers.get("Host", "")).hostname
+        except Exception:
+            return False
+        return hostname in WebSocketHandler._LOCAL_HOSTS
+
+    def _serve_htmlview(self, rest: str):
+        """Serve a YHtmlView document, or report one of its links.
+
+        Both are plain GETs issued by a sandboxed frame (opaque origin, no
+        script), so the usual Origin check cannot be the only guard: the URL
+        carries the widget's unguessable per-content token, the Host must be
+        local, and the request must be a frame load.  A link request posts
+        the activation and answers 204, which leaves the frame where it is.
+        """
+        match = self._HTMLVIEW_PATH_RE.match(rest)
+        if not match:
+            self.send_error(404, "Not Found")
+            return
+        if (not self._is_local_host()
+                or not WebSocketHandler._is_local_origin(self.headers.get("Origin"))):
+            self.send_error(403, "Forbidden")
+            logger.warning("/htmlview rejected: Host=%s Origin=%s",
+                           self.headers.get("Host"), self.headers.get("Origin"))
+            return
+        fetch_dest = self.headers.get("Sec-Fetch-Dest")
+        if fetch_dest is not None and fetch_dest != "iframe":
+            self.send_error(403, "Forbidden")
+            return
+
+        from .htmlviewweb import YHtmlViewWeb
+        token, link = match.group(1), match.group(2)
+        widget = YHtmlViewWeb._lookup(token)
+        if widget is None:
+            self.send_error(404, "Not Found")
+            return
+
+        if link is not None:
+            widget._serve_link(token, int(link))
+            self.send_response(204)
+            self._send_security_headers(csp=self._htmlview_csp(False),
+                                        frame_options="SAMEORIGIN",
+                                        referrer="no-referrer")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
+        served = widget._serve_document(token)
+        if served is None:
+            self.send_error(404, "Not Found")
+            return
+        document, allow_remote = served
+        encoded = document.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self._send_security_headers(csp=self._htmlview_csp(allow_remote),
+                                    frame_options="SAMEORIGIN",
+                                    referrer="no-referrer")
+        self.end_headers()
+        self.wfile.write(encoded)
 
     # ------------------------------------------------------------------
     # HTTP event fallback
