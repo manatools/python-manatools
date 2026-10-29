@@ -966,12 +966,12 @@ body {
     flex-shrink: 0; /* never compress the divider bar */
 }
 
-.mana-paned-horizontal .mana-paned-divider {
+.mana-paned-horizontal > .mana-paned-divider {
     width: 4px;
     cursor: col-resize;
 }
 
-.mana-paned-vertical .mana-paned-divider {
+.mana-paned-vertical > .mana-paned-divider {
     height: 4px;
     cursor: row-resize;
     margin: 0.25rem 0; /* breathing room above/below the horizontal rule */
