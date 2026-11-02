@@ -152,50 +152,93 @@ class WebSocketHandler:
         return bytes(buf)
 
     def receive_frame(self) -> Optional[str]:
-        """Receive a WebSocket frame and return the text payload."""
+        """Receive frames until a text message is complete; return it.
+
+        Every frame is read in full (length, mask key, payload) before its
+        opcode is acted on, so skipped control/binary frames never leave
+        bytes behind that would desynchronise the stream.  A fragmented text
+        message is reassembled from its continuation frames.  Returns None on
+        close, protocol violation (RFC 6455: unmasked client frame, long or
+        fragmented control frame, interleaved data frames), too many frames
+        without a complete text message, or a socket error.
+        """
         try:
-            header = self._recv_exact(2)
+            max_control_frames = 100  # Frames tolerated per text message
+            control_frames_processed = 0
+            fragments = None  # bytearray while a fragmented text message is open
 
-            fin = (header[0] >> 7) & 1
-            opcode = header[0] & 0x0F
-            masked = (header[1] >> 7) & 1
-            payload_len = header[1] & 0x7F
+            while True:
+                header = self._recv_exact(2)
 
-            if opcode == 0x08:  # Close frame
-                self._closed = True
-                return None
+                fin = (header[0] >> 7) & 1
+                opcode = header[0] & 0x0F
+                masked = (header[1] >> 7) & 1
+                payload_len = header[1] & 0x7F
 
-            if opcode == 0x09:  # Ping
-                self._send_pong()
-                return self.receive_frame()
+                if payload_len == 126:
+                    payload_len = struct.unpack(">H", self._recv_exact(2))[0]
+                elif payload_len == 127:
+                    payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
 
-            if opcode != 0x01:  # Not a text frame
-                return self.receive_frame()
+                if not masked:
+                    # RFC 6455 5.1: a server must close on an unmasked client frame
+                    return self._protocol_error("unmasked client frame")
 
-            if payload_len == 126:
-                payload_len = struct.unpack(">H", self._recv_exact(2))[0]
-            elif payload_len == 127:
-                payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
+                if payload_len > self.MAX_FRAME_SIZE:
+                    return self._protocol_error(
+                        "frame too large (%d bytes)" % payload_len)
 
-            if payload_len > self.MAX_FRAME_SIZE:
-                self._closed = True
-                logger.warning(
-                    "WebSocket frame too large (%d bytes); closing connection",
-                    payload_len,
-                )
-                return None
+                if opcode & 0x08 and (payload_len > 125 or not fin):
+                    # RFC 6455 5.5: control frames carry at most 125 bytes
+                    # and are never fragmented
+                    return self._protocol_error(
+                        "invalid control frame (%d bytes, fin=%d)" % (payload_len, fin))
 
-            mask_key = self._recv_exact(4) if masked else b""
-            payload = self._recv_exact(payload_len)
-
-            if masked:
+                mask_key = self._recv_exact(4)
+                payload = self._recv_exact(payload_len)
                 payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
 
-            return payload.decode("utf-8")
+                if opcode == 0x01:  # Text frame
+                    if fragments is not None:
+                        # RFC 6455 5.4: no new message before the open one ends
+                        return self._protocol_error("text frame inside a fragmented message")
+                    if fin:
+                        return payload.decode("utf-8")
+                    fragments = bytearray(payload)
+
+                elif opcode == 0x00 and fragments is not None:  # Continuation
+                    fragments += payload
+                    if len(fragments) > self.MAX_FRAME_SIZE:
+                        return self._protocol_error(
+                            "message too large (%d bytes)" % len(fragments))
+                    if fin:
+                        return bytes(fragments).decode("utf-8")
+
+                elif opcode == 0x08:  # Close frame
+                    self._closed = True
+                    return None
+
+                elif opcode == 0x09:  # Ping
+                    self._send_pong(payload)
+
+                # Ping, pong, binary, fragment: payload consumed, go on
+                control_frames_processed += 1
+                if control_frames_processed >= max_control_frames:
+                    self._closed = True
+                    logger.warning(
+                        "Too many WebSocket frames without a text message; closing connection"
+                    )
+                    return None
         except Exception as e:
             if not self._closed:
                 logger.debug("WebSocket receive error: %s", e)
             return None
+
+    def _protocol_error(self, reason: str) -> None:
+        """Mark the connection closed after a client protocol violation."""
+        self._closed = True
+        logger.warning("WebSocket %s; closing connection", reason)
+        return None
 
     def send(self, message: str):
         """Send a text message through the WebSocket."""
@@ -224,11 +267,11 @@ class WebSocketHandler:
                 logger.debug("WebSocket send error: %s", e)
                 self._closed = True
 
-    def _send_pong(self):
-        """Send a pong frame."""
+    def _send_pong(self, payload: bytes = b""):
+        """Send a pong frame echoing the ping's application data (RFC 6455 5.5.3)."""
         with self._lock:
             try:
-                self.request.sendall(bytes([0x8A, 0x00]))
+                self.request.sendall(bytes([0x8A, len(payload)]) + payload)
             except Exception:
                 pass
 

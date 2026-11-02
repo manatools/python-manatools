@@ -24,23 +24,31 @@ msgstr ""
 
 #: manatools/args.py:28
 msgid "start using Gtk backend"
-msgstr ""
+msgstr "avvia usando il backend Gtk"
 
 #: manatools/args.py:29
 msgid "start using ncurses backend"
-msgstr ""
+msgstr "avvia usando il backend ncurses"
 
 #: manatools/args.py:30
 msgid "start using Qt backend"
-msgstr ""
+msgstr "avvia usando il backend Qt"
 
 #: manatools/args.py:33
 msgid "directory containing localization strings (developer only)"
-msgstr ""
+msgstr "directory contenente le stringhe di localizzazione (solo sviluppatori)"
 
 #: manatools/args.py:34
 msgid "show application version and exit"
-msgstr ""
+msgstr "mostra la versione dell'applicazione ed esce"
+
+#: manatools/args.py:27
+msgid "options"
+msgstr "opzioni"
+
+#: manatools/args.py:31
+msgid "show this help message and exit"
+msgstr "mostra questo messaggio di aiuto ed esce"
 
 #: manatools/aui/backends/curses/checkboxcurses.py:139
 #: manatools/aui/backends/curses/checkboxframecurses.py:236
