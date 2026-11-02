@@ -9,11 +9,15 @@ client frames (masked, as browsers send them):
 2. ping, pong, binary and continuation frames are consumed in full and
    skipped, so the following text frame arrives intact (mask key and
    payload of a skipped frame must not leak into the next header);
-3. a ping is answered with a pong;
+3. a ping is answered with a pong echoing its data;
 4. a ping flood is handled iteratively (no recursion) and the connection
    is dropped after 100 consecutive non-text frames;
 5. close frames, oversized frames and oversized control frames end the
-   connection.
+   connection;
+6. fragmented text messages are reassembled (control frames may come in
+   between); fragmented control frames, a new text frame inside an open
+   message and oversized reassembled messages end the connection;
+7. unmasked client frames end the connection.
 
 No browser and no dialog needed.
 Run directly: python3 test/test_web_ws_frames.py (exit 0 = pass).
@@ -39,18 +43,21 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def frame(opcode, payload=b"", fin=True):
-    """Build a masked client frame."""
+def frame(opcode, payload=b"", fin=True, masked=True):
+    """Build a client frame (masked unless *masked* is False)."""
     head = bytearray([(0x80 if fin else 0) | opcode])
+    bit = 0x80 if masked else 0
     n = len(payload)
     if n < 126:
-        head.append(0x80 | n)
+        head.append(bit | n)
     elif n < 65536:
-        head.append(0x80 | 126)
+        head.append(bit | 126)
         head += struct.pack(">H", n)
     else:
-        head.append(0x80 | 127)
+        head.append(bit | 127)
         head += struct.pack(">Q", n)
+    if not masked:
+        return bytes(head) + payload
     key = os.urandom(4)
     return bytes(head) + key + bytes(b ^ key[i % 4] for i, b in enumerate(payload))
 
@@ -139,8 +146,9 @@ def main():
     check("ping then text", r == "after-ping", repr(r))
     check("ping answered with pong", sent.startswith(b"\x8a\x00"), repr(sent[:4]))
 
-    r, _, _ = run_case(ping(b"hello") + text("after-ping-payload"))
+    r, _, sent = run_case(ping(b"hello") + text("after-ping-payload"))
     check("ping with payload then text", r == "after-ping-payload", repr(r))
+    check("pong echoes ping payload", sent.startswith(b"\x8a\x05hello"), repr(sent[:8]))
 
     r, _, _ = run_case(frame(0x0A) + frame(0x0A, b"pong!") + text("after-pong"))
     check("unsolicited pongs then text", r == "after-pong", repr(r))
@@ -181,6 +189,40 @@ def main():
 
     r, closed, _ = run_case(text("trunc")[:-2])
     check("truncated frame returns None", r is None, repr(r))
+
+    # 6. fragmentation
+    r, _, sent = run_case(frame(0x01, b"frag", fin=False) + frame(0x00, b"men", fin=False)
+                          + ping(b"mid") + frame(0x00, b"ted") + text("next"), count=2)
+    check("fragmented text reassembled around a ping", r == ["fragmented", "next"], repr(r))
+    check("ping inside fragmented message answered", sent.startswith(b"\x8a\x03mid"), repr(sent[:8]))
+
+    raw = "àèìòù €".encode("utf-8")
+    r, _, _ = run_case(frame(0x01, raw[:3], fin=False) + frame(0x00, raw[3:]))
+    check("utf-8 character split across fragments", r == "àèìòù €", repr(r))
+
+    r, _, _ = run_case(frame(0x02, b"bin", fin=False) + frame(0x00, b"ary") + text("after-binary-msg"))
+    check("fragmented binary message skipped", r == "after-binary-msg", repr(r))
+
+    r, closed, _ = run_case(frame(0x09, b"p", fin=False) + text("after-frag-ping"))
+    check("fragmented ping rejected", r is None and closed, f"r={r!r} closed={closed}")
+
+    r, closed, _ = run_case(frame(0x01, b"open", fin=False) + text("interleaved"))
+    check("text frame inside open message rejected", r is None and closed, f"r={r!r} closed={closed}")
+
+    saved = WebSocketHandler.MAX_FRAME_SIZE
+    WebSocketHandler.MAX_FRAME_SIZE = 1000
+    try:
+        r, closed, _ = run_case(frame(0x01, b"a" * 600, fin=False) + frame(0x00, b"b" * 600))
+        check("oversized reassembled message rejected", r is None and closed, f"r={r!r} closed={closed}")
+    finally:
+        WebSocketHandler.MAX_FRAME_SIZE = saved
+
+    # 7. masking
+    r, closed, _ = run_case(frame(0x01, b"plain", masked=False))
+    check("unmasked text frame rejected", r is None and closed, f"r={r!r} closed={closed}")
+
+    r, closed, _ = run_case(frame(0x09, masked=False) + text("after-unmasked-ping"))
+    check("unmasked ping rejected", r is None and closed, f"r={r!r} closed={closed}")
 
     if FAILURES:
         print(f"{len(FAILURES)} check(s) failed: {', '.join(FAILURES)}")
