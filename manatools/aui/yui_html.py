@@ -59,7 +59,8 @@ MAX_LINKS = 10000
 MAX_STYLE_CHARS = 512 * 1024
 MAX_ATTR_CHARS = 2048
 MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024
-MAX_INLINE_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_INLINE_TOTAL_BYTES = 32 * 1024 * 1024   # every emitted cid: copy counts
+MAX_CID_IDS = 256                           # distinct cid: values resolved
 
 # Removed together with everything they contain.
 _DROP_WITH_CONTENT = frozenset({
@@ -265,21 +266,29 @@ class _Sanitizer(HTMLParser):
         if not cid or self.cid_resolver is None:
             return None
         if cid in self._cid_cache:
-            return self._cid_cache[cid]
-        result = None
-        try:
-            resolved = self.cid_resolver(cid)
-            if resolved:
-                data, mime = resolved
-                mime = str(mime or "").split(";", 1)[0].strip().lower()
-                if (isinstance(data, (bytes, bytearray)) and mime in _IMAGE_MIMES
-                        and 0 < len(data) <= MAX_INLINE_IMAGE_BYTES
-                        and self._inline_total + len(data) <= MAX_INLINE_TOTAL_BYTES):
-                    self._inline_total += len(data)
-                    result = f"data:{mime};base64,{base64.b64encode(bytes(data)).decode('ascii')}"
-        except Exception:
-            result = None
-        self._cid_cache[cid] = result
+            result, size = self._cid_cache[cid]
+        else:
+            if len(self._cid_cache) >= MAX_CID_IDS or self._inline_total >= MAX_INLINE_TOTAL_BYTES:
+                return None
+            result, size = None, 0
+            try:
+                resolved = self.cid_resolver(cid)
+                if resolved:
+                    data, mime = resolved
+                    mime = str(mime or "").split(";", 1)[0].strip().lower()
+                    if (isinstance(data, (bytes, bytearray)) and mime in _IMAGE_MIMES
+                            and 0 < len(data) <= MAX_INLINE_IMAGE_BYTES
+                            and self._inline_total + len(data) <= MAX_INLINE_TOTAL_BYTES):
+                        size = len(data)
+                        result = f"data:{mime};base64,{base64.b64encode(bytes(data)).decode('ascii')}"
+            except Exception:
+                result, size = None, 0
+            self._cid_cache[cid] = (result, size)
+        # Charge every copy, not every distinct cid: an image referenced N
+        # times is emitted (and held by the engine) N times.
+        if result is None or self._inline_total + size > MAX_INLINE_TOTAL_BYTES:
+            return None
+        self._inline_total += size
         return result
 
     def _resource_url(self, url: str) -> Optional[str]:

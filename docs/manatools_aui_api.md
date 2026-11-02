@@ -735,6 +735,9 @@ if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == view:
 
 Only raster `data:`/`cid:` images (png, jpeg, gif, webp, bmp) are displayed.
 Input past 8 MB is truncated; element nesting is capped at 256 levels.
+Each `cid:` image is capped at 8 MB, a document resolves at most 256 distinct
+`cid:` values, and all inlined copies together (every reference counts) at
+32 MB; images past a limit are dropped.
 
 ### 8.15 LogView
 
