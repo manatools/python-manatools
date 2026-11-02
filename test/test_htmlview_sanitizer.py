@@ -115,6 +115,31 @@ def test_remote_and_cid():
     check("csp: remote images allowed", "img-src data: http: https:" in allowed.document, allowed.document[:300])
 
 
+def test_cid_limits():
+    calls = []
+
+    def resolver(cid):
+        calls.append(cid)
+        return (big if cid == "big" else PNG_1PX), "image/png"
+
+    # One image referenced many times: every emitted copy is charged.
+    big = b"\x89PNG" + b"\0" * (4 * 1024 * 1024)
+    copies = yui_html.MAX_INLINE_TOTAL_BYTES // len(big)
+    r = sanitize('<img src="cid:big">' * (copies + 50), cid_resolver=resolver)
+    check("cid: repeated copies capped by total budget", r.body.count("data:image/png") == copies,
+          r.body.count("data:image/png"))
+    check("cid: resolved once per id", calls.count("big") == 1, calls.count("big"))
+    check("cid: output bounded", len(r.body) < yui_html.MAX_INLINE_TOTAL_BYTES * 2, len(r.body))
+
+    # Many distinct ids: only MAX_CID_IDS reach the resolver.
+    calls.clear()
+    r = sanitize("".join(f'<img src="cid:i{n}">' for n in range(yui_html.MAX_CID_IDS + 500)),
+                 cid_resolver=resolver)
+    check("cid: distinct ids capped", len(calls) == yui_html.MAX_CID_IDS, len(calls))
+    check("cid: images past the cap dropped", r.body.count("data:image/png") == yui_html.MAX_CID_IDS,
+          r.body.count("data:image/png"))
+
+
 def test_css():
     r = sanitize(
         '<style>@import url(https://evil.example/x.css);'
@@ -198,6 +223,7 @@ if __name__ == '__main__':
     test_active_content()
     test_links()
     test_remote_and_cid()
+    test_cid_limits()
     test_css()
     test_structure_and_limits()
     test_text_rendering()
