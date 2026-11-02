@@ -152,46 +152,70 @@ class WebSocketHandler:
         return bytes(buf)
 
     def receive_frame(self) -> Optional[str]:
-        """Receive a WebSocket frame and return the text payload."""
+        """Receive frames until a text frame arrives; return its payload.
+
+        Every frame is read in full (length, mask key, payload) before its
+        opcode is acted on, so skipped control/binary frames never leave
+        bytes behind that would desynchronise the stream.  Returns None on
+        close, protocol violation, too many consecutive non-text frames, or
+        a socket error.
+        """
         try:
-            header = self._recv_exact(2)
+            max_control_frames = 100  # Non-text frames tolerated per text frame
+            control_frames_processed = 0
 
-            fin = (header[0] >> 7) & 1
-            opcode = header[0] & 0x0F
-            masked = (header[1] >> 7) & 1
-            payload_len = header[1] & 0x7F
+            while True:
+                header = self._recv_exact(2)
 
-            if opcode == 0x08:  # Close frame
-                self._closed = True
-                return None
+                opcode = header[0] & 0x0F
+                masked = (header[1] >> 7) & 1
+                payload_len = header[1] & 0x7F
 
-            if opcode == 0x09:  # Ping
-                self._send_pong()
-                return self.receive_frame()
+                if payload_len == 126:
+                    payload_len = struct.unpack(">H", self._recv_exact(2))[0]
+                elif payload_len == 127:
+                    payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
 
-            if opcode != 0x01:  # Not a text frame
-                return self.receive_frame()
+                if payload_len > self.MAX_FRAME_SIZE:
+                    self._closed = True
+                    logger.warning(
+                        "WebSocket frame too large (%d bytes); closing connection",
+                        payload_len,
+                    )
+                    return None
 
-            if payload_len == 126:
-                payload_len = struct.unpack(">H", self._recv_exact(2))[0]
-            elif payload_len == 127:
-                payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
+                if opcode & 0x08 and payload_len > 125:
+                    # RFC 6455 5.5: control frames carry at most 125 bytes
+                    self._closed = True
+                    logger.warning(
+                        "WebSocket control frame too large (%d bytes); closing connection",
+                        payload_len,
+                    )
+                    return None
 
-            if payload_len > self.MAX_FRAME_SIZE:
-                self._closed = True
-                logger.warning(
-                    "WebSocket frame too large (%d bytes); closing connection",
-                    payload_len,
-                )
-                return None
+                mask_key = self._recv_exact(4) if masked else b""
+                payload = self._recv_exact(payload_len)
 
-            mask_key = self._recv_exact(4) if masked else b""
-            payload = self._recv_exact(payload_len)
+                if opcode == 0x01:  # Text frame
+                    if masked:
+                        payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+                    return payload.decode("utf-8")
 
-            if masked:
-                payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+                if opcode == 0x08:  # Close frame
+                    self._closed = True
+                    return None
 
-            return payload.decode("utf-8")
+                if opcode == 0x09:  # Ping
+                    self._send_pong()
+
+                # Ping, pong, binary, continuation: payload consumed, skip
+                control_frames_processed += 1
+                if control_frames_processed >= max_control_frames:
+                    self._closed = True
+                    logger.warning(
+                        "Too many consecutive non-text WebSocket frames; closing connection"
+                    )
+                    return None
         except Exception as e:
             if not self._closed:
                 logger.debug("WebSocket receive error: %s", e)
