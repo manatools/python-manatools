@@ -394,10 +394,10 @@ def test_htmlview_example(backend_name=None):
     factory.createHeading(vbox, "HtmlView Example")
 
     top = factory.createHBox(vbox)
-    sample_combo = factory.createComboBox(top, "&Sample:", False)
+    sample_combo = factory.createComboBox(top, "Sample:", False)
     sample_combo.addItems([yui.YItem(name, selected=(i == 0)) for i, (name, _, _) in enumerate(SAMPLES)])
     sample_combo.setNotify(True)
-    allow_remote = factory.createCheckBox(top, "&Allow remote content", False)
+    allow_remote = factory.createCheckBox(top, "Allow remote content", False)
     allow_remote.setNotify(True)
 
     view = factory.createHtmlView(vbox)
