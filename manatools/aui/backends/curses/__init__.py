@@ -15,6 +15,7 @@ from .progressbarcurses import YProgressBarCurses
 from .radiobuttoncurses import YRadioButtonCurses
 from .tablecurses import YTableCurses
 from .richtextcurses import YRichTextCurses
+from .htmlviewcurses import YHtmlViewCurses
 from .menubarcurses import YMenuBarCurses
 from .replacepointcurses import YReplacePointCurses
 from .intfieldcurses import YIntFieldCurses
@@ -46,6 +47,7 @@ __all__ = [
     "YRadioButtonCurses",
     "YTableCurses",
     "YRichTextCurses",
+    "YHtmlViewCurses",
     "YMenuBarCurses",
     "YReplacePointCurses",
     "YIntFieldCurses",

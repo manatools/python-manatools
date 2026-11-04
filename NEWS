@@ -1,6 +1,7 @@
 Python-manatools
 ================
 0.99.4
+   - Improved localization management to make it available to applications (also locally)
    - Fixed issue #11: Qt backend - pressing ESC in Find Packages no longer leaves the main window
      permanently inactive.
    - Added web backend (Matteo Pasotti)

@@ -154,50 +154,93 @@ class WebSocketHandler:
         return bytes(buf)
 
     def receive_frame(self) -> Optional[str]:
-        """Receive a WebSocket frame and return the text payload."""
+        """Receive frames until a text message is complete; return it.
+
+        Every frame is read in full (length, mask key, payload) before its
+        opcode is acted on, so skipped control/binary frames never leave
+        bytes behind that would desynchronise the stream.  A fragmented text
+        message is reassembled from its continuation frames.  Returns None on
+        close, protocol violation (RFC 6455: unmasked client frame, long or
+        fragmented control frame, interleaved data frames), too many frames
+        without a complete text message, or a socket error.
+        """
         try:
-            header = self._recv_exact(2)
+            max_control_frames = 100  # Frames tolerated per text message
+            control_frames_processed = 0
+            fragments = None  # bytearray while a fragmented text message is open
 
-            fin = (header[0] >> 7) & 1
-            opcode = header[0] & 0x0F
-            masked = (header[1] >> 7) & 1
-            payload_len = header[1] & 0x7F
+            while True:
+                header = self._recv_exact(2)
 
-            if opcode == 0x08:  # Close frame
-                self._closed = True
-                return None
+                fin = (header[0] >> 7) & 1
+                opcode = header[0] & 0x0F
+                masked = (header[1] >> 7) & 1
+                payload_len = header[1] & 0x7F
 
-            if opcode == 0x09:  # Ping
-                self._send_pong()
-                return self.receive_frame()
+                if payload_len == 126:
+                    payload_len = struct.unpack(">H", self._recv_exact(2))[0]
+                elif payload_len == 127:
+                    payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
 
-            if opcode != 0x01:  # Not a text frame
-                return self.receive_frame()
+                if not masked:
+                    # RFC 6455 5.1: a server must close on an unmasked client frame
+                    return self._protocol_error("unmasked client frame")
 
-            if payload_len == 126:
-                payload_len = struct.unpack(">H", self._recv_exact(2))[0]
-            elif payload_len == 127:
-                payload_len = struct.unpack(">Q", self._recv_exact(8))[0]
+                if payload_len > self.MAX_FRAME_SIZE:
+                    return self._protocol_error(
+                        "frame too large (%d bytes)" % payload_len)
 
-            if payload_len > self.MAX_FRAME_SIZE:
-                self._closed = True
-                logger.warning(
-                    "WebSocket frame too large (%d bytes); closing connection",
-                    payload_len,
-                )
-                return None
+                if opcode & 0x08 and (payload_len > 125 or not fin):
+                    # RFC 6455 5.5: control frames carry at most 125 bytes
+                    # and are never fragmented
+                    return self._protocol_error(
+                        "invalid control frame (%d bytes, fin=%d)" % (payload_len, fin))
 
-            mask_key = self._recv_exact(4) if masked else b""
-            payload = self._recv_exact(payload_len)
-
-            if masked:
+                mask_key = self._recv_exact(4)
+                payload = self._recv_exact(payload_len)
                 payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
 
-            return payload.decode("utf-8")
+                if opcode == 0x01:  # Text frame
+                    if fragments is not None:
+                        # RFC 6455 5.4: no new message before the open one ends
+                        return self._protocol_error("text frame inside a fragmented message")
+                    if fin:
+                        return payload.decode("utf-8")
+                    fragments = bytearray(payload)
+
+                elif opcode == 0x00 and fragments is not None:  # Continuation
+                    fragments += payload
+                    if len(fragments) > self.MAX_FRAME_SIZE:
+                        return self._protocol_error(
+                            "message too large (%d bytes)" % len(fragments))
+                    if fin:
+                        return bytes(fragments).decode("utf-8")
+
+                elif opcode == 0x08:  # Close frame
+                    self._closed = True
+                    return None
+
+                elif opcode == 0x09:  # Ping
+                    self._send_pong(payload)
+
+                # Ping, pong, binary, fragment: payload consumed, go on
+                control_frames_processed += 1
+                if control_frames_processed >= max_control_frames:
+                    self._closed = True
+                    logger.warning(
+                        "Too many WebSocket frames without a text message; closing connection"
+                    )
+                    return None
         except Exception as e:
             if not self._closed:
                 logger.debug("WebSocket receive error: %s", e)
             return None
+
+    def _protocol_error(self, reason: str) -> None:
+        """Mark the connection closed after a client protocol violation."""
+        self._closed = True
+        logger.warning("WebSocket %s; closing connection", reason)
+        return None
 
     def send(self, message: str):
         """Send a text message through the WebSocket."""
@@ -226,11 +269,11 @@ class WebSocketHandler:
                 logger.debug("WebSocket send error: %s", e)
                 self._closed = True
 
-    def _send_pong(self):
-        """Send a pong frame."""
+    def _send_pong(self, payload: bytes = b""):
+        """Send a pong frame echoing the ping's application data (RFC 6455 5.5.3)."""
         with self._lock:
             try:
-                self.request.sendall(bytes([0x8A, 0x00]))
+                self.request.sendall(bytes([0x8A, len(payload)]) + payload)
             except Exception:
                 pass
 
@@ -383,7 +426,19 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         logger.debug(format, *args)
 
-    def _send_security_headers(self):
+    _DEFAULT_CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none';"
+    )
+
+    def _send_security_headers(self, csp: Optional[str] = None,
+                               frame_options: str = "DENY",
+                               referrer: str = "same-origin"):
         """Emit HTTP security headers on every successful response.
 
         * CSP: restricts scripts/fonts/images to same origin; allows inline
@@ -392,20 +447,15 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
         * X-Content-Type-Options: prevents MIME-type sniffing.
         * X-Frame-Options: prevents the page being embedded in an iframe.
         * Referrer-Policy: prevents leaking the URL to third-party requests.
+
+        The only caller overriding the defaults is the YHtmlView document
+        route, whose response must be frameable by our own page and carries a
+        far stricter CSP of its own.
         """
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "connect-src 'self' ws: wss:; "
-            "frame-ancestors 'none';",
-        )
+        self.send_header("Content-Security-Policy", csp or self._DEFAULT_CSP)
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", frame_options)
+        self.send_header("Referrer-Policy", referrer)
 
     def handle_one_request(self):
         """Override to suppress flush errors after a WebSocket upgrade."""
@@ -430,6 +480,8 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
             self._serve_static(path[len("/static/"):])
         elif path.startswith("/icon/"):
             self._serve_icon(path[len("/icon/"):])
+        elif path.startswith("/htmlview/"):
+            self._serve_htmlview(path[len("/htmlview/"):])
         elif path == "/events":
             self._serve_sse()
         else:
@@ -629,6 +681,94 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
                 pass
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # YHtmlView documents
+    # ------------------------------------------------------------------
+
+    # <token> for the document, <token>/link/<n> for a link activation.
+    _HTMLVIEW_PATH_RE = re.compile(r"^([A-Za-z0-9_-]{16,64})(?:/link/(\d{1,6}))?$")
+
+    @staticmethod
+    def _htmlview_csp(allow_remote: bool) -> str:
+        """CSP of a YHtmlView document: no script at all, sandboxed, images
+        only inline unless the application allowed remote content."""
+        img_src = "data: http: https:" if allow_remote else "data:"
+        return (
+            "default-src 'none'; "
+            f"img-src {img_src}; "
+            "style-src 'unsafe-inline'; "
+            "font-src data:; "
+            "base-uri 'none'; "
+            "form-action 'none'; "
+            "frame-ancestors 'self'; "
+            "sandbox"
+        )
+
+    def _is_local_host(self) -> bool:
+        """True if the Host header names this machine (DNS-rebinding guard)."""
+        try:
+            hostname = urlparse("//" + self.headers.get("Host", "")).hostname
+        except Exception:
+            return False
+        return hostname in WebSocketHandler._LOCAL_HOSTS
+
+    def _serve_htmlview(self, rest: str):
+        """Serve a YHtmlView document, or report one of its links.
+
+        Both are plain GETs issued by a sandboxed frame (opaque origin, no
+        script), so the usual Origin check cannot be the only guard: the URL
+        carries the widget's unguessable per-content token, the Host must be
+        local, and the request must be a frame load.  A link request posts
+        the activation and answers 204, which leaves the frame where it is.
+        """
+        match = self._HTMLVIEW_PATH_RE.match(rest)
+        if not match:
+            self.send_error(404, "Not Found")
+            return
+        if (not self._is_local_host()
+                or not WebSocketHandler._is_local_origin(self.headers.get("Origin"))):
+            self.send_error(403, "Forbidden")
+            logger.warning("/htmlview rejected: Host=%s Origin=%s",
+                           self.headers.get("Host"), self.headers.get("Origin"))
+            return
+        fetch_dest = self.headers.get("Sec-Fetch-Dest")
+        if fetch_dest is not None and fetch_dest != "iframe":
+            self.send_error(403, "Forbidden")
+            return
+
+        from .htmlviewweb import YHtmlViewWeb
+        token, link = match.group(1), match.group(2)
+        widget = YHtmlViewWeb._lookup(token)
+        if widget is None:
+            self.send_error(404, "Not Found")
+            return
+
+        if link is not None:
+            widget._serve_link(token, int(link))
+            self.send_response(204)
+            self._send_security_headers(csp=self._htmlview_csp(False),
+                                        frame_options="SAMEORIGIN",
+                                        referrer="no-referrer")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return
+
+        served = widget._serve_document(token)
+        if served is None:
+            self.send_error(404, "Not Found")
+            return
+        document, allow_remote = served
+        encoded = document.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self._send_security_headers(csp=self._htmlview_csp(allow_remote),
+                                    frame_options="SAMEORIGIN",
+                                    referrer="no-referrer")
+        self.end_headers()
+        self.wfile.write(encoded)
 
     # ------------------------------------------------------------------
     # HTTP event fallback

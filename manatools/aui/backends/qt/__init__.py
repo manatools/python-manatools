@@ -15,6 +15,7 @@ from .progressbarqt import YProgressBarQt
 from .radiobuttonqt import YRadioButtonQt
 from .tableqt import YTableQt
 from .richtextqt import YRichTextQt
+from .htmlviewqt import YHtmlViewQt
 from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
 from .intfieldqt import YIntFieldQt
@@ -47,6 +48,7 @@ __all__ = [
     "YRadioButtonQt",
     "YTableQt",
     "YRichTextQt",
+    "YHtmlViewQt",
     "YMenuBarQt",
     "YReplacePointQt",
     "YIntFieldQt",
