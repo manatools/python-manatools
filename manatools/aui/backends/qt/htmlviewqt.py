@@ -33,6 +33,8 @@ from ...yui_common import *
 # QWebEngineView.setHtml() goes through a data: URL capped at 2 MB.
 _SETHTML_LIMIT = 2 * 1024 * 1024 - 4096
 _DATA_IMAGE_RE = re.compile(r"^data:(image/[a-z0-9.+-]+);base64,(.*)$", re.IGNORECASE | re.DOTALL)
+# QAbstractScrollArea::sizeHint() default, inherited by the QTextBrowser fallback.
+_VIEW_HINT_W, _VIEW_HINT_H = 256, 192
 
 _webengine_classes = None
 
@@ -91,7 +93,16 @@ def _webengine():
         def javaScriptConsoleMessage(self, *_args):
             pass
 
-    _webengine_classes = (QtWebEngineCore, QtWebEngineWidgets, _Interceptor, _Page)
+    class _View(QtWebEngineWidgets.QWebEngineView):
+        """A bare QWebEngineView hints (0, 0), so a dialog that is not
+        expanded squeezes it to a sliver.  Hint what the QTextBrowser
+        fallback does (QAbstractScrollArea's fixed default) so both engines
+        lay out alike."""
+
+        def sizeHint(self):
+            return QtCore.QSize(_VIEW_HINT_W, _VIEW_HINT_H)
+
+    _webengine_classes = (QtWebEngineCore, QtWebEngineWidgets, _Interceptor, _Page, _View)
     return _webengine_classes
 
 
@@ -130,11 +141,11 @@ class YHtmlViewQt(YHtmlViewBase):
     # -- backend construction -----------------------------------------------
 
     def _create_webengine_view(self, classes):
-        QtWebEngineCore, QtWebEngineWidgets, Interceptor, Page = classes
+        QtWebEngineCore, _QtWebEngineWidgets, Interceptor, Page, View = classes
         Settings = QtWebEngineCore.QWebEngineSettings
         Profile = QtWebEngineCore.QWebEngineProfile
 
-        view = QtWebEngineWidgets.QWebEngineView()
+        view = View()
         profile = Profile()  # no storage name: off-the-record
         for name, value in (("setHttpCacheType", getattr(Profile.HttpCacheType, "NoCache", None)),
                             ("setPersistentCookiesPolicy",
