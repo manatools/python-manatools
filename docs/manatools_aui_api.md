@@ -153,13 +153,23 @@ class YHtmlBasePolicy(Enum):
 
 ### YChartLegendPosition
 
-Where a `YChartPie` places its legend (see §8.14c).
+Where a chart (`YChartPie`, `YChartBar`) places its legend (see §8.14c, §8.14d).
 
 ```python
 class YChartLegendPosition(Enum):
     Right  = 0   # legend right of the pie (default)
     Bottom = 1   # legend under the pie
     Hidden = 2   # no legend
+```
+
+### YChartBarOrientation
+
+Direction `YChartBar` bars grow in (see §8.14d).
+
+```python
+class YChartBarOrientation(Enum):
+    Vertical   = 0   # bars grow up, categories along the x axis (default)
+    Horizontal = 1   # bars grow right, categories along the y axis
 ```
 
 ---
@@ -761,6 +771,11 @@ percent per slice). The model and all the math live in `YChartPieBase`
 (`yui_common.py`); backends only paint it, so values, percentages, colors
 and events are the same everywhere. Stretchable in both directions.
 
+Both charts derive from `YChartBase`, which provides the title
+(`setLabel`/`label`), `setLegendPosition`/`legendPosition`, the palette
+(`YChartBase.PALETTE`, Okabe-Ito, colorblind-safe), `#rrggbb` color
+validation and the Activated event.
+
 Clicking a slice or a legend row (Enter/Space on the keyboard) selects it and
 posts a `YWidgetEvent` with reason `Activated` when `notify()` is on; read
 the slice with `selectedSlice()`. Arrow keys only move the selection.
@@ -801,8 +816,7 @@ Invalid input raises: `ValueError` for negative/non-finite values or a color
 that is not `#rrggbb`, `TypeError` for a `bool` value or non-int index,
 `IndexError` for an index out of range. Zero-value slices stay in the legend
 but are not drawn; a chart with no slices (or a zero total) shows "No data".
-Slices without a color cycle through a colorblind-safe palette
-(`YChartPieBase.PALETTE`, Okabe-Ito). Every setter redraws; on the web
+Slices without a color cycle through the palette (`YChartBase.PALETTE`). Every setter redraws; on the web
 backend rapid changes are sent as one update.
 
 ```python
@@ -826,6 +840,102 @@ if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
 
 Demo: `test/test_chartpie.py [web|qt|gtk|ncurses]`; headless checks:
 `test/test_chartpie_{web,qt,gtk,curses}_headless.py`.
+
+### 8.14d ChartBar
+
+```python
+factory.createChartBar(parent, label: str = "") -> YWidget
+```
+
+Bar chart over **categories x series**: each category is a group of bars,
+one per series; series carry the legend entries and colors (a single series
+is a plain bar chart). Bars are side by side (grouped, default) or piled up
+(`setStacked(True)`); values may be negative (bars below the zero line). A
+value axis with rounded 1/2/5 x 10^n steps (always including 0) carries
+compact tick labels (`1.5k`, `20M`) and optional gridlines. The model and
+all the math (axis, bar geometry, hit test) live in `YChartBarBase`;
+backends only paint it. Stretchable in both directions.
+
+Clicking a bar (Enter/Space on the keyboard) selects it and posts a
+`YWidgetEvent` with reason `Activated` when `notify()` is on; read it with
+`selectedCategory()` / `selectedSeries()`. In stacked mode every segment is
+its own bar. Arrow keys only move the selection.
+
+```python
+# title / legend (from YChartBase)
+w.setLabel(label: str)
+w.setLegendPosition(pos: YChartLegendPosition)   # legend lists the series
+# series (colors: "#rrggbb" or None = palette)
+w.addSeries(name: str, color: str | None = None) -> int     # new series is 0 everywhere
+w.setSeriesName(s: int, name: str)
+w.seriesName(s)   -> str
+w.setSeriesColor(s: int, color: str | None)
+w.seriesColor(s)  -> str                 # color actually drawn
+w.removeSeries(s: int)
+w.seriesCount()   -> int
+# categories
+w.addCategory(label: str, values=None) -> int  # values[s] per series, missing = 0
+w.setCategoryLabel(c: int, label: str)
+w.categoryLabel(c) -> str
+w.removeCategory(c: int)
+w.categoryCount()  -> int
+# values (finite numbers, negatives allowed)
+w.setValue(c: int, s: int, value)
+w.value(c, s)      -> float
+w.categoryTotal(c) -> float              # sum over the series
+w.setData(categories, series, rows=None) # bulk replace, one redraw, selection cleared;
+                                         # series: names or (name, color); rows[c][s],
+                                         # short or missing rows padded with 0
+w.deleteAllData()
+# look
+w.setOrientation(o: YChartBarOrientation)
+w.orientation()  -> YChartBarOrientation
+w.setStacked(stacked: bool = True)
+w.stacked()      -> bool
+w.setShowValues(show: bool = True)       # number at each bar end (default False)
+w.showValues()   -> bool
+w.setShowGrid(show: bool = True)         # gridlines (default True); axis always drawn
+w.showGrid()     -> bool
+# selection
+w.selectedCategory() -> int              # -1 = none
+w.selectedSeries()   -> int
+w.setSelectedBar(c: int, s: int)         # highlight only, no event; (-1, -1) clears
+```
+
+Invalid input raises like `YChartPie`: `ValueError` (non-finite value,
+bad color, too many values or rows), `TypeError` (`bool` value, non-int
+index, wrong enum), `IndexError` (index out of range). Zero values are kept
+but not drawn; a chart without categories or series shows "No data".
+Removing a series or category keeps the selection on the same bar (or
+clears it if that bar went away). Every setter redraws; on the web backend
+rapid changes are sent as one update.
+
+```python
+chart = factory.createChartBar(vbox, "Load (%)")
+chart.setData(["Jan", "Feb", "Mar"],
+              ["CPU", "RAM", ("Swap", "#cc0000")],
+              [[30, 20, 5], [45, 25, -8], [28, 40, 12]])
+chart.setShowValues(True)
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
+    c, s = chart.selectedCategory(), chart.selectedSeries()
+    status.setValue(f"{chart.categoryLabel(c)} / {chart.seriesName(s)}: {chart.value(c, s):g}")
+```
+
+| Backend | Rendering |
+|---|---|
+| Qt | `QWidget` painted with `QPainter` (no QtCharts); real font metrics for axis/labels; tooltip per bar, else the help text |
+| GTK | `Gtk.DrawingArea` with cairo + PangoCairo, same layout as Qt |
+| NCurses | Always horizontal block bars: grouped = one row per (category, series), stacked = one row per category with colored segments (fill patterns without colors); zero column `│` with negatives on its left; axis row with min / 0 / max; one-line series legend; value column shows stacked totals |
+| Web | Server-generated inline SVG (axis, grid, bars, value labels) + HTML legend; text widths are estimated, crowded category labels are thinned out; clicks sent as `{bar: [c, s]}` |
+
+Keyboard (Qt/GTK): the two arrows along the category axis move between
+categories, the other two between series. NCurses: Up/Down walk the rows,
+Left/Right the segments of a stacked row.
+
+Demo: `test/test_chartbar.py [web|qt|gtk|ncurses]`; headless checks:
+`test/test_chartbar_model_headless.py`, `test/test_chartbar_{web,qt,gtk,curses}_headless.py`.
 
 ### 8.15 LogView
 
@@ -1316,6 +1426,7 @@ if app.isTextMode():
 | `createRichText` | HTML via WebKit / Gtk.Label | QTextBrowser | Plain text fallback |
 | `createHtmlView` | WebKitGTK 6.0, else Pango label | QtWebEngine, else QTextBrowser | Flattened text with link navigation |
 | `createChartPie` | cairo on Gtk.DrawingArea | QPainter | Bar list (one row per slice) |
+| `createChartBar` | cairo on Gtk.DrawingArea | QPainter | Horizontal block bars (orientation ignored) |
 | Scrollbar auto-scroll | Supported | Supported | Limited |
 | `shutdown()` required | No | No | Yes |
 
