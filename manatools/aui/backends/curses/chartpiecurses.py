@@ -8,8 +8,10 @@ a bar chart: one row per slice with a colored block, label, value, percent
 and a bar whose length is the slice share of the total.  An optional title
 row comes first; in donut mode the center text is shown under it.
 
-Slice colors map to the terminal palette: the xterm 256-color cube when
-available, else the nearest of the 8 basic colors by hue.
+Slice colors and glyphs come from commoncurses.chart_color_attr() /
+chart_glyphs(): 256/88-color cubes, fixed distinct colors on 16/8-color
+terminals, none on monochrome ones (labels identify the rows), ASCII glyphs
+where Unicode blocks cannot be shown.
 
 legendPosition() Hidden drops the label/value/percent columns (bars only);
 Right and Bottom look the same here.
@@ -21,66 +23,14 @@ License: LGPLv2+
 
 @package manatools.aui.backends.curses
 '''
-import colorsys
 import curses
 import logging
 import gettext
 
 from ...yui_common import *
-from .commoncurses import _curses_help_text_changed
+from .commoncurses import _curses_help_text_changed, chart_color_attr, chart_glyphs
 
 _ = gettext.gettext
-
-_BLOCK = "█"
-_SWATCH = "■"
-
-# hex color -> curses color pair id, shared by every chart.
-_pairs = {}
-_PAIR_BASE = 100
-
-
-def _curses_color(hex_color: str) -> int:
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    if getattr(curses, "COLORS", 8) >= 256:
-        q = lambda v: 0 if v < 48 else (1 if v < 115 else (v - 35) // 40)
-        return 16 + 36 * q(r) + 6 * q(g) + q(b)
-    h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
-    if s < 0.25:
-        return curses.COLOR_WHITE if v > 0.3 else curses.COLOR_BLACK
-    h *= 360.0
-    if h < 30 or h >= 330:
-        return curses.COLOR_RED
-    if h < 70:
-        return curses.COLOR_YELLOW
-    if h < 160:
-        return curses.COLOR_GREEN
-    if h < 200:
-        return curses.COLOR_CYAN
-    if h < 260:
-        return curses.COLOR_BLUE
-    return curses.COLOR_MAGENTA
-
-
-def _color_attr(hex_color: str) -> int:
-    """curses attribute drawing *hex_color* as foreground, 0 if unsupported."""
-    try:
-        if not curses.has_colors():
-            return 0
-        pid = _pairs.get(hex_color)
-        if pid is None:
-            pid = _PAIR_BASE + len(_pairs)
-            if pid >= getattr(curses, "COLOR_PAIRS", 0):
-                return 0
-            try:
-                curses.start_color()
-                curses.use_default_colors()
-            except Exception:
-                pass
-            curses.init_pair(pid, _curses_color(hex_color), -1)
-            _pairs[hex_color] = pid
-        return curses.color_pair(pid)
-    except Exception:
-        return 0
 
 
 class YChartPieCurses(YChartPieBase):
@@ -144,6 +94,8 @@ class YChartPieCurses(YChartPieBase):
         return 20
 
     def key_hints(self) -> str:
+        if chart_glyphs().ascii:
+            return _("Up/Down=Move ENTER=Activate")
         return _("↑↓=Move ENTER=Activate")
 
     # -- drawing ------------------------------------------------------------
@@ -174,6 +126,7 @@ class YChartPieCurses(YChartPieBase):
             pass
 
     def _draw_rows(self, window, y, x, width, height):
+        g = chart_glyphs(window)
         dim = 0 if self.isEnabled() else curses.A_DIM
         bottom = y + height
         for text, attr in self._header_rows():
@@ -210,15 +163,15 @@ class YChartPieCurses(YChartPieBase):
         bar_w = max(0, width - fixed)
 
         for index, label, value_text, pct_text, color in shown:
-            cattr = _color_attr(color) | dim
+            cattr = chart_color_attr(color) | dim
             current = index == self._selected
             row_attr = (curses.A_REVERSE if (current and self._focused) else
                         (curses.A_BOLD if current else 0)) | dim
             cx = x
-            self._put(window, y, cx, _SWATCH + " ", cattr)
+            self._put(window, y, cx, g.swatch + " ", cattr)
             cx += 2
             if columns:
-                lab = label if len(label) <= label_w else label[:max(0, label_w - 1)] + "…"
+                lab = label if len(label) <= label_w else label[:max(0, label_w - 1)] + g.ellipsis
                 cell = f"{lab:<{label_w}} {value_text:>{value_w}} "
                 if pct_w:
                     cell += f"{pct_text:>{pct_w}} "
@@ -226,14 +179,14 @@ class YChartPieCurses(YChartPieBase):
                 cx += len(cell)
             elif current:
                 # Bars only: mark the selected row on its swatch.
-                self._put(window, y, x, _SWATCH, cattr | curses.A_REVERSE)
+                self._put(window, y, x, g.swatch, cattr | curses.A_REVERSE)
             if bar_w > 0:
                 pct = self.slicePercent(index)
                 n = int(round(pct / 100.0 * bar_w))
                 if pct > 0 and n == 0:
                     n = 1
                 if n:
-                    self._put(window, y, cx, _BLOCK * min(n, bar_w), cattr)
+                    self._put(window, y, cx, g.block * min(n, bar_w), cattr)
             y += 1
 
         if more and y < bottom:
@@ -241,10 +194,10 @@ class YChartPieCurses(YChartPieBase):
             hidden_below = len(rows) - start - len(shown)
             parts = []
             if hidden_above:
-                parts.append(f"↑{hidden_above}")
+                parts.append(f"{g.up}{hidden_above}")
             if hidden_below:
-                parts.append(f"↓{hidden_below}")
-            self._put(window, y, x, ("… " + " ".join(parts))[:width], curses.A_DIM)
+                parts.append(f"{g.down}{hidden_below}")
+            self._put(window, y, x, (g.ellipsis + " " + " ".join(parts))[:width], curses.A_DIM)
 
     # -- input --------------------------------------------------------------
 
