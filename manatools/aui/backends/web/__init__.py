@@ -23,6 +23,7 @@ from .tableweb import YTableWeb
 from .richtextweb import YRichTextWeb
 from .htmlviewweb import YHtmlViewWeb
 from .chartpieweb import YChartPieWeb
+from .chartbarweb import YChartBarWeb
 from .menubarweb import YMenuBarWeb
 from .replacepointweb import YReplacePointWeb
 from .checkboxframeweb import YCheckBoxFrameWeb
@@ -56,6 +57,7 @@ __all__ = [
     "YRichTextWeb",
     "YHtmlViewWeb",
     "YChartPieWeb",
+    "YChartBarWeb",
     "YMenuBarWeb",
     "YReplacePointWeb",
     "YCheckBoxFrameWeb",
