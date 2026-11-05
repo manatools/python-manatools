@@ -17,6 +17,7 @@ from .tablegtk import YTableGtk
 from .richtextgtk import YRichTextGtk
 from .htmlviewgtk import YHtmlViewGtk
 from .chartpiegtk import YChartPieGtk
+from .chartbargtk import YChartBarGtk
 from .menubargtk import YMenuBarGtk
 from .replacepointgtk import YReplacePointGtk
 from .intfieldgtk import YIntFieldGtk
@@ -50,6 +51,7 @@ __all__ = [
     "YRichTextGtk",
     "YHtmlViewGtk",
     "YChartPieGtk",
+    "YChartBarGtk",
     "YMenuBarGtk",
     "YReplacePointGtk",
     "YIntFieldGtk",
