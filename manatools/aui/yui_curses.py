@@ -612,6 +612,10 @@ class YWidgetFactoryCurses:
         """Create a read-only HTML view rendered as text (curses backend)."""
         return YHtmlViewCurses(parent, html)
 
+    def createChartPie(self, parent, label: str = ""):
+        """Create a pie chart (shown as a bar list in a terminal)."""
+        return YChartPieCurses(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (curses backend)."""
         return YMenuBarCurses(parent)
