@@ -15,8 +15,11 @@ marked when the axis has negative values.  An axis row under the bars shows
 the range (min, 0, max).  A one-line series legend sits above the bars
 (legendPosition() Hidden drops it; Right and Bottom look the same here), and
 setShowValues(True) adds a value column (stacked: the category total).
-Colors map to the terminal palette like YChartPie; without colors, stacked
-segments are told apart by fill patterns.
+Colors and glyphs come from commoncurses.chart_color_attr() /
+chart_glyphs() like YChartPie; without working colors, stacked segments and
+their legend entries are told apart by fill patterns (grouped rows already
+carry the series name), and ASCII glyphs replace the Unicode blocks where
+those cannot be shown.
 
 orientation() is kept in the model but has no effect here.
 
@@ -32,29 +35,16 @@ import logging
 import gettext
 
 from ...yui_common import *
-from .commoncurses import _curses_help_text_changed
-from .chartpiecurses import _color_attr
+from .commoncurses import _curses_help_text_changed, chart_color_attr, chart_glyphs
 
 _ = gettext.gettext
 
-_BLOCK = "█"
-_PATTERNS = ("█", "▓", "▒", "░")   # stacked, no colors
-_ZERO = "│"
-_AXIS = "─"
-_SWATCH = "■"
 
 
-def _has_colors() -> bool:
-    try:
-        return bool(curses.has_colors())
-    except Exception:
-        return False
-
-
-def _cut(text: str, width: int) -> str:
+def _cut(text: str, width: int, ellipsis: str = "…") -> str:
     if width <= 0:
         return ""
-    return text if len(text) <= width else text[:max(0, width - 1)] + "…"
+    return text if len(text) <= width else text[:max(0, width - 1)] + ellipsis
 
 
 class YChartBarCurses(YChartBarBase):
@@ -124,9 +114,10 @@ class YChartBarCurses(YChartBarBase):
         return 24
 
     def key_hints(self) -> str:
+        ascii_only = chart_glyphs().ascii
         if self._stacked:
-            return _("↑↓←→=Move ENTER=Activate")
-        return _("↑↓=Move ENTER=Activate")
+            return _("Arrows=Move ENTER=Activate") if ascii_only else _("↑↓←→=Move ENTER=Activate")
+        return _("Up/Down=Move ENTER=Activate") if ascii_only else _("↑↓=Move ENTER=Activate")
 
     # -- drawing ------------------------------------------------------------
 
@@ -158,19 +149,25 @@ class YChartBarCurses(YChartBarBase):
     def _draw_chart(self, window, y, x, width, height):
         dim = 0 if self.isEnabled() else curses.A_DIM
         bottom = y + height
-        colors = _has_colors()
+        g = chart_glyphs(window)
+        # Colors that actually work (pairs can run out even with has_colors()).
+        attrs = [chart_color_attr(self.seriesColor(si)) for si in range(len(self._series))]
+        colors = any(attrs)
+        # Without colors, stacked segments (and their legend entries) use patterns.
+        patterned = self._stacked and not colors
 
         if self._label:
-            self._put(window, y, x, _cut(self._label, width), curses.A_BOLD | dim)
+            self._put(window, y, x, _cut(self._label, width, g.ellipsis), curses.A_BOLD | dim)
             y += 1
         if self._show_legend() and y < bottom:
             cx = x
             for s, name, color in self._legend_rows():
-                cell = f"{_SWATCH} {name}  "
+                mark = g.patterns[s % len(g.patterns)] if patterned else g.swatch
+                cell = f"{mark} {name}  "
                 if cx + len(cell) > x + width:
-                    self._put(window, y, cx, _cut("…", x + width - cx), dim)
+                    self._put(window, y, cx, _cut(g.ellipsis, x + width - cx, g.ellipsis), dim)
                     break
-                self._put(window, y, cx, _SWATCH, _color_attr(color) | dim)
+                self._put(window, y, cx, mark, attrs[s] | dim)
                 attr = (curses.A_BOLD if s == self._sel[1] else 0) | dim
                 self._put(window, y, cx + 2, name, attr)
                 cx += len(cell)
@@ -179,7 +176,7 @@ class YChartBarCurses(YChartBarBase):
         rows = self._rows_model()
         if not rows:
             if y < bottom:
-                self._put(window, y, x, _cut(_("No data"), width), curses.A_DIM)
+                self._put(window, y, x, _cut(_("No data"), width, g.ellipsis), curses.A_DIM)
             return
 
         avail = bottom - y - 1          # last row: axis
@@ -233,14 +230,14 @@ class YChartBarCurses(YChartBarBase):
                         (curses.A_BOLD if current else 0)) | dim
             first = self._stacked or s == 0
             if first:
-                self._put(window, y, x, f"{_cut(self._categories[c], label_w):<{label_w}}", row_attr)
+                self._put(window, y, x, f"{_cut(self._categories[c], label_w, g.ellipsis):<{label_w}}", row_attr)
             elif current:
                 self._put(window, y, x, " " * label_w, row_attr)
             if series_w:
                 self._put(window, y, x + label_w + 1,
-                          f"{_cut(self._series[s][0], series_w):<{series_w}}", row_attr)
+                          f"{_cut(self._series[s][0], series_w, g.ellipsis):<{series_w}}", row_attr)
             if mark_zero:
-                self._put(window, y, bar_x + zero, _ZERO, curses.A_DIM)
+                self._put(window, y, bar_x + zero, g.zero, curses.A_DIM)
             segments = []
             if self._stacked:
                 pos = neg = 0.0
@@ -267,8 +264,8 @@ class YChartBarCurses(YChartBarBase):
                 a, b = max(0, a), min(bar_w, b)
                 if b <= a:
                     continue
-                fill = _BLOCK if colors or not self._stacked else _PATTERNS[si % len(_PATTERNS)]
-                attr = _color_attr(self.seriesColor(si)) | dim
+                fill = g.patterns[si % len(g.patterns)] if patterned else g.block
+                attr = attrs[si] | dim
                 if self._stacked and (c, si) == self._sel:
                     attr |= curses.A_REVERSE if self._focused else curses.A_BOLD
                 self._put(window, y, bar_x + a, fill * (b - a), attr)
@@ -281,11 +278,11 @@ class YChartBarCurses(YChartBarBase):
         if more and y < bottom - 1:
             parts = []
             if start:
-                parts.append(f"↑{start}")
+                parts.append(f"{g.up}{start}")
             hidden_below = len(rows) - start - len(shown)
             if hidden_below:
-                parts.append(f"↓{hidden_below}")
-            self._put(window, y, x, _cut("… " + " ".join(parts), width), curses.A_DIM)
+                parts.append(f"{g.down}{hidden_below}")
+            self._put(window, y, x, _cut(g.ellipsis + " " + " ".join(parts), width, g.ellipsis), curses.A_DIM)
             y += 1
 
         # axis row: min at the bar start, 0 at the zero column, max at the end
