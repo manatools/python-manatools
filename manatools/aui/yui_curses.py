@@ -616,6 +616,10 @@ class YWidgetFactoryCurses:
         """Create a pie chart (shown as a bar list in a terminal)."""
         return YChartPieCurses(parent, label)
 
+    def createChartBar(self, parent, label: str = ""):
+        """Create a bar chart (always horizontal block bars in a terminal)."""
+        return YChartBarCurses(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (curses backend)."""
         return YMenuBarCurses(parent)
