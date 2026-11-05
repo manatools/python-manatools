@@ -564,6 +564,10 @@ class YWidgetFactoryWeb:
         from .backends.web import YChartPieWeb
         return YChartPieWeb(parent, label)
 
+    def createChartBar(self, parent, label: str = ""):
+        from .backends.web import YChartBarWeb
+        return YChartBarWeb(parent, label)
+
     def createMenuBar(self, parent):
         from .backends.web import YMenuBarWeb
         return YMenuBarWeb(parent)
