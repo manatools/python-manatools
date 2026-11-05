@@ -349,6 +349,8 @@
         on('.mana-tab', 'click', handleTabClick);
         on('.mana-menu-item', 'click', handleMenuItemClick);
         on('.mana-checkboxframe-toggle', 'change', handleCheckboxFrameToggle);
+        on('.mana-ychartpie [data-slice]', 'click', handleChartSliceClick);
+        on('.mana-ychartpie [data-slice]', 'keydown', handleChartSliceKey);
 
         initMenuBehavior(root);
 
@@ -507,6 +509,22 @@
         tab.classList.add('active');
         tab.setAttribute('aria-selected', 'true');
         sendEvent({ type: 'event', widget_id: getWidgetId(tabWidget), reason: 'SelectionChanged', data: { selectedIndex: tabIndex } });
+    }
+
+    function handleChartSliceClick(event) {
+        // Slices (SVG paths) and legend rows both carry data-slice.
+        const el = event.currentTarget;
+        const chart = el.closest('.mana-ychartpie');
+        if (!chart || chart.classList.contains('mana-disabled')) return;
+        const index = parseInt(el.dataset.slice, 10);
+        if (isNaN(index)) return;
+        sendEvent({ type: 'event', widget_id: getWidgetId(chart), reason: 'Activated', data: { slice: index } });
+    }
+
+    function handleChartSliceKey(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        handleChartSliceClick(event);
     }
 
     function handleMenuItemClick(event) {
