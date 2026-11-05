@@ -17,6 +17,7 @@ from .tablecurses import YTableCurses
 from .richtextcurses import YRichTextCurses
 from .htmlviewcurses import YHtmlViewCurses
 from .chartpiecurses import YChartPieCurses
+from .chartbarcurses import YChartBarCurses
 from .menubarcurses import YMenuBarCurses
 from .replacepointcurses import YReplacePointCurses
 from .intfieldcurses import YIntFieldCurses
@@ -50,6 +51,7 @@ __all__ = [
     "YRichTextCurses",
     "YHtmlViewCurses",
     "YChartPieCurses",
+    "YChartBarCurses",
     "YMenuBarCurses",
     "YReplacePointCurses",
     "YIntFieldCurses",
