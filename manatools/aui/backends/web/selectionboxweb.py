@@ -10,9 +10,10 @@ class YSelectionBoxWeb(YSelectionWidget):
     """List selection box widget."""
     
     def __init__(self, parent=None, label: str = "", multi_selection: bool = False):
-        super().__init__(parent)
-        self._label = label
         self._multi_selection = multi_selection
+        super().__init__(parent)
+        # YSelectionWidget.__init__ resets _label, so set it afterwards.
+        self._label = label
 
     def label(self) -> str:
         return self._label
@@ -95,6 +96,27 @@ class YSelectionBoxWeb(YSelectionWidget):
             if chosen:
                 self._selected_items.append(item)
     
+    def _context_menu_select(self, ref):
+        """Context-menu adapter: right-click on option *ref* (its value index).
+
+        An unselected option becomes the only selected one, so the handler can
+        rely on selectedItem(); an option inside the selection keeps it.
+        """
+        items = getattr(self, "_items", [])
+        if not isinstance(ref, int) or not (0 <= ref < len(items)):
+            return
+        item = items[ref]
+        if item in self._selected_items:
+            return
+        for old in self._selected_items:
+            old.setSelected(False)
+        item.setSelected(True)
+        self._selected_items = [item]
+        self._notify_update()
+
+    def _context_menu_notify_changed(self):
+        self._notify_update()
+
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
 
@@ -125,6 +147,8 @@ class YSelectionBoxWeb(YSelectionWidget):
             extra_attrs["multiple"] = True
         extra_attrs["size"] = "8"  # Default visible rows
         extra_attrs["title"] = self.helpText() or None
+        if self.notifyContextMenu():
+            extra_attrs["data-notify-context-menu"] = "1"
         
         attrs = widget_attrs(
             self.id(),

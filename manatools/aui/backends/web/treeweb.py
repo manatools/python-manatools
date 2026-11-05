@@ -19,14 +19,17 @@ class YTreeWeb(YSelectionWidget):
     """Tree view widget rendered as a flat paginated table."""
 
     def __init__(self, parent=None, label: str = "", multiselection=False, recursiveselection=False):
-        super().__init__(parent)
-        self._label = label
         self._multiselection = multiselection
         self._recursiveselection = recursiveselection
         self._item_registry: dict = {}
         # Populated on every render(); maps DOM row index → YTreeItem
         self._flat_items: list = []
+        # (item, depth) pairs of the last render, in DOM row order
+        self._flat_rows: list = []
         self._logger = logging.getLogger(f"manatools.aui.web.{self.__class__.__name__}")
+        super().__init__(parent)
+        # YSelectionWidget.__init__ resets _label, so set it afterwards.
+        self._label = label
 
     def widgetClass(self):
         return "YTree"
@@ -72,6 +75,7 @@ class YTreeWeb(YSelectionWidget):
             self._selected_items = []
         self._item_registry.clear()
         self._flat_items = []
+        self._flat_rows = []
         self._notify_update()
 
     def rebuildTree(self):
@@ -193,6 +197,45 @@ class YTreeWeb(YSelectionWidget):
         if 0 <= index < len(self._flat_items):
             self._select_model(self._flat_items[index], True)
 
+    def _context_menu_select(self, ref):
+        """Context-menu adapter: right-click on a row.
+
+        *ref* is the absolute DOM row index (flat table rendering) or an item
+        id string.  An unselected item becomes the only selected one, so the
+        handler can rely on selectedItem(); an item inside the selection keeps
+        it.  Only the rows are pushed, so the page/filter state is kept.
+        Runs on a server thread: it resolves *ref* against the snapshot of the
+        last render and never rebuilds it.
+        """
+        if isinstance(ref, str):
+            item = getattr(self, "_item_registry", {}).get(ref)
+        elif isinstance(ref, int):
+            flat_items = getattr(self, "_flat_items", [])
+            item = flat_items[ref] if 0 <= ref < len(flat_items) else None
+        else:
+            item = None
+        if item is None or item in self._selected_items:
+            return
+        for old in list(self._selected_items):
+            try:
+                old.setSelected(False)
+            except Exception:
+                pass
+        try:
+            item.setSelected(True)
+        except Exception:
+            pass
+        self._selected_items = [item]
+        dialog = self.findDialog()
+        if dialog is None or not hasattr(dialog, "_broadcast"):
+            return
+        dialog._broadcast({"type": "update", "updates": [{
+            "action": "rows", "target": f"#{self.id()}", "html": self._render_rows_html(),
+        }]})
+
+    def _context_menu_notify_changed(self):
+        self._notify_update()
+
     def _set_backend_enabled(self, enabled: bool):
         self._notify_update()
 
@@ -213,27 +256,58 @@ class YTreeWeb(YSelectionWidget):
     # Rendering
     # ------------------------------------------------------------------
 
+    def _sync_flat_items(self) -> list:
+        """Flatten the items and rebuild the registry and the flat row list.
+
+        Done on every full render so indices and ids stay consistent after
+        deleteAllItems() + re-population cycles.  The new lists are built
+        aside and swapped in whole, so readers on other threads always see a
+        complete snapshot.
+        """
+        flat = self._flatten_items()
+        registry = {}
+        flat_items = []
+        for item, _ in flat:
+            registry[self._item_id(item)] = item
+            flat_items.append(item)
+            if item.selected() and item not in self._selected_items:
+                self._select_model(item, True)
+        self._item_registry = registry
+        self._flat_items = flat_items
+        self._flat_rows = flat
+        return flat
+
+    def _render_rows_html(self, flat=None) -> str:
+        """Return the inner HTML of <tbody>: one row per item, label in the
+        column matching its depth, empty <td> cells for all other columns.
+
+        Without *flat* the rows of the last render are used as they are: the
+        caller may run on a server thread and must not rebuild the model.
+        """
+        if flat is None:
+            flat = getattr(self, "_flat_rows", [])
+        max_depth = max((d for _, d in flat), default=0) + 1
+        selected = list(self._selected_items)
+        rows = []
+        for item, depth in flat:
+            sel_class = ' selected' if item in selected else ''
+            cells = ''.join(
+                f'<td>{escape_html(item.label())}</td>' if col == depth else '<td></td>'
+                for col in range(max_depth)
+            )
+            rows.append(f'<tr class="mana-table-row{sel_class}">{cells}</tr>')
+        return ''.join(rows)
+
     def render(self) -> str:
         self._logger.debug("render: %d root items", len(self._items))
 
-        flat = self._flatten_items()
-
-        # Rebuild registry and flat list on every full render so indices and
-        # ids stay consistent after deleteAllItems() + re-population cycles.
-        self._item_registry.clear()
-        self._flat_items = []
-        for item, _ in flat:
-            item_id = self._item_id(item)
-            self._item_registry[item_id] = item
-            self._flat_items.append(item)
-            if item.selected() and item not in self._selected_items:
-                self._select_model(item, True)
-
+        flat = self._sync_flat_items()
         max_depth = max((d for _, d in flat), default=0) + 1  # = number of columns
 
         # Outer wrapper: carries widget identity; adding mana-ytable activates
         # the shared table pagination/search JavaScript automatically.
-        attrs = widget_attrs(self.id(), "YTree", True, self._visible, "mana-ytable")
+        attrs = widget_attrs(self.id(), "YTree", True, self._visible, "mana-ytable", {
+            "data-notify-context-menu": "1" if self.notifyContextMenu() else None})
         # Tooltip on the wrapper: rows are rebuilt by JS (deferred push,
         # pagination), so a per-row title would be lost.
         if self.helpText():
@@ -255,19 +329,7 @@ class YTreeWeb(YSelectionWidget):
             thead += '<th scope="col"></th>'
         thead += '</tr></thead>'
 
-        # Body: one row per item; label in the column matching its depth,
-        # empty <td> cells for all other columns
-        tbody = '<tbody>'
-        for item, depth in flat:
-            sel_class = ' selected' if item in self._selected_items else ''
-            tbody += f'<tr class="mana-table-row{sel_class}">'
-            for col in range(max_depth):
-                if col == depth:
-                    tbody += f'<td>{escape_html(item.label())}</td>'
-                else:
-                    tbody += '<td></td>'
-            tbody += '</tr>'
-        tbody += '</tbody>'
+        tbody = f'<tbody>{self._render_rows_html(flat)}</tbody>'
 
         scroll = (
             '<div class="mana-table-scroll">'

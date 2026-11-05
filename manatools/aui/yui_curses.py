@@ -10,6 +10,7 @@ import time
 import logging
 from .yui_common import *
 from .backends.curses import *
+from .backends.curses.commoncurses import _curses_open_context_menu
 
 class YUICurses:
     def __init__(self):
@@ -283,6 +284,18 @@ class YApplicationCurses:
     def isTextMode(self) -> bool:
         """Indicate that this is a text-mode (ncurses) application."""
         return True
+
+    def openContextMenu(self, items) -> bool:
+        """Show a context menu for the widget that posted ContextMenuActivated.
+
+        items is a root YMenuItem or a list of YMenuItem. Non-blocking: a pick
+        arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
+        ContextMenuCancelled. Returns False if no menu was shown.
+        """
+        dlg = YDialogCurses.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _curses_open_context_menu(dlg, items)
 
     def busyCursor(self):
         """Set busy cursor (not applicable in ncurses)."""

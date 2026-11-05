@@ -9,7 +9,7 @@ import os
 import logging
 from .yui_common import *
 from .backends.qt import *
-from .backends.qt.commonqt import _resolve_icon
+from .backends.qt.commonqt import _resolve_icon, _open_context_menu
 
 class YUIQt:
     def __init__(self):
@@ -280,6 +280,18 @@ class YApplicationQt:
     def isTextMode(self) -> bool:
         """Indicate that this is not a text-mode (Qt) application."""
         return False
+
+    def openContextMenu(self, items) -> bool:
+        """Show a context menu for the widget that posted ContextMenuActivated.
+
+        items is a root YMenuItem or a list of YMenuItem. Non-blocking: a pick
+        arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
+        ContextMenuCancelled. Returns False if no menu was shown.
+        """
+        dlg = YDialogQt.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _open_context_menu(dlg, items)
 
     def busyCursor(self):
         """Set busy cursor (Qt backend)."""
