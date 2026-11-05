@@ -210,6 +210,11 @@ class YChartLegendPosition(Enum):
     Bottom = 1
     Hidden = 2
 
+class YChartBarOrientation(Enum):
+    """Direction YChartBar bars grow in."""
+    Vertical = 0      # bars grow up, categories along the x axis
+    Horizontal = 1    # bars grow right, categories along the y axis
+
 # Exceptions
 class YUIException(Exception):
     pass
@@ -1089,6 +1094,382 @@ class YChartPieBase(YChartBase):
         if not 0 <= index < len(self._slices):
             return False
         self._selected = index
+        self._apply_chart()
+        self._post_activated()
+        return True
+
+class YChartBarBase(YChartBase):
+    """Shared model of the YChartBar widget: categories x series.
+
+    Each category is one group of bars, one bar per series; series carry the
+    legend entries and colors.  Bars are side by side (grouped) or piled up
+    (setStacked(True)); values may be negative (bars below the zero line).
+
+    All the math lives here so backends only map units to pixels:
+
+    - ``_value_axis()`` -> (vmin, vmax, ticks): "nice" range including 0;
+    - ``_bar_geometry()`` -> (c, s, u0, u1, v0, v1, color) per non-zero bar,
+      where u0..u1 is the position along the category axis in 0..1 and
+      v0 -> v1 the data interval from the baseline to the bar end;
+    - ``_bar_at(u, v)`` -> (c, s) hit test in the same units.
+
+    Clicking a bar selects (category, series) and posts a YWidgetEvent with
+    reason Activated (when notify() is on).
+    """
+
+    GROUP_FILL = 0.8        # share of a category slot covered by its bars
+    _TICK_TARGET = 5        # wanted number of axis steps
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._series = []           # [[name, color or None]]
+        self._categories = []       # [label]
+        self._rows = []             # [category][series] -> float
+        self._orientation = YChartBarOrientation.Vertical
+        self._stacked = False
+        self._show_values = False
+        self._show_grid = True
+        self._sel = (-1, -1)
+        self._geometry_cache = None
+        self._axis_cache = None
+        super().__init__(parent, label)
+
+    def widgetClass(self):
+        return "YChartBar"
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_bar_value(value) -> float:
+        return YChartBase._check_number(value, True, "bar value")
+
+    def _check_series(self, s) -> int:
+        return self._check_index_in(s, len(self._series), "series index")
+
+    def _check_category(self, c) -> int:
+        return self._check_index_in(c, len(self._categories), "category index")
+
+    def _check_row(self, values, width: int) -> list:
+        values = [] if values is None else [self._check_bar_value(v) for v in values]
+        if len(values) > width:
+            raise ValueError(f"{len(values)} values for {width} series")
+        return values + [0.0] * (width - len(values))
+
+    @staticmethod
+    def _series_entry(item) -> list:
+        if isinstance(item, (tuple, list)):
+            if not 1 <= len(item) <= 2:
+                raise ValueError("series must be name or (name, color)")
+            name, color = item[0], (item[1] if len(item) > 1 else None)
+        else:
+            name, color = item, None
+        return ["" if name is None else str(name), YChartBase._check_color(color)]
+
+    # -- series -------------------------------------------------------------
+
+    def addSeries(self, name, color=None) -> int:
+        """Append a series (a bar in every category, value 0); return its index."""
+        self._series.append(self._series_entry((name, color)))
+        for row in self._rows:
+            row.append(0.0)
+        self._chart_changed()
+        return len(self._series) - 1
+
+    def setSeriesName(self, s: int, name):
+        self._series[self._check_series(s)][0] = "" if name is None else str(name)
+        self._chart_changed()
+
+    def seriesName(self, s: int) -> str:
+        return self._series[self._check_series(s)][0]
+
+    def setSeriesColor(self, s: int, color):
+        """Set a custom ``"#rrggbb"`` color, or None to go back to the palette."""
+        self._series[self._check_series(s)][1] = self._check_color(color)
+        self._chart_changed()
+
+    def seriesColor(self, s: int) -> str:
+        """Color the series is drawn with: custom one, else from PALETTE."""
+        return self._series[self._check_series(s)][1] or self._palette_color(s)
+
+    def removeSeries(self, s: int):
+        self._check_series(s)
+        del self._series[s]
+        for row in self._rows:
+            del row[s]
+        c, sel = self._sel
+        if sel == s:
+            self._sel = (-1, -1)
+        elif sel > s:
+            self._sel = (c, sel - 1)
+        self._chart_changed()
+
+    def seriesCount(self) -> int:
+        return len(self._series)
+
+    # -- categories ---------------------------------------------------------
+
+    def addCategory(self, label, values=None) -> int:
+        """Append a category; *values* holds one value per series (missing = 0).
+        Returns its index."""
+        row = self._check_row(values, len(self._series))
+        self._categories.append("" if label is None else str(label))
+        self._rows.append(row)
+        self._chart_changed()
+        return len(self._categories) - 1
+
+    def setCategoryLabel(self, c: int, label):
+        self._categories[self._check_category(c)] = "" if label is None else str(label)
+        self._chart_changed()
+
+    def categoryLabel(self, c: int) -> str:
+        return self._categories[self._check_category(c)]
+
+    def removeCategory(self, c: int):
+        self._check_category(c)
+        del self._categories[c]
+        del self._rows[c]
+        sel, s = self._sel
+        if sel == c:
+            self._sel = (-1, -1)
+        elif sel > c:
+            self._sel = (sel - 1, s)
+        self._chart_changed()
+
+    def categoryCount(self) -> int:
+        return len(self._categories)
+
+    # -- values -------------------------------------------------------------
+
+    def setValue(self, c: int, s: int, value):
+        self._check_category(c)
+        self._check_series(s)
+        self._rows[c][s] = self._check_bar_value(value)
+        self._chart_changed()
+
+    def value(self, c: int, s: int) -> float:
+        self._check_category(c)
+        self._check_series(s)
+        return self._rows[c][s]
+
+    def categoryTotal(self, c: int) -> float:
+        """Sum of the category values over all series."""
+        return sum(self._rows[self._check_category(c)])
+
+    def setData(self, categories, series, rows=None):
+        """Replace everything at once (one redraw, selection cleared).
+
+        *categories*: labels; *series*: names or ``(name, color)``;
+        *rows*: ``rows[c][s]`` values, short or missing rows padded with 0.
+        Everything is validated before the chart changes.
+        """
+        new_series = [self._series_entry(item) for item in (series or ())]
+        new_categories = ["" if c is None else str(c) for c in (categories or ())]
+        rows = list(rows or ())
+        if len(rows) > len(new_categories):
+            raise ValueError(f"{len(rows)} rows for {len(new_categories)} categories")
+        rows += [None] * (len(new_categories) - len(rows))
+        new_rows = [self._check_row(r, len(new_series)) for r in rows]
+        self._series, self._categories, self._rows = new_series, new_categories, new_rows
+        self._sel = (-1, -1)
+        self._chart_changed()
+
+    def deleteAllData(self):
+        """Remove every category and series."""
+        self.setData((), (), ())
+
+    # -- look ---------------------------------------------------------------
+
+    def setOrientation(self, orientation: YChartBarOrientation):
+        if not isinstance(orientation, YChartBarOrientation):
+            raise TypeError("orientation must be a YChartBarOrientation")
+        self._orientation = orientation
+        self._apply_chart()
+
+    def orientation(self) -> YChartBarOrientation:
+        return self._orientation
+
+    def setStacked(self, stacked: bool = True):
+        """Pile the series of a category (True) instead of side by side."""
+        self._stacked = bool(stacked)
+        self._chart_changed()
+
+    def stacked(self) -> bool:
+        return self._stacked
+
+    def setShowValues(self, show: bool = True):
+        """Draw each value at the end of its bar (default False)."""
+        self._show_values = bool(show)
+        self._apply_chart()
+
+    def showValues(self) -> bool:
+        return self._show_values
+
+    def setShowGrid(self, show: bool = True):
+        """Draw gridlines at the axis ticks (default True); the axis stays."""
+        self._show_grid = bool(show)
+        self._apply_chart()
+
+    def showGrid(self) -> bool:
+        return self._show_grid
+
+    # -- selection ----------------------------------------------------------
+
+    def selectedCategory(self) -> int:
+        """Category of the selected (last clicked) bar, -1 if none."""
+        return self._sel[0]
+
+    def selectedSeries(self) -> int:
+        """Series of the selected (last clicked) bar, -1 if none."""
+        return self._sel[1]
+
+    def setSelectedBar(self, c: int, s: int):
+        """Highlight bar (*c*, *s*) without posting an event; (-1, -1) clears."""
+        if (c, s) != (-1, -1):
+            self._check_category(c)
+            self._check_series(s)
+        self._sel = (c, s)
+        self._apply_chart()
+
+    # -- shared internals ---------------------------------------------------
+
+    def _chart_changed(self):
+        self._geometry_cache = None
+        self._axis_cache = None
+        self._apply_chart()
+
+    @staticmethod
+    def _nice_step(raw: float) -> float:
+        """1/2/5 x 10^n step nearest to *raw* (so the axis gets ~4-8 steps)."""
+        exp = math.floor(math.log10(raw))
+        base = 10.0 ** exp
+        f = raw / base
+        if f < 1.5:
+            return base
+        if f < 3.0:
+            return 2.0 * base
+        if f < 7.0:
+            return 5.0 * base
+        return 10.0 * base
+
+    def _data_range(self):
+        lo = hi = 0.0
+        for row in self._rows:
+            if self._stacked:
+                lo = min(lo, sum(v for v in row if v < 0))
+                hi = max(hi, sum(v for v in row if v > 0))
+            else:
+                for v in row:
+                    lo = min(lo, v)
+                    hi = max(hi, v)
+        return lo, hi
+
+    def _value_axis(self):
+        """``(vmin, vmax, ticks)``: data range with 0, rounded to nice steps.
+
+        Empty or all-zero data gives 0..1.
+        """
+        axis = self._axis_cache
+        if axis is None:
+            lo, hi = self._data_range()
+            if hi - lo <= 0:
+                lo, hi = 0.0, 1.0
+            step = self._nice_step((hi - lo) / self._TICK_TARGET)
+            vmin = math.floor(lo / step + 1e-9) * step
+            vmax = math.ceil(hi / step - 1e-9) * step
+            digits = max(0, -int(math.floor(math.log10(step))) + 1)
+            n = int(round((vmax - vmin) / step))
+            ticks = [round(vmin + i * step, digits) or 0.0 for i in range(n + 1)]
+            axis = (round(vmin, digits) or 0.0, round(vmax, digits) or 0.0, ticks)
+            self._axis_cache = axis
+        return axis
+
+    def _bar_geometry(self) -> list:
+        """Drawable bars as ``(c, s, u0, u1, v0, v1, color)``.
+
+        u0..u1: position along the category axis, 0..1 (category c owns the
+        slot c/n..(c+1)/n).  v0 -> v1: from the bar baseline to its end, in
+        data units (grouped: 0 -> value; stacked: running sums kept apart for
+        positive and negative values).  Zero values are left out.
+        """
+        geom = self._geometry_cache
+        if geom is None:
+            geom = []
+            n, k = len(self._categories), len(self._series)
+            if n and k:
+                slot = 1.0 / n
+                group = slot * self.GROUP_FILL
+                pad = (slot - group) / 2.0
+                colors = [self.seriesColor(s) for s in range(k)]
+                for c, row in enumerate(self._rows):
+                    left = c * slot + pad
+                    pos = neg = 0.0
+                    for s, v in enumerate(row):
+                        if v == 0:
+                            continue
+                        if self._stacked:
+                            u0, u1 = left, left + group
+                            if v > 0:
+                                v0, pos = pos, pos + v
+                                v1 = pos
+                            else:
+                                v0, neg = neg, neg + v
+                                v1 = neg
+                        else:
+                            w = group / k
+                            u0, u1 = left + s * w, left + (s + 1) * w
+                            v0, v1 = 0.0, v
+                        geom.append((c, s, u0, u1, v0, v1, colors[s]))
+            self._geometry_cache = geom
+        return geom
+
+    def _bar_at(self, u: float, v: float):
+        """Bar at category-axis position *u* (0..1) and data value *v*;
+        ``(-1, -1)`` if none."""
+        for c, s, u0, u1, v0, v1, _color in self._bar_geometry():
+            if u0 <= u < u1 and min(v0, v1) <= v <= max(v0, v1):
+                return c, s
+        return -1, -1
+
+    def _category_at(self, u: float) -> int:
+        """Category whose slot contains *u* (0..1), -1 if none."""
+        n = len(self._categories)
+        if n == 0 or not 0 <= u < 1:
+            return -1
+        return min(n - 1, int(u * n))
+
+    @staticmethod
+    def _format_tick(value: float) -> str:
+        """Compact axis label: 0, 2.5, 1.5k, 20M, -3G."""
+        if value == 0:
+            return "0"
+        a = abs(value)
+        for limit, suffix in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
+            if a >= limit:
+                return f"{value / limit:.3g}{suffix}"
+        return f"{value:.6g}"
+
+    def _value_text(self, c: int, s: int) -> str:
+        return self._format_value(self._rows[c][s])
+
+    def _bar_tooltip(self, c: int, s: int) -> str:
+        """Hover text: "category · series: value" (series omitted if unnamed)."""
+        name = self._series[s][0]
+        head = f"{self._categories[c]} \u00b7 {name}" if name else self._categories[c]
+        return f"{head}: {self._value_text(c, s)}"
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(series index, name, color)``."""
+        return [(s, entry[0], self.seriesColor(s)) for s, entry in enumerate(self._series)]
+
+    def _bar_clicked(self, c, s) -> bool:
+        """Select bar (*c*, *s*) and report it as activated."""
+        try:
+            c, s = int(c), int(s)
+        except (TypeError, ValueError):
+            return False
+        if not (0 <= c < len(self._categories) and 0 <= s < len(self._series)):
+            return False
+        self._sel = (c, s)
         self._apply_chart()
         self._post_activated()
         return True
