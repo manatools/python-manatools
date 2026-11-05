@@ -346,9 +346,11 @@ from .yui_common import (
     # Enums
     YUIDimension, YAlignmentType, YDialogType, YDialogColorMode,
     YEventType, YEventReason, YCheckBoxState, YButtonRole, YLogViewFocus,
+    YChartLegendPosition,
     # Base classes
     YWidget, YSingleChildContainerWidget, YSelectionWidget,
     YSimpleInputField, YItem, YTreeItem, YTableHeader, YTableItem, YTableCell,
+    YChartSlice,
     # Events
     YEvent, YWidgetEvent, YKeyEvent, YMenuEvent, YTimeoutEvent, YCancelEvent,
     # Exceptions
@@ -364,8 +366,10 @@ __all__ = [
     'YUI', 'YUI_ui', 'YUI_widgetFactory', 'YUI_app', 'YUI_application', 'YUI_yApp',
     'YUIDimension', 'YAlignmentType', 'YDialogType', 'YDialogColorMode',
     'YEventType', 'YEventReason', 'YCheckBoxState', 'YButtonRole', 'YLogViewFocus',
+    'YChartLegendPosition',
     'YWidget', 'YSingleChildContainerWidget', 'YSelectionWidget', 
     'YSimpleInputField', 'YItem', 'YTreeItem', 'YTableHeader', 'YTableItem', 'YTableCell',
+    'YChartSlice',
     'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YTimeoutEvent', 'YCancelEvent',
     'YUIException', 'YUIWidgetNotFoundException', 'YUINoDialogException', 'YUIInvalidWidgetException',
     'YMenuItem',
