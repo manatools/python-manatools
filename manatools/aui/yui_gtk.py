@@ -987,6 +987,11 @@ class YWidgetFactoryGtk:
         from .backends.gtk.chartpiegtk import YChartPieGtk
         return YChartPieGtk(parent, label)
 
+    def createChartBar(self, parent, label: str = ""):
+        """Create a bar chart widget (GTK backend)."""
+        from .backends.gtk.chartbargtk import YChartBarGtk
+        return YChartBarGtk(parent, label)
+
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)
