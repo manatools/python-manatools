@@ -28,7 +28,10 @@ class YUICurses:
             self._stdscr = curses.initscr()
             curses.noecho()
             curses.cbreak()
-            curses.curs_set(1)  # Show cursor
+            try:
+                curses.curs_set(1)  # Show cursor
+            except curses.error:
+                pass                # no cursor visibility control (e.g. vt100)
             self._stdscr.keypad(True)
             # Explicitly map Shift+Tab (\033[Z) to KEY_BTAB so it works on
             # Linux VT consoles (TERM=linux), whose terminfo has no kcbt entry.
@@ -41,13 +44,17 @@ class YUICurses:
             # Enable colors if available
             if curses.has_colors():
                 curses.start_color()
-                curses.use_default_colors()
+                try:
+                    curses.use_default_colors()
+                    background = -1
+                except curses.error:
+                    background = curses.COLOR_BLACK     # no default colors
                 self._colors_initialized = True
                 # Define some color pairs
                 curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
-                curses.init_pair(2, curses.COLOR_YELLOW, -1)
-                curses.init_pair(3, curses.COLOR_GREEN, -1)
-                curses.init_pair(4, curses.COLOR_RED, -1)
+                curses.init_pair(2, curses.COLOR_YELLOW, background)
+                curses.init_pair(3, curses.COLOR_GREEN, background)
+                curses.init_pair(4, curses.COLOR_RED, background)
         except Exception as e:
             print(f"Error initializing curses: {e}")
             self._cleanup_curses()
@@ -59,7 +66,10 @@ class YUICurses:
                 curses.nocbreak()
                 self._stdscr.keypad(False)
                 curses.echo()
-                curses.curs_set(1)
+                try:
+                    curses.curs_set(1)
+                except curses.error:
+                    pass
                 curses.endwin()
         except:
             pass
