@@ -16,6 +16,7 @@ from .radiobuttongtk import YRadioButtonGtk
 from .tablegtk import YTableGtk
 from .richtextgtk import YRichTextGtk
 from .htmlviewgtk import YHtmlViewGtk
+from .chartpiegtk import YChartPieGtk
 from .menubargtk import YMenuBarGtk
 from .replacepointgtk import YReplacePointGtk
 from .intfieldgtk import YIntFieldGtk
@@ -48,6 +49,7 @@ __all__ = [
     "YTableGtk",
     "YRichTextGtk",
     "YHtmlViewGtk",
+    "YChartPieGtk",
     "YMenuBarGtk",
     "YReplacePointGtk",
     "YIntFieldGtk",
