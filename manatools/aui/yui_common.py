@@ -737,6 +737,104 @@ class YHtmlViewBase(YWidget):
                 dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
         return True
 
+class YChartBase(YWidget):
+    """Shared base of the chart widgets (YChartPie, YChartBar).
+
+    Holds what every chart has: a title, a legend position, the color
+    palette, input validation, value formatting and the Activated event.
+    Every model change ends in ``_apply_chart()``, the single backend
+    redraw hook.  Charts are stretchable in both directions.
+    """
+
+    # Okabe-Ito colorblind-safe palette (black replaced by grey so it stays
+    # visible on dark themes).  Cycled for entries without a custom color.
+    PALETTE = (
+        "#e69f00", "#56b4e9", "#009e73", "#f0e442",
+        "#0072b2", "#d55e00", "#cc79a7", "#999999",
+    )
+
+    _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._label = "" if label is None else str(label)
+        self._legend_position = YChartLegendPosition.Right
+        super().__init__(parent)
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_number(value, allow_negative: bool = False, what: str = "value") -> float:
+        if isinstance(value, bool):
+            raise TypeError(f"{what} must be a number, not bool")
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError(f"{what} must be finite, got {value!r}")
+        if value < 0 and not allow_negative:
+            raise ValueError(f"{what} must be >= 0, got {value!r}")
+        return value
+
+    @staticmethod
+    def _check_color(color):
+        """``"#rrggbb"`` normalized to lowercase, or None ("use the palette")."""
+        if color is None or color == "":
+            return None
+        if not isinstance(color, str) or not YChartBase._COLOR_RE.match(color):
+            raise ValueError(f"color must be '#rrggbb', got {color!r}")
+        return color.lower()
+
+    @staticmethod
+    def _check_index_in(index, count: int, what: str = "index") -> int:
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise TypeError(f"{what} must be an int")
+        if not 0 <= index < count:
+            raise IndexError(f"{what} {index} out of range")
+        return index
+
+    # -- title and legend ---------------------------------------------------
+
+    def setLabel(self, label: str):
+        self._label = "" if label is None else str(label)
+        self._apply_chart()
+
+    def label(self) -> str:
+        return self._label
+
+    def setLegendPosition(self, position: YChartLegendPosition):
+        if not isinstance(position, YChartLegendPosition):
+            raise TypeError("position must be a YChartLegendPosition")
+        self._legend_position = position
+        self._apply_chart()
+
+    def legendPosition(self) -> YChartLegendPosition:
+        return self._legend_position
+
+    # -- backend hooks ------------------------------------------------------
+
+    def _apply_chart(self):
+        """Redraw the backend widget from the current model."""
+        pass
+
+    # -- shared internals ---------------------------------------------------
+
+    def _palette_color(self, index: int) -> str:
+        return self.PALETTE[index % len(self.PALETTE)]
+
+    @staticmethod
+    def _format_value(value: float) -> str:
+        if value == int(value) and abs(value) < 1e15:
+            return str(int(value))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+
+    def _post_activated(self):
+        """Post YWidgetEvent(Activated) when notify() is on."""
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+
 class YChartSlice:
     """One slice of a YChartPie: label, non-negative value, optional color
     (``"#rrggbb"``, None means "use the palette") and an application payload.
@@ -764,13 +862,13 @@ class YChartSlice:
     def data(self):
         return self._data
 
-class YChartPieBase(YWidget):
+class YChartPieBase(YChartBase):
     """Shared model of the YChartPie widget.
 
     Holds the slices and does all the math (percentages, angles, hit test,
     legend text), so a backend only paints ``_geometry()`` / ``_legend_rows()``
-    and reports clicks through ``_slice_clicked()``.  Every model change ends
-    in ``_apply_chart()``, the single backend redraw hook.
+    and reports clicks through ``_slice_clicked()``.  Title, legend position,
+    palette and the redraw hook ``_apply_chart()`` come from YChartBase.
 
     Angles are in degrees, 0 at 12 o'clock, growing clockwise.
 
@@ -778,30 +876,17 @@ class YChartPieBase(YWidget):
     with reason Activated (when notify() is on).
     """
 
-    # Okabe-Ito colorblind-safe palette (black replaced by grey so it stays
-    # visible on dark themes).  Cycled for slices without a custom color.
-    PALETTE = (
-        "#e69f00", "#56b4e9", "#009e73", "#f0e442",
-        "#0072b2", "#d55e00", "#cc79a7", "#999999",
-    )
-
     MAX_DONUT_RATIO = 0.9
-
-    _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
     def __init__(self, parent=None, label: str = ""):
         # Attributes first: addChild() on the parent may render us immediately.
-        self._label = "" if label is None else str(label)
         self._slices = []
         self._selected = -1
-        self._legend_position = YChartLegendPosition.Right
         self._show_percent = True
         self._donut_ratio = 0.0
         self._center_text = ""
         self._geometry_cache = None
-        super().__init__(parent)
-        self.setStretchable(YUIDimension.YD_HORIZ, True)
-        self.setStretchable(YUIDimension.YD_VERT, True)
+        super().__init__(parent, label)
 
     def widgetClass(self):
         return "YChartPie"
@@ -810,36 +895,10 @@ class YChartPieBase(YWidget):
 
     @staticmethod
     def _check_value(value) -> float:
-        if isinstance(value, bool):
-            raise TypeError("slice value must be a number, not bool")
-        value = float(value)
-        if not math.isfinite(value) or value < 0:
-            raise ValueError(f"slice value must be finite and >= 0, got {value!r}")
-        return value
-
-    @staticmethod
-    def _check_color(color):
-        if color is None or color == "":
-            return None
-        if not isinstance(color, str) or not YChartPieBase._COLOR_RE.match(color):
-            raise ValueError(f"slice color must be '#rrggbb', got {color!r}")
-        return color.lower()
+        return YChartBase._check_number(value, False, "slice value")
 
     def _check_index(self, index) -> int:
-        if isinstance(index, bool) or not isinstance(index, int):
-            raise TypeError("slice index must be an int")
-        if not 0 <= index < len(self._slices):
-            raise IndexError(f"slice index {index} out of range")
-        return index
-
-    # -- title --------------------------------------------------------------
-
-    def setLabel(self, label: str):
-        self._label = "" if label is None else str(label)
-        self._apply_chart()
-
-    def label(self) -> str:
-        return self._label
+        return self._check_index_in(index, len(self._slices), "slice index")
 
     # -- slices -------------------------------------------------------------
 
@@ -903,7 +962,7 @@ class YChartPieBase(YWidget):
     def sliceColor(self, index: int) -> str:
         """Color the slice is drawn with: custom one, else from PALETTE."""
         s = self._slices[self._check_index(index)]
-        return s._color or self.PALETTE[index % len(self.PALETTE)]
+        return s._color or self._palette_color(index)
 
     def total(self) -> float:
         return sum(s._value for s in self._slices)
@@ -915,15 +974,6 @@ class YChartPieBase(YWidget):
         return s._value * 100.0 / total if total > 0 else 0.0
 
     # -- look ---------------------------------------------------------------
-
-    def setLegendPosition(self, position: YChartLegendPosition):
-        if not isinstance(position, YChartLegendPosition):
-            raise TypeError("position must be a YChartLegendPosition")
-        self._legend_position = position
-        self._apply_chart()
-
-    def legendPosition(self) -> YChartLegendPosition:
-        return self._legend_position
 
     def setShowPercent(self, show: bool = True):
         """Show (True, default) or hide the percent column of the legend."""
@@ -968,12 +1018,6 @@ class YChartPieBase(YWidget):
         self._selected = index
         self._apply_chart()
 
-    # -- backend hooks ------------------------------------------------------
-
-    def _apply_chart(self):
-        """Redraw the backend widget from the current model."""
-        pass
-
     # -- shared internals ---------------------------------------------------
 
     def _chart_changed(self):
@@ -1017,12 +1061,6 @@ class YChartPieBase(YWidget):
         # Rounding can leave angle a hair past the last slice end.
         return geom[-1][0] if geom else -1
 
-    @staticmethod
-    def _format_value(value: float) -> str:
-        if value == int(value) and abs(value) < 1e15:
-            return str(int(value))
-        return f"{value:.2f}".rstrip("0").rstrip(".")
-
     def _legend_rows(self) -> list:
         """Legend rows as ``(index, label, value_text, percent_text, color)``;
         percent_text is "" when showPercent() is off."""
@@ -1052,10 +1090,7 @@ class YChartPieBase(YWidget):
             return False
         self._selected = index
         self._apply_chart()
-        if self.notify():
-            dlg = self.findDialog()
-            if dlg is not None:
-                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        self._post_activated()
         return True
 
 class YItem:
