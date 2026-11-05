@@ -151,6 +151,17 @@ class YHtmlBasePolicy(Enum):
     DocumentBase = 1   # relative links resolved against the document's <base href>
 ```
 
+### YChartLegendPosition
+
+Where a `YChartPie` places its legend (see §8.14c).
+
+```python
+class YChartLegendPosition(Enum):
+    Right  = 0   # legend right of the pie (default)
+    Bottom = 1   # legend under the pie
+    Hidden = 2   # no legend
+```
+
 ---
 
 ## 3. Exception Classes
@@ -739,6 +750,83 @@ Each `cid:` image is capped at 8 MB, a document resolves at most 256 distinct
 `cid:` values, and all inlined copies together (every reference counts) at
 32 MB; images past a limit are dropped.
 
+### 8.14c ChartPie
+
+```python
+factory.createChartPie(parent, label: str = "") -> YWidget
+```
+
+Pie or donut chart with an optional title and a legend (label, value,
+percent per slice). The model and all the math live in `YChartPieBase`
+(`yui_common.py`); backends only paint it, so values, percentages, colors
+and events are the same everywhere. Stretchable in both directions.
+
+Clicking a slice or a legend row (Enter/Space on the keyboard) selects it and
+posts a `YWidgetEvent` with reason `Activated` when `notify()` is on; read
+the slice with `selectedSlice()`. Arrow keys only move the selection.
+
+```python
+# title
+w.setLabel(label: str)
+w.label()        -> str
+# slices (values: finite numbers >= 0; colors: "#rrggbb" or None = palette)
+w.addSlice(label: str, value, color: str | None = None, data=None) -> int   # index
+w.setSlices(slices)                      # YChartSlice or (label, value[, color[, data]]) tuples;
+                                         # all validated first, one redraw, clears the selection
+w.setSliceValue(index: int, value)
+w.setSliceLabel(index: int, label: str)
+w.setSliceColor(index: int, color: str | None)
+w.removeSlice(index: int)
+w.deleteAllSlices()
+w.sliceCount()   -> int
+w.slice(index)   -> YChartSlice
+w.sliceColor(index) -> str               # color actually drawn (custom or palette)
+w.total()        -> float
+w.slicePercent(index) -> float           # 0..100, 0 when the total is 0
+# look
+w.setLegendPosition(pos: YChartLegendPosition)
+w.legendPosition() -> YChartLegendPosition
+w.setShowPercent(show: bool = True)      # percent column in the legend
+w.showPercent()  -> bool
+w.setDonutRatio(ratio: float)            # hole radius / outer radius, clamped 0..0.9; 0 = pie
+w.donutRatio()   -> float
+w.setCenterText(text: str)               # shown in the hole (donut mode only)
+w.centerText()   -> str
+# selection
+w.selectedSlice() -> int                 # -1 = none
+w.setSelectedSlice(index: int)           # highlight only, no event; -1 clears
+```
+
+Invalid input raises: `ValueError` for negative/non-finite values or a color
+that is not `#rrggbb`, `TypeError` for a `bool` value or non-int index,
+`IndexError` for an index out of range. Zero-value slices stay in the legend
+but are not drawn; a chart with no slices (or a zero total) shows "No data".
+Slices without a color cycle through a colorblind-safe palette
+(`YChartPieBase.PALETTE`, Okabe-Ito). Every setter redraws; on the web
+backend rapid changes are sent as one update.
+
+```python
+chart = factory.createChartPie(vbox, "Disk usage (GB)")
+chart.setSlices([("System", 18.5), ("Home", 42), ("Free", 29.5, "#999999")])
+chart.setDonutRatio(0.55)
+chart.setCenterText(f"{chart.total():g}")
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
+    s = chart.slice(chart.selectedSlice())
+    status.setValue(f"{s.label()}: {s.value():g} ({chart.slicePercent(chart.selectedSlice()):.1f}%)")
+```
+
+| Backend | Rendering |
+|---|---|
+| Qt | `QWidget` painted with `QPainter` (no QtCharts); hover tooltips per slice, else the help text |
+| GTK | `Gtk.DrawingArea` with cairo + PangoCairo; slice separators cut out so the theme background shows |
+| NCurses | No disc: one row per slice with color block, label, value, percent and a proportional bar; `Hidden` keeps only the bars, `Right`/`Bottom` look the same; donut center text shown under the title |
+| Web | Server-generated inline SVG + HTML legend (no script, labels escaped); clicks sent as `{slice: <index>}` |
+
+Demo: `test/test_chartpie.py [web|qt|gtk|ncurses]`; headless checks:
+`test/test_chartpie_{web,qt,gtk,curses}_headless.py`.
+
 ### 8.15 LogView
 
 ```python
@@ -1105,6 +1193,19 @@ row.iconName(index: int = 0) -> str
 row.checked(index: int = 0)  -> bool
 ```
 
+### 9.7 YChartSlice
+
+One slice of a `YChartPie` (§8.14c). Read-only: change slices through the
+chart setters so it redraws.
+
+```python
+YChartSlice(label: str = "", value=0, color: str | None = None, data=None)
+s.label() -> str
+s.value() -> float
+s.color() -> str | None     # custom "#rrggbb", None when the palette is used
+s.data()                    # application payload
+```
+
 ---
 
 ## 10. Layout Reference
@@ -1214,6 +1315,7 @@ if app.isTextMode():
 | `createImage` | Full image rendering (GdkPixbuf; scales on size-allocate when stretchable) | Full image rendering (QLabel+QPixmap; scales on resizeEvent when stretchable) | Unicode box frame with `fallBackName` text |
 | `createRichText` | HTML via WebKit / Gtk.Label | QTextBrowser | Plain text fallback |
 | `createHtmlView` | WebKitGTK 6.0, else Pango label | QtWebEngine, else QTextBrowser | Flattened text with link navigation |
+| `createChartPie` | cairo on Gtk.DrawingArea | QPainter | Bar list (one row per slice) |
 | Scrollbar auto-scroll | Supported | Supported | Limited |
 | `shutdown()` required | No | No | Yes |
 
