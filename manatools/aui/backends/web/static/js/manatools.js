@@ -351,6 +351,8 @@
         on('.mana-checkboxframe-toggle', 'change', handleCheckboxFrameToggle);
         on('.mana-ychartpie [data-slice]', 'click', handleChartSliceClick);
         on('.mana-ychartpie [data-slice]', 'keydown', handleChartSliceKey);
+        on('.mana-ychartbar [data-bar]', 'click', handleChartBarClick);
+        on('.mana-ychartbar [data-bar]', 'keydown', handleChartBarKey);
 
         initMenuBehavior(root);
 
@@ -525,6 +527,22 @@
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         handleChartSliceClick(event);
+    }
+
+    function handleChartBarClick(event) {
+        // data-bar="<category>,<series>"
+        const el = event.currentTarget;
+        const chart = el.closest('.mana-ychartbar');
+        if (!chart || chart.classList.contains('mana-disabled')) return;
+        const parts = (el.dataset.bar || '').split(',').map(function (v) { return parseInt(v, 10); });
+        if (parts.length !== 2 || parts.some(isNaN)) return;
+        sendEvent({ type: 'event', widget_id: getWidgetId(chart), reason: 'Activated', data: { bar: parts } });
+    }
+
+    function handleChartBarKey(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        handleChartBarClick(event);
     }
 
     function handleMenuItemClick(event) {
