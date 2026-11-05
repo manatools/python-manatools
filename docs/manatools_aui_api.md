@@ -42,6 +42,21 @@ finally:
     ui.shutdown()   # NCurses only; no-op on GUI backends
 ```
 
+### NCurses terminal capabilities
+
+The NCurses backend adapts to what the terminal's terminfo entry (`TERM`)
+reports: it runs on monochrome terminals such as `vt100` (no colors, no
+cursor-visibility control) as well as on 8-, 16-, 88- and 256-color
+terminals. Charts follow the color depth and switch to ASCII glyphs where
+Unicode blocks cannot be shown; `MUI_CURSES_ASCII=1` forces ASCII glyphs,
+`MUI_CURSES_ASCII=0` forces Unicode (see §8.14e).
+
+```bash
+tput colors                       # what curses will see (-1 or 0 = no colors)
+TERM=xterm-256color python3 app.py
+MUI_CURSES_ASCII=1 python3 app.py # e.g. on a real DEC terminal or a non-UTF-8 console
+```
+
 ---
 
 ## 2. Enums
@@ -835,7 +850,7 @@ if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
 |---|---|
 | Qt | `QWidget` painted with `QPainter` (no QtCharts); hover tooltips per slice, else the help text |
 | GTK | `Gtk.DrawingArea` with cairo + PangoCairo; slice separators cut out so the theme background shows |
-| NCurses | No disc: one row per slice with color block, label, value, percent and a proportional bar; `Hidden` keeps only the bars, `Right`/`Bottom` look the same; donut center text shown under the title |
+| NCurses | No disc: one row per slice with color block, label, value, percent and a proportional bar; `Hidden` keeps only the bars, `Right`/`Bottom` look the same; donut center text shown under the title; colors and glyphs per terminal: §8.14e |
 | Web | Server-generated inline SVG + HTML legend (no script, labels escaped); clicks sent as `{slice: <index>}` |
 
 Demo: `test/test_chartpie.py [web|qt|gtk|ncurses]`; headless checks:
@@ -927,7 +942,7 @@ if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
 |---|---|
 | Qt | `QWidget` painted with `QPainter` (no QtCharts); real font metrics for axis/labels; tooltip per bar, else the help text |
 | GTK | `Gtk.DrawingArea` with cairo + PangoCairo, same layout as Qt |
-| NCurses | Always horizontal block bars: grouped = one row per (category, series), stacked = one row per category with colored segments (fill patterns without colors); zero column `│` with negatives on its left; axis row with min / 0 / max; one-line series legend; value column shows stacked totals |
+| NCurses | Always horizontal block bars: grouped = one row per (category, series), stacked = one row per category with colored segments (fill patterns without colors); zero column `│` with negatives on its left; axis row with min / 0 / max; one-line series legend; value column shows stacked totals; colors and glyphs per terminal: §8.14e |
 | Web | Server-generated inline SVG (axis, grid, bars, value labels) + HTML legend; text widths are estimated, crowded category labels are thinned out; clicks sent as `{bar: [c, s]}` |
 
 Keyboard (Qt/GTK): the two arrows along the category axis move between
@@ -936,6 +951,105 @@ Left/Right the segments of a stacked row.
 
 Demo: `test/test_chartbar.py [web|qt|gtk|ncurses]`; headless checks:
 `test/test_chartbar_model_headless.py`, `test/test_chartbar_{web,qt,gtk,curses}_headless.py`.
+
+### 8.14e Charts on NCurses: colors, glyphs and monochrome terminals
+
+`YChartPie` and `YChartBar` are drawn with colored block characters in a
+terminal. What they look like depends on two things the terminal reports:
+how many colors it has (`curses.COLORS`, the terminfo `colors` value shown
+by `tput colors`) and whether it can show the Unicode block glyphs.
+
+#### Color depth
+
+| Terminal colors | Examples | How chart colors are chosen |
+|---|---|---|
+| none | `vt100`, `vt220` | No color. Rows are identified by their labels (pie: slice label; grouped bars: category + series column), stacked bar segments by fill patterns, the selection by reverse video (focused) or bold |
+| 8 | `xterm`, `linux` console, `screen`, `rxvt` | Fixed distinct ANSI colors for the palette (table below); bright yellow is drawn as yellow + bold. Custom colors: nearest of the xterm 16 ANSI colors, bright ones as base color + bold |
+| 16 | `xterm-16color` | Same fixed palette colors using the bright half (8-15) instead of bold; custom colors: nearest xterm ANSI color |
+| 88 | `xterm-88color`, `rxvt-unicode` | 4x4x4 color cube (16-79); fixed distinct cube entries for the palette (the cube is too coarse for nearest-color: orange and vermillion would collide); custom colors: nearest cube entry |
+| 256 | `xterm-256color`, `screen-256color`, `rxvt-unicode-256color` | 6x6x6 color cube (16-231), nearest level per channel, for palette and custom colors |
+| 16777216 (direct) | `xterm-direct` | The exact RGB value of every color (numbers 0-7 stay ANSI, so near-black `#000000`-`#000007` becomes `#000008`) |
+
+Terminals between 16 and 88 colors are treated as 16-color terminals,
+between 256 and direct color as 256-color terminals. A true-color terminal
+only gets exact colors when `TERM` names a direct-color entry; with
+`TERM=xterm-256color` it is driven as a 256-color terminal. Black is never chosen as a
+foreground color (it would be invisible on dark backgrounds); greys map
+only to the grey entries (dark grey, light grey, white) so a near-black
+does not turn red. Backgrounds keep the terminal default
+(`use_default_colors()`), or black where the terminal has no default color.
+
+The default chart palette (`YChartBase.PALETTE`) on each depth:
+
+| # | Palette color | 8 colors | 16 colors | 88 colors | 256 colors | direct |
+|---|---|---|---|---|---|---|
+| 0 | orange `#e69f00` | yellow | 3 yellow | 68 | 178 | exact |
+| 1 | sky blue `#56b4e9` | cyan | 14 bright cyan | 43 | 74 | exact |
+| 2 | bluish green `#009e73` | green | 2 green | 21 | 35 | exact |
+| 3 | yellow `#f0e442` | yellow + bold | 11 bright yellow | 72 | 221 | exact |
+| 4 | blue `#0072b2` | blue | 4 blue | 22 | 25 | exact |
+| 5 | vermillion `#d55e00` | red | 1 red | 48 | 166 | exact |
+| 6 | reddish purple `#cc79a7` | magenta | 5 magenta | 53 | 175 | exact |
+| 7 | grey `#999999` | white | 7 white (light grey) | 37 | 102 | exact |
+
+Charts with more than 8 slices or series cycle through the palette, so
+entries 8 and up repeat the colors above (labels still tell them apart).
+
+Color pairs are shared by every chart, one per terminal color actually
+used, and taken from the top of the terminal's pair range downwards
+(`COLOR_PAIRS - 1`, capped at 32767), leaving the low pair ids to other
+widgets. On an 8-color terminal with 64 pairs the palette needs 7 pairs
+(57-63). Pair ids below 32 are never taken; colors that would need one are
+drawn without color, exactly like on a monochrome terminal (only charts
+with many distinct custom colors on a 64-pair terminal can get there).
+
+#### Glyphs
+
+| Element | Unicode | ASCII |
+|---|---|---|
+| bar / slice block | `█` | `#` |
+| legend swatch | `■` | `#` |
+| stacked segments without color (series 0, 1, 2, 3, ...) | `█ ▓ ▒ ░` | `# = + :` |
+| zero column (bar chart with negative values) | `│` | `\|` |
+| cut label, "more rows" marker | `…`, `↑N ↓N` | `~`, `^N vN` |
+| key hints in the footer | `↑↓=Move` | `Up/Down=Move` |
+
+ASCII glyphs are used when `MUI_CURSES_ASCII` is `1`/`yes`/`true`/`on`,
+when `TERM` is a DEC VT entry (`vt52`, `vt100`, `vt220`, ... — real DEC
+terminals have no Unicode), or when the window's output encoding cannot
+encode the Unicode glyphs. `MUI_CURSES_ASCII=0`/`no`/`false`/`off` forces
+Unicode, e.g. for `TERM=vt100` inside a modern UTF-8 terminal emulator.
+Python usually writes UTF-8 even under a C or Latin-1 locale, so a
+terminal emulator that is *not* UTF-8 is not detected automatically: set
+`MUI_CURSES_ASCII=1` there. The dialog frame uses curses line drawing
+(terminfo ACS) and works everywhere; texts of other widgets are unaffected.
+
+#### Monochrome terminals in practice
+
+- `YChartPie`: one row per slice with label, value, percent and bar, so
+  slices are readable without color; the selected row is reversed when the
+  chart has focus, bold otherwise.
+- `YChartBar`, grouped: one row per (category, series) with a series column
+  as soon as there are two series; colors are not needed.
+- `YChartBar`, stacked: one row per category; segments and the matching
+  legend entries use the fill patterns above. The selected segment is
+  reversed (focused) or bold.
+- Attributes: bold, reverse and underline are available on `vt100`; dim is
+  not, so a disabled chart looks like an enabled one there (it still takes
+  no focus and ignores keys).
+- On 8-color terminals bright yellow relies on the terminal rendering bold
+  as bright; terminals that only thicken the font show palette entries 0
+  and 3 (orange, yellow) as the same yellow.
+
+```bash
+TERM=vt100 MUI_BACKEND=ncurses python3 test/test_chartbar.py            # monochrome, ASCII
+TERM=xterm MUI_BACKEND=ncurses python3 test/test_chartbar.py            # 8 colors
+TERM=rxvt-unicode MUI_BACKEND=ncurses python3 test/test_chartbar.py     # 88 colors
+TERM=xterm-256color MUI_BACKEND=ncurses python3 test/test_chartbar.py   # 256 colors
+```
+
+Headless checks of the mapping and glyph rules:
+`test/test_chart_curses_colors_headless.py`.
 
 ### 8.15 LogView
 
