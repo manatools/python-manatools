@@ -17,21 +17,27 @@ class AppArgs :
     command is the application name
     It can be superseded to add specific options
     '''
-    def __init__(self, command) :
+    def __init__(self, command, localedir='/usr/share/locale', strings_domain='python-manatools') :
 
-        # We need to call this as early as possible because
-        # command-line help strings are translated
-        gettext.install(command, localedir='/usr/share/locale', names=('ngettext',))
-        self.parser = argparse.ArgumentParser(prog=command, usage='%(prog)s [options]')
+        translator = gettext.translation(strings_domain, localedir=localedir, fallback=True)
+        tr = translator.gettext
+
+        usage = '%%(prog)s [%s]' % tr('options')
+        self.parser = argparse.ArgumentParser(prog=command, usage=usage)
+        if getattr(self.parser, '_optionals', None) is not None:
+            self.parser._optionals.title = tr('options')
+        for action in self.parser._actions:
+            if '--help' in action.option_strings:
+                action.help = tr('show this help message and exit')
         ui_select_parser = self.parser.add_mutually_exclusive_group()
         # force manatools aui backend
-        ui_select_parser.add_argument('--gtk', help=_('start using Gtk backend'), action='store_true')
-        ui_select_parser.add_argument('--ncurses', help=_('start using ncurses backend'), action='store_true')
-        ui_select_parser.add_argument('--qt', help=_('start using Qt backend'), action='store_true')
+        ui_select_parser.add_argument('--gtk', help=tr('start using Gtk backend'), action='store_true')
+        ui_select_parser.add_argument('--ncurses', help=tr('start using ncurses backend'), action='store_true')
+        ui_select_parser.add_argument('--qt', help=tr('start using Qt backend'), action='store_true')
 
         # Application arguments
-        self.parser.add_argument('--locales-dir', nargs='?', help=_('directory containing localization strings (developer only)'))
-        self.parser.add_argument('--version',     help=_('show application version and exit'), action='store_true')
+        self.parser.add_argument('--locales-dir', nargs='?', help=tr('directory containing localization strings (developer only)'))
+        self.parser.add_argument('--version',     help=tr('show application version and exit'), action='store_true')
 
         self._args = None
 
