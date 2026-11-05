@@ -4,7 +4,9 @@ Common base classes and definitions shared across all backends
 
 from enum import Enum
 import fnmatch
+import math
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -201,6 +203,12 @@ class YHtmlBasePolicy(Enum):
     """
     NoBase = 0
     DocumentBase = 1
+
+class YChartLegendPosition(Enum):
+    """Where YChartPie places its legend relative to the pie."""
+    Right = 0
+    Bottom = 1
+    Hidden = 2
 
 # Exceptions
 class YUIException(Exception):
@@ -723,6 +731,327 @@ class YHtmlViewBase(YWidget):
         if rendered is None or not 0 <= index < len(rendered.links):
             return False
         self._last_url = rendered.links[index]
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        return True
+
+class YChartSlice:
+    """One slice of a YChartPie: label, non-negative value, optional color
+    (``"#rrggbb"``, None means "use the palette") and an application payload.
+
+    Read-only for applications: change slices through the YChartPie setters
+    so the chart redraws.
+    """
+
+    def __init__(self, label="", value=0, color=None, data=None):
+        self._label = "" if label is None else str(label)
+        self._value = YChartPieBase._check_value(value)
+        self._color = YChartPieBase._check_color(color)
+        self._data = data
+
+    def label(self) -> str:
+        return self._label
+
+    def value(self) -> float:
+        return self._value
+
+    def color(self):
+        """Custom color as ``"#rrggbb"``, or None when the palette is used."""
+        return self._color
+
+    def data(self):
+        return self._data
+
+class YChartPieBase(YWidget):
+    """Shared model of the YChartPie widget.
+
+    Holds the slices and does all the math (percentages, angles, hit test,
+    legend text), so a backend only paints ``_geometry()`` / ``_legend_rows()``
+    and reports clicks through ``_slice_clicked()``.  Every model change ends
+    in ``_apply_chart()``, the single backend redraw hook.
+
+    Angles are in degrees, 0 at 12 o'clock, growing clockwise.
+
+    Clicking a slice selects it (selectedSlice()) and posts a YWidgetEvent
+    with reason Activated (when notify() is on).
+    """
+
+    # Okabe-Ito colorblind-safe palette (black replaced by grey so it stays
+    # visible on dark themes).  Cycled for slices without a custom color.
+    PALETTE = (
+        "#e69f00", "#56b4e9", "#009e73", "#f0e442",
+        "#0072b2", "#d55e00", "#cc79a7", "#999999",
+    )
+
+    MAX_DONUT_RATIO = 0.9
+
+    _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._label = "" if label is None else str(label)
+        self._slices = []
+        self._selected = -1
+        self._legend_position = YChartLegendPosition.Right
+        self._show_percent = True
+        self._donut_ratio = 0.0
+        self._center_text = ""
+        self._geometry_cache = None
+        super().__init__(parent)
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
+
+    def widgetClass(self):
+        return "YChartPie"
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_value(value) -> float:
+        if isinstance(value, bool):
+            raise TypeError("slice value must be a number, not bool")
+        value = float(value)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"slice value must be finite and >= 0, got {value!r}")
+        return value
+
+    @staticmethod
+    def _check_color(color):
+        if color is None or color == "":
+            return None
+        if not isinstance(color, str) or not YChartPieBase._COLOR_RE.match(color):
+            raise ValueError(f"slice color must be '#rrggbb', got {color!r}")
+        return color.lower()
+
+    def _check_index(self, index) -> int:
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise TypeError("slice index must be an int")
+        if not 0 <= index < len(self._slices):
+            raise IndexError(f"slice index {index} out of range")
+        return index
+
+    # -- title --------------------------------------------------------------
+
+    def setLabel(self, label: str):
+        self._label = "" if label is None else str(label)
+        self._apply_chart()
+
+    def label(self) -> str:
+        return self._label
+
+    # -- slices -------------------------------------------------------------
+
+    def addSlice(self, label, value, color=None, data=None) -> int:
+        """Append a slice and return its index."""
+        self._slices.append(YChartSlice(label, value, color, data))
+        self._chart_changed()
+        return len(self._slices) - 1
+
+    def setSlices(self, slices):
+        """Replace all slices at once (one redraw).
+
+        *slices* holds YChartSlice objects or ``(label, value[, color[, data]])``
+        tuples.  Everything is validated before the chart changes.
+        """
+        new = []
+        for s in slices or ():
+            if isinstance(s, YChartSlice):
+                new.append(s)
+            else:
+                new.append(YChartSlice(*s))
+        self._slices = new
+        self._selected = -1
+        self._chart_changed()
+
+    def setSliceValue(self, index: int, value):
+        s = self._slices[self._check_index(index)]
+        s._value = self._check_value(value)
+        self._chart_changed()
+
+    def setSliceLabel(self, index: int, label):
+        s = self._slices[self._check_index(index)]
+        s._label = "" if label is None else str(label)
+        self._chart_changed()
+
+    def setSliceColor(self, index: int, color):
+        """Set a custom ``"#rrggbb"`` color, or None to go back to the palette."""
+        s = self._slices[self._check_index(index)]
+        s._color = self._check_color(color)
+        self._chart_changed()
+
+    def removeSlice(self, index: int):
+        del self._slices[self._check_index(index)]
+        if self._selected == index:
+            self._selected = -1
+        elif self._selected > index:
+            self._selected -= 1
+        self._chart_changed()
+
+    def deleteAllSlices(self):
+        self._slices = []
+        self._selected = -1
+        self._chart_changed()
+
+    def sliceCount(self) -> int:
+        return len(self._slices)
+
+    def slice(self, index: int) -> YChartSlice:
+        return self._slices[self._check_index(index)]
+
+    def sliceColor(self, index: int) -> str:
+        """Color the slice is drawn with: custom one, else from PALETTE."""
+        s = self._slices[self._check_index(index)]
+        return s._color or self.PALETTE[index % len(self.PALETTE)]
+
+    def total(self) -> float:
+        return sum(s._value for s in self._slices)
+
+    def slicePercent(self, index: int) -> float:
+        """Share of the slice in the total, 0..100 (0 when the total is 0)."""
+        s = self._slices[self._check_index(index)]
+        total = self.total()
+        return s._value * 100.0 / total if total > 0 else 0.0
+
+    # -- look ---------------------------------------------------------------
+
+    def setLegendPosition(self, position: YChartLegendPosition):
+        if not isinstance(position, YChartLegendPosition):
+            raise TypeError("position must be a YChartLegendPosition")
+        self._legend_position = position
+        self._apply_chart()
+
+    def legendPosition(self) -> YChartLegendPosition:
+        return self._legend_position
+
+    def setShowPercent(self, show: bool = True):
+        """Show (True, default) or hide the percent column of the legend."""
+        self._show_percent = bool(show)
+        self._apply_chart()
+
+    def showPercent(self) -> bool:
+        return self._show_percent
+
+    def setDonutRatio(self, ratio: float):
+        """Inner hole radius as a fraction of the outer one; 0 = full pie.
+
+        Clamped to 0..MAX_DONUT_RATIO.
+        """
+        ratio = float(ratio)
+        if not math.isfinite(ratio):
+            raise ValueError("donut ratio must be finite")
+        self._donut_ratio = min(max(ratio, 0.0), self.MAX_DONUT_RATIO)
+        self._apply_chart()
+
+    def donutRatio(self) -> float:
+        return self._donut_ratio
+
+    def setCenterText(self, text: str):
+        """Text in the donut hole (not shown when donutRatio() is 0)."""
+        self._center_text = "" if text is None else str(text)
+        self._apply_chart()
+
+    def centerText(self) -> str:
+        return self._center_text
+
+    # -- selection ----------------------------------------------------------
+
+    def selectedSlice(self) -> int:
+        """Index of the selected (last clicked) slice, -1 if none."""
+        return self._selected
+
+    def setSelectedSlice(self, index: int):
+        """Highlight *index* (-1 clears) without posting an event."""
+        if index != -1:
+            self._check_index(index)
+        self._selected = index
+        self._apply_chart()
+
+    # -- backend hooks ------------------------------------------------------
+
+    def _apply_chart(self):
+        """Redraw the backend widget from the current model."""
+        pass
+
+    # -- shared internals ---------------------------------------------------
+
+    def _chart_changed(self):
+        self._geometry_cache = None
+        self._apply_chart()
+
+    def _geometry(self) -> list:
+        """Drawable slices as ``(index, start_deg, sweep_deg, color)``.
+
+        Zero-value slices are left out; empty when the total is 0 (backends
+        then draw an empty ring and "No data").
+        """
+        geom = self._geometry_cache
+        if geom is None:
+            geom = []
+            total = self.total()
+            if total > 0:
+                start = 0.0
+                for i, s in enumerate(self._slices):
+                    if s._value <= 0:
+                        continue
+                    sweep = s._value * 360.0 / total
+                    geom.append((i, start, sweep, self.sliceColor(i)))
+                    start += sweep
+            self._geometry_cache = geom
+        return geom
+
+    def _slice_at(self, dx: float, dy: float, radius: float) -> int:
+        """Slice under a point at (*dx*, *dy*) from the center, screen
+        coordinates (y grows downward), on a pie of *radius*; -1 if none."""
+        if radius <= 0:
+            return -1
+        r = math.hypot(dx, dy)
+        if r > radius or r < radius * self._donut_ratio:
+            return -1
+        angle = math.degrees(math.atan2(dx, -dy)) % 360.0
+        for index, start, sweep, _color in self._geometry():
+            if start <= angle < start + sweep:
+                return index
+        geom = self._geometry()
+        # Rounding can leave angle a hair past the last slice end.
+        return geom[-1][0] if geom else -1
+
+    @staticmethod
+    def _format_value(value: float) -> str:
+        if value == int(value) and abs(value) < 1e15:
+            return str(int(value))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(index, label, value_text, percent_text, color)``;
+        percent_text is "" when showPercent() is off."""
+        total = self.total()
+        rows = []
+        for i, s in enumerate(self._slices):
+            pct = ""
+            if self._show_percent:
+                pct = f"{(s._value * 100.0 / total) if total > 0 else 0.0:.1f}%"
+            rows.append((i, s._label, self._format_value(s._value), pct,
+                         self.sliceColor(i)))
+        return rows
+
+    def _slice_tooltip(self, index: int) -> str:
+        """Hover text for a slice: "label: value (pct%)"."""
+        s = self._slices[index]
+        return (f"{s._label}: {self._format_value(s._value)} "
+                f"({self.slicePercent(index):.1f}%)")
+
+    def _slice_clicked(self, index) -> bool:
+        """Select the index-th slice and report it as activated."""
+        try:
+            index = int(index)
+        except (TypeError, ValueError):
+            return False
+        if not 0 <= index < len(self._slices):
+            return False
+        self._selected = index
+        self._apply_chart()
         if self.notify():
             dlg = self.findDialog()
             if dlg is not None:
