@@ -20,6 +20,7 @@ import sys
 
 # allow running from repo root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+os.environ["MUI_CURSES_ASCII"] = "0"     # these checks expect the Unicode glyphs
 
 from manatools.aui.yui_common import YChartLegendPosition, YEventReason  # noqa: E402
 from manatools.aui.backends.curses.chartbarcurses import YChartBarCurses  # noqa: E402
