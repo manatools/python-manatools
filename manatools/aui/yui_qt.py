@@ -503,6 +503,10 @@ class YWidgetFactoryQt:
         """Create a read-only, hardened HTML view (Qt backend)."""
         return YHtmlViewQt(parent, html)
 
+    def createChartPie(self, parent, label: str = ""):
+        """Create a pie / donut chart widget."""
+        return YChartPieQt(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (Qt backend)."""
         return YMenuBarQt(parent)
