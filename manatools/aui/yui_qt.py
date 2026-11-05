@@ -507,6 +507,10 @@ class YWidgetFactoryQt:
         """Create a pie / donut chart widget."""
         return YChartPieQt(parent, label)
 
+    def createChartBar(self, parent, label: str = ""):
+        """Create a bar chart widget."""
+        return YChartBarQt(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (Qt backend)."""
         return YMenuBarQt(parent)
