@@ -54,7 +54,8 @@ class YTableWeb(YSelectionWidget):
 
         An unselected row becomes the only selected row, so the handler can
         rely on selectedItem(); a row inside the selection keeps it.  Only the
-        rows are pushed, so the page/filter state in the browser is kept.
+        selected row index is pushed: the browser marks it and keeps its rows,
+        page and filter state.
         """
         rows = getattr(self, "_rows", [])
         if not isinstance(ref, int) or not (0 <= ref < len(rows)):
@@ -76,7 +77,7 @@ class YTableWeb(YSelectionWidget):
         if dialog is None or getattr(self, "_deferred_pending", False) or not hasattr(dialog, "_broadcast"):
             return
         dialog._broadcast({"type": "update", "updates": [{
-            "action": "rows", "target": f"#{self.id()}", "html": self._render_rows_html(),
+            "action": "select", "target": f"#{self.id()}", "rows": [ref],
         }]})
 
     def _context_menu_notify_changed(self):
