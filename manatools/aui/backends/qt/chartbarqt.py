@@ -24,7 +24,7 @@ import weakref
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from ...yui_common import *
-from .chartpieqt import _elide
+from .chartpieqt import _elide, _plain_tooltip
 
 _GAP = 6            # pixels between labels, axis, legend and title
 _ROW_PAD = 4        # extra height of a legend row over the font height
@@ -54,8 +54,25 @@ class _BarCanvas(QtWidgets.QWidget):
             return []
         return rows
 
+    def _cached(self, owner, name, compute):
+        """Value of *compute()* cached until the data or the font changes."""
+        key = (owner._version, owner.legendPosition(), self.font().key())
+        cache = getattr(self, "_measure_cache", None)
+        if cache is None or cache[0] != key:
+            cache = self._measure_cache = (key, {})
+        if name not in cache[1]:
+            cache[1][name] = compute()
+        return cache[1][name]
+
+    def _widest(self, owner, name, texts):
+        fm = self.fontMetrics()
+        return self._cached(owner, name, lambda: max((fm.horizontalAdvance(t) for t in texts), default=0))
+
     def _legend_size(self, owner):
         """(row height, swatch, width of the widest row) of the series legend."""
+        return self._cached(owner, "legend", lambda: self._measure_legend(owner))
+
+    def _measure_legend(self, owner):
         fm = self.fontMetrics()
         row_h = fm.height() + _ROW_PAD
         swatch = max(8, int(fm.height() * 0.8))
@@ -129,7 +146,7 @@ class _BarCanvas(QtWidgets.QWidget):
         fh = fm.height()
         values = owner.showValues() and not owner.stacked()
         if owner.orientation() == YChartBarOrientation.Horizontal:
-            cat_w = max((fm.horizontalAdvance(t) for t in cat_texts), default=0)
+            cat_w = self._widest(owner, "categories", cat_texts)
             left = area.left() + min(cat_w, area.width() * 0.35) + _GAP
             right = area.right() - fm.horizontalAdvance(tick_texts[-1]) / 2.0 - 2
             top = area.top() + 2
@@ -240,36 +257,59 @@ class _BarCanvas(QtWidgets.QWidget):
                            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                            _elide(fm, cat_texts[c], left - area.left() - _GAP))
         else:
-            longest = max(fm.horizontalAdvance(t) for t in cat_texts)
+            longest = self._widest(owner, "categories", cat_texts)
             want = min(longest, fm.horizontalAdvance("M" * _MIN_LABEL_CHARS)) + 2 * _GAP
             every = max(1, math.ceil(want / slot))
             width = slot * every - 2 * _GAP
+            last_end = -1e9
             for c in range(0, n, every):
                 label = _elide(fm, cat_texts[c], width)
                 lw = fm.horizontalAdvance(label)
                 x = upos((c + 0.5) / n) - lw / 2.0
                 x = max(area.left(), min(x, area.right() - lw))    # keep inside the widget
+                if x < last_end + _GAP:
+                    continue                # pushed onto its neighbour by the edge
+                last_end = x + lw
                 p.drawText(QtCore.QRectF(x, bottom + _GAP / 2.0, lw + 1, fh),
                            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
 
-        # bars
+        # bars; bars thinner than a pixel are merged per pixel line and color
+        # (overlapping extents only) so dense charts draw at most a few rects
+        # per pixel instead of one per bar
         selected = (owner.selectedCategory(), owner.selectedSeries())
         sel_rect = None
         values = []
+        thin = {}           # (pixel, color) -> [[lo, hi], ...] along the value axis
         p.setPen(Qt.PenStyle.NoPen)
         for c, s, u0, u1, v0, v1, color in owner._bar_geometry():
             a, b = upos(u0), upos(u1)
             q0, q1 = vpos(v0), vpos(v1)
+            lo, hi = min(q0, q1), max(q0, q1)
             if horizontal:
-                rect = QtCore.QRectF(min(q0, q1), a, max(abs(q1 - q0), 1.0), b - a)
+                rect = QtCore.QRectF(lo, a, max(hi - lo, 1.0), max(b - a, 1.0))
             else:
-                rect = QtCore.QRectF(a, min(q0, q1), b - a, max(abs(q1 - q0), 1.0))
-            p.setBrush(QtGui.QColor(color))
-            p.drawRect(rect)
+                rect = QtCore.QRectF(a, lo, max(b - a, 1.0), max(hi - lo, 1.0))
             if (c, s) == selected:
                 sel_rect = rect
-            if owner.showValues():
+            if b - a < 1.0:
+                spans = thin.setdefault((int(a), color), [])
+                if spans and lo <= spans[-1][1] + 1.0 and hi >= spans[-1][0] - 1.0:
+                    spans[-1][0] = min(spans[-1][0], lo)
+                    spans[-1][1] = max(spans[-1][1], hi)
+                else:
+                    spans.append([lo, hi])
+                continue
+            p.setBrush(QtGui.QColor(color))
+            p.drawRect(rect)
+            if owner.showValues() and b - a >= 3.0:     # no room for labels on thinner bars
                 values.append((c, s, rect, v1 >= v0))
+        for (pixel, color), spans in thin.items():
+            p.setBrush(QtGui.QColor(color))
+            for lo, hi in spans:
+                if horizontal:
+                    p.drawRect(QtCore.QRectF(lo, pixel, max(hi - lo, 1.0), 1.0))
+                else:
+                    p.drawRect(QtCore.QRectF(pixel, lo, 1.0, max(hi - lo, 1.0)))
         if sel_rect is not None:
             p.setPen(QtGui.QPen(text, 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
@@ -366,13 +406,14 @@ class _BarCanvas(QtWidgets.QWidget):
         left, top, right, bottom, horizontal, vmin, span = self._plot
         if not (left <= pos.x() <= right and top <= pos.y() <= bottom):
             return -1, -1
+        length = max(1.0, (bottom - top) if horizontal else (right - left))
         if horizontal:
-            u = (pos.y() - top) / max(1.0, bottom - top)
+            u = (pos.y() - top) / length
             v = vmin + (pos.x() - left) / max(1.0, right - left) * span
         else:
-            u = (pos.x() - left) / max(1.0, right - left)
+            u = (pos.x() - left) / length
             v = vmin + (bottom - pos.y()) / max(1.0, bottom - top) * span
-        return owner._bar_at(u, v)
+        return owner._bar_at(u, v, 1.0 / length)       # one pixel of tolerance
 
     def mousePressEvent(self, event):
         owner = self._owner()
@@ -428,7 +469,9 @@ class _BarCanvas(QtWidgets.QWidget):
             tip = ""
             if owner is not None:
                 c, s = self._bar_at_pos(owner, QtCore.QPointF(event.pos()))
-                tip = owner._bar_tooltip(c, s) if c >= 0 else owner.helpText()
+                # Bar labels are data: shown literally.  The help text is
+                # passed as is, like every other Qt widget's tooltip.
+                tip = _plain_tooltip(owner._bar_tooltip(c, s)) if c >= 0 else owner.helpText()
             if tip:
                 QtWidgets.QToolTip.showText(event.globalPos(), tip, self)
             else:
