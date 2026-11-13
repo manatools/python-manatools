@@ -26,7 +26,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 gi.require_version('PangoCairo', '1.0')
-from gi.repository import Gtk, Gdk, Pango, PangoCairo
+from gi.repository import GLib, Gtk, Gdk, Pango, PangoCairo
 from ...yui_common import *
 from .chartpiegtk import _rgb
 
@@ -74,7 +74,18 @@ class _BarArea(Gtk.DrawingArea):
         return layout
 
     def _text_size(self, text, bold=False):
-        return self._layout_for(text, bold).get_pixel_size()
+        """Pixel size of *text*, cached per font: creating a Pango layout for
+        every measurement made large charts slow."""
+        font = self.get_pango_context().get_font_description()
+        font_key = font.to_string() if font is not None else ""
+        cache = getattr(self, "_size_cache", None)
+        if cache is None or cache[0] != font_key or len(cache[1]) > 20000:
+            cache = self._size_cache = (font_key, {})
+        key = (text, bold)
+        size = cache[1].get(key)
+        if size is None:
+            size = cache[1][key] = self._layout_for(text, bold).get_pixel_size()
+        return size
 
     def _fg(self):
         try:
@@ -99,6 +110,16 @@ class _BarArea(Gtk.DrawingArea):
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             self._text(cr, text, x + dx, y + dy, w, h, (0, 0, 0, 0.45), align, valign)
         self._text(cr, text, x, y, w, h, (1, 1, 1, 1), align, valign)
+
+    def _widest(self, owner, cat_texts):
+        """Widest category label, cached until the data or the font changes."""
+        key = (owner._version, getattr(self, "_size_cache", ("",))[0])
+        cached = getattr(self, "_widest_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        widest = max((self._text_size(t)[0] for t in cat_texts), default=0)
+        self._widest_cache = ((owner._version, self._size_cache[0]), widest)
+        return widest
 
     # -- legend -------------------------------------------------------------
 
@@ -175,7 +196,7 @@ class _BarArea(Gtk.DrawingArea):
         fh = self._text_size("Ag")[1]
         values = owner.showValues() and not owner.stacked()
         if owner.orientation() == YChartBarOrientation.Horizontal:
-            cat_w = max((self._text_size(t)[0] for t in cat_texts), default=0)
+            cat_w = self._widest(owner, cat_texts)
             left = ax + min(cat_w, aw * 0.35) + _GAP
             right = ax + aw - self._text_size(tick_texts[-1])[0] / 2.0 - 2
             top = ay + 2
@@ -283,34 +304,59 @@ class _BarArea(Gtk.DrawingArea):
                 self._text(cr, cat_texts[c], ax, mid - fh / 2.0, left - ax - _GAP, fh, fg,
                            Pango.Alignment.RIGHT)
         else:
-            longest = max(self._text_size(t)[0] for t in cat_texts)
+            longest = self._widest(owner, cat_texts)
             want = min(longest, self._text_size("M" * _MIN_LABEL_CHARS)[0]) + 2 * _GAP
             every = max(1, math.ceil(want / slot))
             box_w = slot * every - 2 * _GAP
+            last_end = -1e9
             for c in range(0, n, every):
                 tw = min(self._text_size(cat_texts[c])[0], box_w)
                 x = upos((c + 0.5) / n) - tw / 2.0
                 x = max(ax, min(x, ax + aw - tw))       # keep inside the widget
+                if x < last_end + _GAP:
+                    continue                # pushed onto its neighbour by the edge
+                last_end = x + tw
                 self._text(cr, cat_texts[c], x, bottom + _GAP / 2.0, tw + 1, fh, fg)
 
         # bars
         selected = (owner.selectedCategory(), owner.selectedSeries())
         sel_rect = None
         values = []
+        # Bars thinner than a pixel are merged per pixel line and color
+        # (overlapping extents only), so dense charts fill at most a few
+        # rectangles per pixel instead of one per bar.
+        thin = {}           # (pixel, color) -> [[lo, hi], ...] along the value axis
         for c, s, u0, u1, v0, v1, color in owner._bar_geometry():
             a, b = upos(u0), upos(u1)
             q0, q1 = vpos(v0), vpos(v1)
+            lo, hi = min(q0, q1), max(q0, q1)
             if horizontal:
-                rect = (min(q0, q1), a, max(abs(q1 - q0), 1.0), b - a)
+                rect = (lo, a, max(hi - lo, 1.0), max(b - a, 1.0))
             else:
-                rect = (a, min(q0, q1), b - a, max(abs(q1 - q0), 1.0))
+                rect = (a, lo, max(b - a, 1.0), max(hi - lo, 1.0))
+            if (c, s) == selected:
+                sel_rect = rect
+            if b - a < 1.0:
+                spans = thin.setdefault((int(a), color), [])
+                if spans and lo <= spans[-1][1] + 1.0 and hi >= spans[-1][0] - 1.0:
+                    spans[-1][0] = min(spans[-1][0], lo)
+                    spans[-1][1] = max(spans[-1][1], hi)
+                else:
+                    spans.append([lo, hi])
+                continue
             cr.set_source_rgb(*_rgb(color))
             cr.rectangle(*rect)
             cr.fill()
-            if (c, s) == selected:
-                sel_rect = rect
-            if owner.showValues():
+            if owner.showValues() and b - a >= 3.0:     # no room for labels on thinner bars
                 values.append((c, s, rect, v1 >= v0))
+        for (pixel, color), spans in thin.items():
+            cr.set_source_rgb(*_rgb(color))
+            for lo, hi in spans:
+                if horizontal:
+                    cr.rectangle(lo, pixel, max(hi - lo, 1.0), 1.0)
+                else:
+                    cr.rectangle(pixel, lo, 1.0, max(hi - lo, 1.0))
+            cr.fill()
         if sel_rect is not None:
             cr.set_source_rgba(*fg)
             cr.set_line_width(2.0)
@@ -383,13 +429,14 @@ class _BarArea(Gtk.DrawingArea):
         left, top, right, bottom, horizontal, vmin, span = self._plot
         if not (left <= x <= right and top <= y <= bottom):
             return -1, -1
+        length = max(1.0, (bottom - top) if horizontal else (right - left))
         if horizontal:
-            u = (y - top) / max(1.0, bottom - top)
+            u = (y - top) / length
             v = vmin + (x - left) / max(1.0, right - left) * span
         else:
-            u = (x - left) / max(1.0, right - left)
+            u = (x - left) / length
             v = vmin + (bottom - y) / max(1.0, bottom - top) * span
-        return owner._bar_at(u, v)
+        return owner._bar_at(u, v, 1.0 / length)       # one pixel of tolerance
 
     def _on_pressed(self, _gesture, _n_press, x, y):
         owner = self._owner()
@@ -497,10 +544,23 @@ class YChartBarGtk(YChartBarBase):
         if area is None:
             return
         try:
-            area.update_size_request()
             area.queue_draw()
         except Exception:
             self._logger.exception("Failed to redraw chart")
+        # Re-measuring is O(labels): do it once per burst of changes (e.g. an
+        # addSlice() loop), when the main loop is idle.
+        if not getattr(self, "_size_idle", 0):
+            self._size_idle = GLib.idle_add(self._idle_update_size)
+
+    def _idle_update_size(self):
+        self._size_idle = 0
+        area = getattr(self, "_backend_widget", None)
+        if area is not None:
+            try:
+                area.update_size_request()
+            except Exception:
+                self._logger.exception("Failed to update size request")
+        return False
         self._update_accessible()
 
     # -- common widget API --------------------------------------------------
