@@ -27,7 +27,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Gdk', '4.0')
 gi.require_version('PangoCairo', '1.0')
-from gi.repository import Gtk, Gdk, Pango, PangoCairo
+from gi.repository import GLib, Gtk, Gdk, Pango, PangoCairo
 import cairo
 from ...yui_common import *
 
@@ -82,7 +82,18 @@ class _PieArea(Gtk.DrawingArea):
         return layout
 
     def _text_size(self, text, bold=False):
-        return self._layout_for(text, bold).get_pixel_size()
+        """Pixel size of *text*, cached per font: creating a Pango layout for
+        every measurement made large charts slow."""
+        font = self.get_pango_context().get_font_description()
+        font_key = font.to_string() if font is not None else ""
+        cache = getattr(self, "_size_cache", None)
+        if cache is None or cache[0] != font_key or len(cache[1]) > 20000:
+            cache = self._size_cache = (font_key, {})
+        key = (text, bold)
+        size = cache[1].get(key)
+        if size is None:
+            size = cache[1][key] = self._layout_for(text, bold).get_pixel_size()
+        return size
 
     def _fg(self):
         try:
@@ -97,7 +108,18 @@ class _PieArea(Gtk.DrawingArea):
     # -- size ---------------------------------------------------------------
 
     def _legend_metrics(self, owner):
-        """(row height, swatch, value col width, pct col width, label width)."""
+        """(row height, swatch, value col width, pct col width, label width);
+        cached until the data, the percent column or the font changes."""
+        key = (owner._version, owner.showPercent(), getattr(self, "_size_cache", ("",))[0])
+        cached = getattr(self, "_metrics_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        metrics = self._measure_legend(owner)
+        # The font key may only be known after the first measurement.
+        self._metrics_cache = ((owner._version, owner.showPercent(), self._size_cache[0]), metrics)
+        return metrics
+
+    def _measure_legend(self, owner):
         text_h = self._text_size("Ag")[1]
         row_h = text_h + _ROW_PAD
         swatch = max(8, int(text_h * 0.8))
@@ -228,19 +250,43 @@ class _PieArea(Gtk.DrawingArea):
                 self._center_text(cr, _NO_DATA, cx, cy, radius * 1.2, fg)
             else:
                 cr.push_group()
-                for index, start, sweep, color in geom:
+                cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD)
+                # Slices thinner than a pixel along the rim are invisible on
+                # their own: each run of them is filled as one wedge (color of
+                # its first slice).  Hit testing still uses the real slices.
+                deg_px = 360.0 / max(1e-9, 2 * math.pi * radius)
+                sectors = []        # (start, sweep, color) actually drawn
+                run = None
+                for _index, start, sweep, color in geom:
+                    if sweep < deg_px:
+                        if run is None:
+                            run = [start, sweep, color]
+                        else:
+                            run[1] += sweep
+                        if run[1] >= deg_px:
+                            sectors.append(tuple(run))
+                            run = None
+                        continue
+                    if run is not None:
+                        sectors.append(tuple(run))
+                        run = None
+                    sectors.append((start, sweep, color))
+                if run is not None:
+                    sectors.append(tuple(run))
+                for start, sweep, color in sectors:
                     cr.set_source_rgb(*_rgb(color))
                     self._sector(cr, cx, cy, radius, r_in, start, sweep)
-                    cr.set_fill_rule(cairo.FILL_RULE_EVEN_ODD)
                     cr.fill()
-                if len(geom) > 1:
-                    # Cut 1px separators so the background shows between slices.
+                if len(sectors) > 1:
+                    # Cut 1px separators so the background shows between
+                    # slices, only where they leave some slice visible.
                     cr.set_operator(cairo.OPERATOR_DEST_OUT)
                     cr.set_source_rgba(0, 0, 0, 1)
                     cr.set_line_width(1.0)
-                    for _index, start, sweep, _color in geom:
-                        self._sector(cr, cx, cy, radius, r_in, start, sweep)
-                        cr.stroke()
+                    for start, sweep, _color in sectors:
+                        if sweep >= 3 * deg_px:
+                            self._sector(cr, cx, cy, radius, r_in, start, sweep)
+                            cr.stroke()
                     cr.set_operator(cairo.OPERATOR_OVER)
                 cr.pop_group_to_source()
                 cr.paint()
@@ -416,10 +462,23 @@ class YChartPieGtk(YChartPieBase):
         if area is None:
             return
         try:
-            area.update_size_request()
             area.queue_draw()
         except Exception:
             self._logger.exception("Failed to redraw chart")
+        # Re-measuring is O(labels): do it once per burst of changes (e.g. an
+        # addSlice() loop), when the main loop is idle.
+        if not getattr(self, "_size_idle", 0):
+            self._size_idle = GLib.idle_add(self._idle_update_size)
+
+    def _idle_update_size(self):
+        self._size_idle = 0
+        area = getattr(self, "_backend_widget", None)
+        if area is not None:
+            try:
+                area.update_size_request()
+            except Exception:
+                self._logger.exception("Failed to update size request")
+        return False
         try:
             area.update_property([Gtk.AccessibleProperty.LABEL], [self._label or "Pie chart"])
         except Exception:
