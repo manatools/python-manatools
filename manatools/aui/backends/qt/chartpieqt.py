@@ -16,7 +16,9 @@ License: LGPLv2+
 
 @package manatools.aui.backends.qt
 '''
+import html
 import logging
+import math
 import weakref
 
 from PySide6 import QtWidgets, QtCore, QtGui
@@ -26,6 +28,12 @@ _GAP = 8            # pixels between pie, legend and title
 _ROW_PAD = 4        # extra height of a legend row over the font height
 _MIN_PIE = 64       # smallest pie diameter worth drawing
 _NO_DATA = "No data"
+
+
+def _plain_tooltip(text):
+    """Tooltip markup showing *text* literally: QToolTip would otherwise
+    render chart labels that look like HTML as rich text."""
+    return "<qt>" + html.escape(text, quote=False) + "</qt>"
 
 
 def _elide(fm, text, width):
@@ -54,7 +62,15 @@ class _PieCanvas(QtWidgets.QWidget):
     # -- size ---------------------------------------------------------------
 
     def _legend_metrics(self, owner):
-        """(row height, swatch size, value col width, pct col width, label width)."""
+        """(row height, swatch size, value col width, pct col width, label width).
+
+        Measuring every label is O(slices): cached until the data, the
+        percent column or the font changes.
+        """
+        key = (owner._version, owner.showPercent(), self.font().key())
+        cached = getattr(self, "_metrics_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
         fm = self.fontMetrics()
         row_h = fm.height() + _ROW_PAD
         swatch = max(8, int(fm.height() * 0.8))
@@ -62,7 +78,9 @@ class _PieCanvas(QtWidgets.QWidget):
         value_w = max((fm.horizontalAdvance(r[2]) for r in rows), default=0)
         pct_w = fm.horizontalAdvance("100.0%") if owner.showPercent() else 0
         label_w = max((fm.horizontalAdvance(r[1]) for r in rows), default=0)
-        return row_h, swatch, value_w, pct_w, label_w
+        metrics = (row_h, swatch, value_w, pct_w, label_w)
+        self._metrics_cache = (key, metrics)
+        return metrics
 
     def _legend_width(self, owner, label_w=None):
         row_h, swatch, value_w, pct_w, full_label_w = self._legend_metrics(owner)
@@ -150,6 +168,12 @@ class _PieCanvas(QtWidgets.QWidget):
         path.closeSubpath()
         return path
 
+    def _fill_sector(self, p, rect, inner_rect, sector, pen):
+        start, sweep, color = sector
+        p.setPen(pen if pen is not None else QtCore.Qt.PenStyle.NoPen)
+        p.setBrush(QtGui.QColor(color))
+        p.drawPath(self._sector_path(rect, inner_rect, start, sweep))
+
     def paintEvent(self, _event):
         owner = self._owner()
         if owner is None:
@@ -204,13 +228,31 @@ class _PieCanvas(QtWidgets.QWidget):
             else:
                 border = QtGui.QPen(pal.color(QtGui.QPalette.ColorRole.Base), 1)
                 selected_path = None
+                selected = owner.selectedSlice()
+                # Slices thinner than a pixel along the rim are invisible on
+                # their own: draw each run of them as one wedge (color of its
+                # first slice).  Hit testing still uses the real slices.
+                deg_px = 360.0 / max(1e-9, 2 * math.pi * self._radius)
+                run = None          # [start, sweep, color]
                 for index, start, sweep, color in geom:
-                    path = self._sector_path(pie_rect, inner_rect, start, sweep)
-                    p.setPen(border)
-                    p.setBrush(QtGui.QColor(color))
-                    p.drawPath(path)
-                    if index == owner.selectedSlice():
-                        selected_path = path
+                    if index == selected:
+                        selected_path = self._sector_path(pie_rect, inner_rect, start, sweep)
+                    if sweep < deg_px:
+                        if run is None:
+                            run = [start, sweep, color]
+                        else:
+                            run[1] += sweep
+                        if run[1] < deg_px:
+                            continue
+                        start, sweep, color = run
+                    elif run is not None:
+                        self._fill_sector(p, pie_rect, inner_rect, run, None)
+                    run = None
+                    # Separators only where they leave some slice visible.
+                    pen = border if sweep >= 3 * deg_px else None
+                    self._fill_sector(p, pie_rect, inner_rect, (start, sweep, color), pen)
+                if run is not None:
+                    self._fill_sector(p, pie_rect, inner_rect, run, None)
                 if selected_path is not None:
                     p.setPen(QtGui.QPen(text_color, 2.5))
                     p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
@@ -322,7 +364,9 @@ class _PieCanvas(QtWidgets.QWidget):
             text = ""
             if owner is not None:
                 index = self._index_at(owner, QtCore.QPointF(event.pos()))
-                text = owner._slice_tooltip(index) if index >= 0 else owner.helpText()
+                # Slice labels are data: shown literally.  The help text is
+                # passed as is, like every other Qt widget's tooltip.
+                text = _plain_tooltip(owner._slice_tooltip(index)) if index >= 0 else owner.helpText()
             if text:
                 QtWidgets.QToolTip.showText(event.globalPos(), text, self)
             else:
