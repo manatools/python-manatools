@@ -203,17 +203,20 @@ class YTreeWeb(YSelectionWidget):
         *ref* is the absolute DOM row index (flat table rendering) or an item
         id string.  An unselected item becomes the only selected one, so the
         handler can rely on selectedItem(); an item inside the selection keeps
-        it.  Only the rows are pushed, so the page/filter state is kept.
+        it.  Only the selected row index is pushed: the browser marks it and
+        keeps its rows, page and filter state.
         Runs on a server thread: it resolves *ref* against the snapshot of the
         last render and never rebuilds it.
         """
+        flat_items = getattr(self, "_flat_items", [])
+        item = None
         if isinstance(ref, str):
             item = getattr(self, "_item_registry", {}).get(ref)
+            ref = next((i for i, it in enumerate(flat_items) if it is item), None)
+            if ref is None:
+                item = None
         elif isinstance(ref, int):
-            flat_items = getattr(self, "_flat_items", [])
             item = flat_items[ref] if 0 <= ref < len(flat_items) else None
-        else:
-            item = None
         if item is None or item in self._selected_items:
             return
         for old in list(self._selected_items):
@@ -230,7 +233,7 @@ class YTreeWeb(YSelectionWidget):
         if dialog is None or not hasattr(dialog, "_broadcast"):
             return
         dialog._broadcast({"type": "update", "updates": [{
-            "action": "rows", "target": f"#{self.id()}", "html": self._render_rows_html(),
+            "action": "select", "target": f"#{self.id()}", "rows": [ref],
         }]})
 
     def _context_menu_notify_changed(self):
@@ -287,10 +290,10 @@ class YTreeWeb(YSelectionWidget):
         if flat is None:
             flat = getattr(self, "_flat_rows", [])
         max_depth = max((d for _, d in flat), default=0) + 1
-        selected = list(self._selected_items)
+        selected = {id(item) for item in self._selected_items}
         rows = []
         for item, depth in flat:
-            sel_class = ' selected' if item in selected else ''
+            sel_class = ' selected' if id(item) in selected else ''
             cells = ''.join(
                 f'<td>{escape_html(item.label())}</td>' if col == depth else '<td></td>'
                 for col in range(max_depth)
