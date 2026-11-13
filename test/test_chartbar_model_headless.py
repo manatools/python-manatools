@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from manatools.aui.yui import YChartBarOrientation, YChartLegendPosition  # noqa: E402
-from manatools.aui.yui_common import YChartBarBase, YChartBase, YEventReason  # noqa: E402
+from manatools.aui.yui_common import YChartBarBase, YChartBase, YChartPieBase, YEventReason  # noqa: E402
 
 FAILURES = []
 POSTED = []
@@ -146,6 +146,10 @@ def main():
     check("hit: above bar misses", c._bar_at(0.1, 31) == (-1, -1))
     check("hit: negative bar", c._bar_at(0.6, -5) == (1, 0))
     check("hit: slot padding misses", c._bar_at(0.01, 5) == (-1, -1))
+    check("hit: tolerance reaches a thin bar", c._bar_at(0.04, 5, 0.02) == (0, 0)
+          and c._bar_at(0.04, 5) == (-1, -1))
+    check("hit: tolerance picks nearest center", c._bar_at(0.249, 15, 0.05) == (0, 0)
+          and c._bar_at(0.251, 15, 0.05) == (0, 1))
     c.setStacked(True)
     check("hit: stacked segment", c._bar_at(0.2, 50) == (0, 1) and c._bar_at(0.2, 10) == (0, 0))
     check("category at", c._category_at(0.75) == 1 and c._category_at(1.0) == -1)
@@ -171,6 +175,53 @@ def main():
     check("notify off: selects, no event", (c.selectedCategory(), c.selectedSeries()) == (0, 0) and len(POSTED) == 1)
     check("setSelectedBar validates", raises(IndexError, lambda: c.setSelectedBar(9, 0)))
     check("orientation type checked", raises(TypeError, lambda: c.setOrientation(1)))
+
+    # -- limits (shared YChartBase checks) --------------------------------------
+    check("values beyond MAX_VALUE rejected", raises(ValueError, lambda: c.setValue(0, 0, 1e301))
+          and raises(ValueError, lambda: YChartPieBase(None).addSlice("x", 1e308)))
+    for rows, stacked in (([[1e300], [-1e300]], False), ([[1e300]] * 4, True), ([[5e-324]], False),
+                          ([[1e-300], [2e-300]], False)):
+        x = Chart(None)
+        x.setData([str(i) for i in range(len(rows))], ["s"], rows)
+        x.setStacked(stacked)
+        try:
+            vmin, vmax, ticks = x._value_axis()
+            ok = vmin <= min(0.0, min(r[0] for r in rows)) and vmax >= max(r[0] for r in rows) and len(ticks) >= 2
+        except Exception as e:
+            ok = repr(e)
+        check(f"axis survives {rows[0][0]:g} (stacked={stacked})", ok is True, ok)
+    check("huge ticks/values stay short", c._format_tick(2e299) == "2e+299"
+          and YChartBase._format_value(1e300) == "1e+300" and YChartBase._format_value(0.001) == "0.001")
+    pie = YChartPieBase(None)
+    pie.setSlices([("a", 1e300), ("b", 1e300)])
+    geom = pie._geometry()
+    check("pie of huge values stays finite", pie.total() == 2e300 and len(geom) == 2
+          and abs(geom[1][1] - 180.0) < 1e-9 and pie._legend_rows()[0][3] == "50.0%", geom)
+
+    # -- caches and the selection hook --------------------------------------------
+    pie.total()
+    check("pie total cached", pie._total_cache == 2e300)
+    v = pie._version
+    pie.setSliceValue(0, 1)
+    check("data change bumps version, drops caches", pie._version == v + 1 and pie._total_cache is None)
+    rows1 = pie._legend_rows()
+    check("legend rows cached", pie._legend_rows() is rows1)
+    pie.setShowPercent(False)
+    check("legend cache follows showPercent", pie._legend_rows()[0][3] == "")
+    seen = []
+    pie._apply_selection = lambda old: seen.append(("sel", old))
+    pie._apply_chart = lambda: seen.append(("chart",))
+    pie.setSelectedSlice(1)
+    pie._slice_clicked(0)
+    pie.setSelectedSlice(0)
+    check("pie selection uses _apply_selection only on change", seen == [("sel", -1), ("sel", 1)], seen)
+    c.setSelectedBar(-1, -1)
+    seen.clear()
+    c._apply_selection = lambda old: seen.append(("sel", old))
+    c.setSelectedBar(0, 0)
+    c._bar_clicked(1, 1)
+    c.setSelectedBar(1, 1)
+    check("bar selection uses _apply_selection only on change", seen == [("sel", (-1, -1)), ("sel", (0, 0))], seen)
 
     print("FAILED: " + ", ".join(FAILURES) if FAILURES else "all passed")
     return 1 if FAILURES else 0
