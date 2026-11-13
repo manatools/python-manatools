@@ -165,6 +165,13 @@ def main():
     QTest.keyClick(w, QtCore.Qt.Key.Key_Right)
     check("horizontal: Right moves series", c.selectedSeries() == 2)
 
+    c, w = make(cats=[f"c{i}" for i in range(2000)], rows=[[40 + (i * 37) % 30, 20 + i % 11, -5 - i % 7] for i in range(2000)], stacked=True, values=True)
+    QTest.mouseClick(w, centre(c, w, 1000, 1))
+    # 2000 categories in ~360 px: a pixel covers several bars, any of them is right
+    check("dense: paints and hit-tests", not w.grab().isNull()
+          and abs(c.selectedCategory() - 1000) <= 6 and c.selectedSeries() == 1,
+          (c.selectedCategory(), c.selectedSeries()))
+
     c, w = make(cats=[], series=[], rows=[])
     w.setFocus()
     QTest.keyClick(w, QtCore.Qt.Key.Key_Right)
