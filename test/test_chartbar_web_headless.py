@@ -112,6 +112,10 @@ def main():
     check("click: bar selected", (chart.selectedCategory(), chart.selectedSeries()) == (2, 1))
     time.sleep(0.3)
     check("click: selection pushed", any("mana-chartbar-selected" in json.dumps(m) for m in sent))
+    ups = updates(sent)
+    check("click: selection is attr-only", ups and all(u.get("action") == "attr" for u in ups)
+          and any(u["target"].endswith('rect[data-bar="2,1"]') and "selected" in u["value"] for u in ups)
+          and any(u["target"].endswith('li[data-series="1"]') for u in ups), ups)
 
     for bad in ([9, 0], [0, 9], [-1, 0], [0], [0, 1, 2], "0,1", None, [True, 0], [0.5, 1], {"c": 0}):
         post_event(base, {"type": "event", "widget_id": chart.id(), "reason": "Activated",
@@ -170,6 +174,17 @@ def main():
         check("color: injection rejected", False)
     except ValueError:
         check("color: injection rejected", True)
+
+    # -- a failing chart must not break the page --------------------------------
+    chart.setData(["a"], ["s"], [[1]])
+    real = chart._render_svg
+    chart._render_svg = lambda: 1 / 0
+    try:
+        page = get(base + "/")
+        check("render error: page still served", "Chart unavailable" in page and "mana-ychartbar" in page)
+    except Exception as e:
+        check("render error: page still served", False, e)
+    chart._render_svg = real
 
     dlg.destroy()
     print("FAILED: " + ", ".join(FAILURES) if FAILURES else "all passed")
