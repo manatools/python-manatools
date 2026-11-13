@@ -11,10 +11,13 @@ Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 """
 
+import logging
 import math
 
 from ...yui_common import YChartPieBase, YChartLegendPosition
-from .commonweb import escape_attr, escape_html, widget_attrs
+from .commonweb import broadcast_attr_updates, escape_attr, escape_html, widget_attrs
+
+logger = logging.getLogger("manatools.aui.web.YChartPieWeb")
 
 # SVG user units: the pie is drawn in a VIEW x VIEW box and scaled by CSS.
 _VIEW = 200.0
@@ -69,6 +72,20 @@ class YChartPieWeb(YChartPieBase):
 
     def _apply_chart(self):
         self._notify_update()
+
+    def _apply_selection(self, old):
+        # Only the highlight moves: toggle classes instead of re-sending the
+        # whole chart (which can be megabytes for thousands of slices).
+        wid = self.id()
+        updates = []
+        for index, selected in ((old, False), (self._selected, True)):
+            if index < 0:
+                continue
+            sel = " mana-chartpie-selected" if selected else ""
+            updates.append((f'#{wid} path[data-slice="{index}"]', "class", "mana-chartpie-slice" + sel))
+            updates.append((f'#{wid} li[data-slice="{index}"]', "class", "mana-chartpie-legend-row" + sel))
+        if not broadcast_attr_updates(self, updates):
+            self._notify_update()
 
     def setHelpText(self, help_text: str):
         super().setHelpText(help_text)
@@ -154,8 +171,12 @@ class YChartPieWeb(YChartPieBase):
                              extra_attrs={"title": self.helpText() or None})
         title = (f'<div class="mana-chartpie-title">{escape_html(self._label)}</div>'
                  if self._label else "")
+        try:
+            body = (f'<div class="mana-chartpie-pie">{self._render_svg()}</div>'
+                    f'{self._render_legend()}')
+        except Exception:
+            # Never let one chart break the whole dialog page.
+            logger.exception("YChartPie render failed")
+            body = '<div class="mana-chart-error">Chart unavailable</div>'
         return (f'<div {attrs}>{title}'
-                f'<div class="mana-chartpie-body">'
-                f'<div class="mana-chartpie-pie">{self._render_svg()}</div>'
-                f'{self._render_legend()}'
-                f'</div></div>')
+                f'<div class="mana-chartpie-body">{body}</div></div>')
