@@ -18,10 +18,13 @@ Author: Matteo Pasotti <xquiet@coriolite.com>
 License: LGPLv2+
 """
 
+import logging
 import math
 
 from ...yui_common import YChartBarBase, YChartBarOrientation, YChartLegendPosition
-from .commonweb import escape_attr, escape_html, widget_attrs
+from .commonweb import broadcast_attr_updates, escape_attr, escape_html, widget_attrs
+
+logger = logging.getLogger("manatools.aui.web.YChartBarWeb")
 
 _W, _H = 400.0, 240.0       # base viewBox; grows with many categories
 _FONT = 10.0                # SVG text size, viewBox units
@@ -55,6 +58,25 @@ class YChartBarWeb(YChartBarBase):
 
     def _apply_chart(self):
         self._notify_update()
+
+    def _apply_selection(self, old):
+        # Only the highlight moves: toggle classes instead of re-sending the
+        # whole chart (which can be megabytes for thousands of categories).
+        wid = self.id()
+        updates = []
+        for (c, s), selected in ((old, False), (self._sel, True)):
+            if c < 0:
+                continue
+            sel = " mana-chartbar-selected" if selected else ""
+            updates.append((f'#{wid} rect[data-bar="{c},{s}"]', "class", "mana-chartbar-bar" + sel))
+        old_s, new_s = old[1], self._sel[1]
+        if old_s != new_s:
+            for s, selected in ((old_s, False), (new_s, True)):
+                if s >= 0:
+                    updates.append((f'#{wid} li[data-series="{s}"]', "class",
+                                    "mana-chartbar-legend-row" + (" mana-chartbar-selected" if selected else "")))
+        if not broadcast_attr_updates(self, updates):
+            self._notify_update()
 
     def setHelpText(self, help_text: str):
         super().setHelpText(help_text)
@@ -241,7 +263,7 @@ class YChartBarWeb(YChartBarBase):
             if s == self._sel[1]:
                 classes += " mana-chartbar-selected"
             items.append(
-                f'<li class="{classes}">'
+                f'<li class="{classes}" data-series="{s}">'
                 f'<svg class="mana-chartbar-swatch" viewBox="0 0 10 10" aria-hidden="true">'
                 f'<rect width="10" height="10" rx="2" fill="{escape_attr(color)}"/></svg>'
                 f'<span class="mana-chartbar-legend-label">{escape_html(name)}</span></li>')
@@ -257,8 +279,12 @@ class YChartBarWeb(YChartBarBase):
                              extra_attrs={"title": self.helpText() or None})
         title = (f'<div class="mana-chartbar-title">{escape_html(self._label)}</div>'
                  if self._label else "")
+        try:
+            body = (f'<div class="mana-chartbar-plot">{self._render_svg()}</div>'
+                    f'{self._render_legend()}')
+        except Exception:
+            # Never let one chart break the whole dialog page.
+            logger.exception("YChartBar render failed")
+            body = '<div class="mana-chart-error">Chart unavailable</div>'
         return (f'<div {attrs}>{title}'
-                f'<div class="mana-chartbar-body">'
-                f'<div class="mana-chartbar-plot">{self._render_svg()}</div>'
-                f'{self._render_legend()}'
-                f'</div></div>')
+                f'<div class="mana-chartbar-body">{body}</div></div>')
