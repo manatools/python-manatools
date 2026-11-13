@@ -179,6 +179,9 @@ def main():
     k.setEnabled(True)
     check("enabled again: focusable", k._can_focus)
     check("key hints follow mode", "←" in k.key_hints())
+    ctl = make(label="t\nx", cats=("a\nb\tc\x1b[2J",), series=("s\r",), rows=((1,),))
+    lines = draw(ctl).lines()
+    check("control characters replaced", lines[0] == "t?x" and lines[2].startswith("a?b?c?[2J"), lines[:3])
 
     print("FAILED: " + ", ".join(FAILURES) if FAILURES else "all passed")
     return 1 if FAILURES else 0
