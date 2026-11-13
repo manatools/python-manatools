@@ -49,6 +49,10 @@ def post_event(base, payload):
         return r.status
 
 
+def sent_updates(sent):
+    return [u for m in sent if m.get("type") == "update" for u in m.get("updates", [])]
+
+
 def chart_html(page, chart_id):
     m = re.search(r'<div id="%s".*?</ul></div></div>' % re.escape(chart_id), page, re.S)
     return m.group(0) if m else ""
@@ -102,6 +106,10 @@ def main():
     check("click: slice selected", chart.selectedSlice() == 3, chart.selectedSlice())
     time.sleep(0.3)
     check("click: selection pushed", any("mana-chartpie-selected" in json.dumps(m) for m in sent))
+    ups = sent_updates(sent)
+    check("click: selection is attr-only", ups and all(u.get("action") == "attr" for u in ups)
+          and any(u["target"].endswith('path[data-slice="3"]') and "selected" in u["value"] for u in ups),
+          ups)
 
     for bad in (99, -1, "x", None, True, [1], 1.5):
         post_event(base, {"type": "event", "widget_id": chart.id(), "reason": "Activated",
@@ -150,6 +158,17 @@ def main():
         check("color: injection rejected", False)
     except ValueError:
         check("color: injection rejected", True)
+
+    # -- a failing chart must not break the page --------------------------------
+    chart.addSlice("x", 1)
+    real = chart._render_svg
+    chart._render_svg = lambda: 1 / 0
+    try:
+        page = get(base + "/")
+        check("render error: page still served", "Chart unavailable" in page and "mana-ychartpie" in page)
+    except Exception as e:
+        check("render error: page still served", False, e)
+    chart._render_svg = real
 
     dlg.destroy()
     print("FAILED: " + ", ".join(FAILURES) if FAILURES else "all passed")
