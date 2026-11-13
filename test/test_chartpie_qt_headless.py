@@ -103,5 +103,13 @@ w.grab()
 QTest.mouseClick(w, QtCore.Qt.MouseButton.LeftButton, pos=QtCore.QPoint(int(cx), int(cy)))
 check("donut: hole click ignored", len(posted) == 3)
 check("sizeHint sane", w.sizeHint().width() > 200 and w.minimumSizeHint().height() > 0, w.sizeHint())
+
+from manatools.aui.backends.qt.chartpieqt import _plain_tooltip
+doc = QtGui.QTextDocument()
+doc.setHtml(_plain_tooltip('<b>pkg</b> & <img src="/etc/x.png">: 1'))
+check("tooltip: labels shown literally", doc.toPlainText() == '<b>pkg</b> & <img src="/etc/x.png">: 1',
+      doc.toPlainText())
+c, w = make("dense", [(f"s{i}", 1 + i % 7) for i in range(3000)])
+check("dense pie paints", not w.grab().isNull())
 print("FAILED: " + ", ".join(fails) if fails else "all passed")
 sys.exit(1 if fails else 0)
