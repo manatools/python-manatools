@@ -123,6 +123,11 @@ class YChartBarCurses(YChartBarBase):
 
     @staticmethod
     def _put(window, y, x, text, attr=0):
+        # Labels are data: control characters (newline, tab, backspace...)
+        # would move the cursor and scramble other rows.  One-for-one
+        # replacement keeps the column widths computed with len().
+        if not text.isprintable():
+            text = "".join(ch if ch.isprintable() else "?" for ch in text)
         try:
             window.addstr(y, x, text, attr)
         except curses.error:
