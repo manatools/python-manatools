@@ -51,6 +51,9 @@ _ICON_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
 
 _CONTEXT_MENU_SOURCES = ("pointer", "keyboard", "touch")
 
+# Page token a browser sends with its context menu requests.
+_CONTEXT_TOKEN_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
+
 # ---------------------------------------------------------------------------
 # Page builder
 # ---------------------------------------------------------------------------
@@ -117,12 +120,17 @@ class YDialogWeb(YSingleChildContainerWidget):
     # is atomic, whichever thread or dialog asks.
     _context_menu_ids = itertools.count(1)
 
+    # Context menu requests closer than this to the last accepted one are
+    # dropped: nobody right-clicks that fast, a flooding page does.
+    _CONTEXT_MIN_INTERVAL = 0.05
+
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
         # Context menu state is touched by server threads (browser messages)
         # and the application thread (openContextMenu), always under the lock.
         self._context_lock = threading.Lock()
         self._context_menu_request = None  # pending ContextMenuActivated request
         self._context_menu_state = None    # menu currently shown in the browser
+        self._context_request_at = 0.0     # time.monotonic() of the last accepted request
         super().__init__()
         self._dialog_type = dialog_type
         self._color_mode = color_mode
@@ -412,7 +420,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
         elif msg_type == "ready":
-            self._handle_browser_ready()
+            self._handle_browser_ready(self._context_token(data.get("ctx_token")))
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
@@ -542,6 +550,11 @@ class YDialogWeb(YSingleChildContainerWidget):
             value = int(round(value))
         return max(low, min(high, value))
 
+    @staticmethod
+    def _context_token(value) -> str:
+        """Return the page token value if it is well formed, else ''."""
+        return value if isinstance(value, str) and _CONTEXT_TOKEN_RE.match(value) else ""
+
     def _handle_context_menu_request(self, widget, event_data: dict):
         """Turn a browser right-click (or Menu key) on widget into ContextMenuActivated.
 
@@ -554,6 +567,12 @@ class YDialogWeb(YSingleChildContainerWidget):
             return
         if not widget.isEnabled():
             return
+        now = time.monotonic()
+        with self._context_lock:
+            if now - self._context_request_at < self._CONTEXT_MIN_INTERVAL:
+                logger.debug("context menu request dropped: too close to the previous one")
+                return
+            self._context_request_at = now
 
         ref = None
         item_id = event_data.get("itemId")
@@ -576,6 +595,7 @@ class YDialogWeb(YSingleChildContainerWidget):
             "y": self._coerce_int(event_data.get("clientY"), 0, 1000000) or 0,
             "source": source if source in _CONTEXT_MENU_SOURCES else "pointer",
             "seq": self._coerce_int(event_data.get("seq"), 0, 2 ** 53 - 1) or 0,
+            "token": self._context_token(event_data.get("token")),
         }
         with self._context_lock:
             self._context_menu_request = request
@@ -650,12 +670,14 @@ class YDialogWeb(YSingleChildContainerWidget):
                 "pickable": pickable,
                 "top_items": top_items,
                 "widget": request["widget"],
+                "token": request["token"],
             }
         self._broadcast({
             "type": "show_context_menu",
             "menu_id": menu_id,
             "dialog_id": self.id(),
             "seq": request["seq"],
+            "token": request["token"],
             "x": request["x"],
             "y": request["y"],
             "source": request["source"],
@@ -687,12 +709,21 @@ class YDialogWeb(YSingleChildContainerWidget):
             self._post_event(YMenuEvent(item=item, id=context_menu_item_path(item, state["top_items"]),
                                         widget=source))
 
-    def _cancel_context_menu(self):
-        """Drop the open menu, if any, posting ContextMenuCancelled for it."""
+    def _cancel_context_menu(self, token: str = ""):
+        """Drop the open menu, if any, posting ContextMenuCancelled for it.
+
+        With a page token only the menu and the pending request of that page
+        are dropped: another browser tab keeps its own.
+        """
         with self._context_lock:
             state = self._context_menu_state
-            self._context_menu_state = None
-            self._context_menu_request = None
+            if token and state is not None and state["token"] != token:
+                state = None
+            else:
+                self._context_menu_state = None
+            request = self._context_menu_request
+            if not token or (request is not None and request["token"] == token):
+                self._context_menu_request = None
         if state is not None:
             self._post_event(YWidgetEvent(state["widget"], YEventReason.ContextMenuCancelled))
 
@@ -740,7 +771,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         if hasattr(widget, 'notify') and widget.notify():
             self._post_event(YMenuEvent(item=None, id=url))
 
-    def _handle_browser_ready(self):
+    def _handle_browser_ready(self, context_token: str = ""):
         """Bring a freshly connected browser up to date.
 
         A popup opened before any browser was connected broadcasts its
@@ -753,11 +784,13 @@ class YDialogWeb(YSingleChildContainerWidget):
         rows belong to the root dialog: that is what the page rendered.
 
         A context menu shown before is not replayed: it counts as dismissed.
+        context_token names the page that connected, so the menu of another
+        browser tab stays open.
         """
         with YDialogWeb._open_dialogs_lock:
             dialogs = list(YDialogWeb._open_dialogs)
         for dlg in dialogs:
-            dlg._cancel_context_menu()
+            dlg._cancel_context_menu(context_token)
         self._replay_open_modals()
         root = YDialogWeb._root_dialog()
         if root is not None:
