@@ -67,7 +67,7 @@
                 wsReconnectAttempts = 0;
                 setBadge('connected');
                 // Signal server to push deferred content (e.g. table rows).
-                sendEvent({ type: 'ready' });
+                sendEvent({ type: 'ready', ctx_token: ctxToken });
             };
 
             ws.onmessage = function (event) {
@@ -299,6 +299,21 @@
                     const tbody = target.querySelector('.mana-table-inner tbody');
                     if (tbody) tbody.innerHTML = update.html;
                     attachEventListenersToElement(target);
+                    break;
+                }
+                case 'select': {
+                    // Selection set by the server (context menu request):
+                    // mark the rows in place, keeping page and filter state.
+                    const body = target.querySelector('.mana-table-inner tbody');
+                    if (!body) break;
+                    const picked = new Set(Array.isArray(update.rows) ? update.rows : []);
+                    body.querySelectorAll(':scope > tr.selected').forEach(function (tr) {
+                        tr.classList.remove('selected');
+                    });
+                    picked.forEach(function (i) {
+                        const tr = Number.isInteger(i) ? body.children[i] : null;
+                        if (tr) tr.classList.add('selected');
+                    });
                     break;
                 }
                 case 'text':
@@ -628,6 +643,24 @@
     let ctxSuppressClickUntil = 0;  // swallow the click that ends a long-press
     let ctxKeyboardAt = -Infinity;  // when the last keyboard request was sent
 
+    // Names this page in its requests: the server answers every connected
+    // page, and only the one that asked may show (or cancel) the menu.
+    // Kept across reloads so the server can drop the menu the old page left.
+    const ctxToken = (function () {
+        const key = 'mana-ctx-token';
+        try {
+            const saved = window.sessionStorage.getItem(key);
+            if (saved && /^[a-zA-Z0-9_-]{1,64}$/.test(saved)) return saved;
+        } catch (e) { /* storage unavailable */ }
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        const token = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+        try {
+            window.sessionStorage.setItem(key, token);
+        } catch (e) { /* storage unavailable */ }
+        return token;
+    })();
+
     function initContextMenuListeners() {
         document.removeEventListener('contextmenu', handleCtxContextMenu);
         document.addEventListener('contextmenu', handleCtxContextMenu);
@@ -814,7 +847,7 @@
             rowIndex: Number.isInteger(ref.rowIndex) ? ref.rowIndex : null,
             invoker: invoker || null, x: cx, y: cy,
         };
-        const data = Object.assign({}, ref, { clientX: cx, clientY: cy, source: source, seq: ctxSeq });
+        const data = Object.assign({}, ref, { clientX: cx, clientY: cy, source: source, seq: ctxSeq, token: ctxToken });
         sendEvent({ type: 'event', widget_id: widgetId, reason: 'ContextMenuActivated', data: data });
     }
 
@@ -1253,6 +1286,8 @@
     // ---- Open / close --------------------------------------------------
 
     function showContextMenu(msg) {
+        // Asked by another page (browser tab): not ours to show or cancel.
+        if (msg.token !== ctxToken) return;
         const seq = Number(msg.seq);
         if (seq !== ctxSeq || !Array.isArray(msg.items) || !msg.items.length) {
             sendEvent({ type: 'context_menu', menu_id: msg.menu_id, cancelled: true });
