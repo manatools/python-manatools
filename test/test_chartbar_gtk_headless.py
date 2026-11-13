@@ -197,6 +197,13 @@ def main():
     area._on_key(None, Gdk.KEY_Right, 0, 0)
     check("horizontal: Right moves series", c.selectedSeries() == 2)
 
+    c = make(cats=[f"c{i}" for i in range(2000)], rows=[[40 + (i * 37) % 30, 20 + i % 11, -5 - i % 7] for i in range(2000)], stacked=True, values=True)
+    area = c.get_backend_widget()
+    area._on_pressed(None, 1, *centre(c, 1000, 1))
+    # 2000 categories in ~360 px: a pixel covers several bars, any of them is right
+    check("dense: paints and hit-tests", abs(c.selectedCategory() - 1000) <= 6 and c.selectedSeries() == 1,
+          (c.selectedCategory(), c.selectedSeries()))
+
     c = make(cats=[], series=[], rows=[])
     area = c.get_backend_widget()
     check("empty: keys not consumed", not area._on_key(None, Gdk.KEY_Right, 0, 0))
