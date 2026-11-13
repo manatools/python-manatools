@@ -302,7 +302,12 @@ def _build_context_menu(menu, items, top_items, group, state, source, dlg):
             continue
         label = _convert_mnemonic_to_gtk(item.label())
         name = f"i{len(group.list_actions())}"
-        action = Gio.SimpleAction.new(name, None)
+        if item.isMenu():
+            # GTK tracks the open state of a submenu through its
+            # submenu-action, which must therefore hold a boolean state.
+            action = Gio.SimpleAction.new_stateful(name, None, GLib.Variant.new_boolean(False))
+        else:
+            action = Gio.SimpleAction.new(name, None)
         action.set_enabled(item.enabled())
         group.add_action(action)
         if item.isMenu():
