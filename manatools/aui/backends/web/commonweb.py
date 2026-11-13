@@ -215,6 +215,35 @@ def schedule_update_if_open(widget):
         dialog._schedule_update(widget)
 
 
+def broadcast_attr_updates(widget, updates) -> bool:
+    """Push attribute-only DOM updates for *widget*, skipping a full render.
+
+    *updates* is a list of ``(css_selector, attr, value)``; selectors and
+    values must be built from trusted, internal data (ids, ints, constant
+    class names).  Nothing is sent when the dialog is not open, or when a
+    full render of the widget is already pending (it will carry the new
+    state and must not be overtaken).  Returns True when sent.
+    """
+    dialog = widget.findDialog()
+    if dialog is None or not getattr(dialog, "isOpen", lambda: False)() \
+            or not hasattr(dialog, "_broadcast"):
+        return False
+    lock = getattr(dialog, "_pending_lock", None)
+    pending = getattr(dialog, "_pending_updates", {})
+    if lock is not None:
+        with lock:
+            if widget.id() in pending:
+                return False
+    elif widget.id() in pending:
+        return False
+    dialog._broadcast({
+        "type": "update",
+        "updates": [{"action": "attr", "target": target, "attr": attr, "value": value}
+                    for target, attr, value in updates],
+    })
+    return True
+
+
 def build_css_classes(*classes: str) -> str:
     """Build a CSS class string from multiple class names, filtering empty."""
     return " ".join(c for c in classes if c)
