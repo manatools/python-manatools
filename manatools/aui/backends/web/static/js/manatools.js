@@ -67,7 +67,12 @@
                 wsReconnectAttempts = 0;
                 setBadge('connected');
                 // Signal server to push deferred content (e.g. table rows).
-                sendEvent({ type: 'ready', ctx_token: ctxToken });
+                // Name the tables still showing a loading skeleton here, so
+                // this page gets their rows whatever other pages got.
+                const deferred = Array.from(document.querySelectorAll('tr.mana-table-loading'))
+                    .map(function (tr) { const t = tr.closest('.mana-ytable'); return t ? getWidgetId(t) : ''; })
+                    .filter(Boolean);
+                sendEvent({ type: 'ready', ctx_token: ctxToken, deferred: deferred });
             };
 
             ws.onmessage = function (event) {
