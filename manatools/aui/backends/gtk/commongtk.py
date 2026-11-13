@@ -302,20 +302,16 @@ def _build_context_menu(menu, items, top_items, group, state, source, dlg):
             continue
         label = _convert_mnemonic_to_gtk(item.label())
         name = f"i{len(group.list_actions())}"
-        if item.isMenu():
-            # GTK tracks the open state of a submenu through its
-            # submenu-action, which must therefore hold a boolean state.
-            action = Gio.SimpleAction.new_stateful(name, None, GLib.Variant.new_boolean(False))
-        else:
-            action = Gio.SimpleAction.new(name, None)
+        action = Gio.SimpleAction.new(name, None)
         action.set_enabled(item.enabled())
         group.add_action(action)
         if item.isMenu():
             sub = Gio.Menu()
             _build_context_menu(sub, item._children, top_items, group, state, source, dlg)
             entry = Gio.MenuItem.new_submenu(label, sub)
-            # A disabled submenu-action makes the submenu entry insensitive.
-            entry.set_attribute_value("submenu-action", GLib.Variant.new_string(f"ctx.{name}"))
+            # A disabled action makes the submenu entry insensitive. Not
+            # submenu-action: GTK keeps the open state there, not sensitivity.
+            entry.set_attribute_value("action", GLib.Variant.new_string(f"ctx.{name}"))
         else:
             def on_activate(_action, _param, item=item):
                 state["picked"] = True
