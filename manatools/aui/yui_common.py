@@ -760,10 +760,15 @@ class YChartBase(YWidget):
 
     _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+    # Largest accepted magnitude: sums, scaling to 360 degrees or 100 percent
+    # and axis spans of such values stay finite.
+    MAX_VALUE = 1e300
+
     def __init__(self, parent=None, label: str = ""):
         # Attributes first: addChild() on the parent may render us immediately.
         self._label = "" if label is None else str(label)
         self._legend_position = YChartLegendPosition.Right
+        self._version = 0           # bumped on every model change
         super().__init__(parent)
         self.setStretchable(YUIDimension.YD_HORIZ, True)
         self.setStretchable(YUIDimension.YD_VERT, True)
@@ -775,8 +780,9 @@ class YChartBase(YWidget):
         if isinstance(value, bool):
             raise TypeError(f"{what} must be a number, not bool")
         value = float(value)
-        if not math.isfinite(value):
-            raise ValueError(f"{what} must be finite, got {value!r}")
+        if not math.isfinite(value) or abs(value) > YChartBase.MAX_VALUE:
+            raise ValueError(f"{what} must be finite and within "
+                             f"+/-{YChartBase.MAX_VALUE:g}, got {value!r}")
         if value < 0 and not allow_negative:
             raise ValueError(f"{what} must be >= 0, got {value!r}")
         return value
@@ -822,14 +828,32 @@ class YChartBase(YWidget):
         """Redraw the backend widget from the current model."""
         pass
 
+    def _apply_selection(self, old):
+        """Only the selection changed (from *old*); backends may update just
+        the highlight.  Default: full redraw."""
+        self._apply_chart()
+
     # -- shared internals ---------------------------------------------------
+
+    def _invalidate_caches(self):
+        """Drop data-derived caches (subclasses extend)."""
+        pass
+
+    def _chart_changed(self):
+        """Called by every data mutator: new version, caches dropped, redraw."""
+        self._version += 1
+        self._invalidate_caches()
+        self._apply_chart()
 
     def _palette_color(self, index: int) -> str:
         return self.PALETTE[index % len(self.PALETTE)]
 
     @staticmethod
     def _format_value(value: float) -> str:
-        if value == int(value) and abs(value) < 1e15:
+        a = abs(value)
+        if a >= 1e15 or (0 < a < 0.01):
+            return f"{value:.6g}"
+        if value == int(value):
             return str(int(value))
         return f"{value:.2f}".rstrip("0").rstrip(".")
 
@@ -891,6 +915,8 @@ class YChartPieBase(YChartBase):
         self._donut_ratio = 0.0
         self._center_text = ""
         self._geometry_cache = None
+        self._total_cache = None
+        self._legend_cache = None
         super().__init__(parent, label)
 
     def widgetClass(self):
@@ -970,7 +996,10 @@ class YChartPieBase(YChartBase):
         return s._color or self._palette_color(index)
 
     def total(self) -> float:
-        return sum(s._value for s in self._slices)
+        total = self._total_cache
+        if total is None:
+            total = self._total_cache = math.fsum(s._value for s in self._slices)
+        return total
 
     def slicePercent(self, index: int) -> float:
         """Share of the slice in the total, 0..100 (0 when the total is 0)."""
@@ -1020,14 +1049,16 @@ class YChartPieBase(YChartBase):
         """Highlight *index* (-1 clears) without posting an event."""
         if index != -1:
             self._check_index(index)
-        self._selected = index
-        self._apply_chart()
+        old, self._selected = self._selected, index
+        if old != index:
+            self._apply_selection(old)
 
     # -- shared internals ---------------------------------------------------
 
-    def _chart_changed(self):
+    def _invalidate_caches(self):
         self._geometry_cache = None
-        self._apply_chart()
+        self._total_cache = None
+        self._legend_cache = None
 
     def _geometry(self) -> list:
         """Drawable slices as ``(index, start_deg, sweep_deg, color)``.
@@ -1039,7 +1070,7 @@ class YChartPieBase(YChartBase):
         if geom is None:
             geom = []
             total = self.total()
-            if total > 0:
+            if total > 0 and math.isfinite(total):
                 start = 0.0
                 for i, s in enumerate(self._slices):
                     if s._value <= 0:
@@ -1068,7 +1099,11 @@ class YChartPieBase(YChartBase):
 
     def _legend_rows(self) -> list:
         """Legend rows as ``(index, label, value_text, percent_text, color)``;
-        percent_text is "" when showPercent() is off."""
+        percent_text is "" when showPercent() is off.  Cached until the data
+        or showPercent() changes; callers must not modify it."""
+        cached = self._legend_cache
+        if cached is not None and cached[0] == self._show_percent:
+            return cached[1]
         total = self.total()
         rows = []
         for i, s in enumerate(self._slices):
@@ -1077,6 +1112,7 @@ class YChartPieBase(YChartBase):
                 pct = f"{(s._value * 100.0 / total) if total > 0 else 0.0:.1f}%"
             rows.append((i, s._label, self._format_value(s._value), pct,
                          self.sliceColor(i)))
+        self._legend_cache = (self._show_percent, rows)
         return rows
 
     def _slice_tooltip(self, index: int) -> str:
@@ -1093,8 +1129,9 @@ class YChartPieBase(YChartBase):
             return False
         if not 0 <= index < len(self._slices):
             return False
-        self._selected = index
-        self._apply_chart()
+        old, self._selected = self._selected, index
+        if old != index:
+            self._apply_selection(old)
         self._post_activated()
         return True
 
@@ -1119,6 +1156,7 @@ class YChartBarBase(YChartBase):
 
     GROUP_FILL = 0.8        # share of a category slot covered by its bars
     _TICK_TARGET = 5        # wanted number of axis steps
+    _AXIS_LIMIT = 1e306     # axis span clamp: stacked sums stay drawable
 
     def __init__(self, parent=None, label: str = ""):
         # Attributes first: addChild() on the parent may render us immediately.
@@ -1327,15 +1365,15 @@ class YChartBarBase(YChartBase):
         if (c, s) != (-1, -1):
             self._check_category(c)
             self._check_series(s)
-        self._sel = (c, s)
-        self._apply_chart()
+        old, self._sel = self._sel, (c, s)
+        if old != (c, s):
+            self._apply_selection(old)
 
     # -- shared internals ---------------------------------------------------
 
-    def _chart_changed(self):
+    def _invalidate_caches(self):
         self._geometry_cache = None
         self._axis_cache = None
-        self._apply_chart()
 
     @staticmethod
     def _nice_step(raw: float) -> float:
@@ -1371,15 +1409,21 @@ class YChartBarBase(YChartBase):
         axis = self._axis_cache
         if axis is None:
             lo, hi = self._data_range()
-            if hi - lo <= 0:
+            lo, hi = max(lo, -self._AXIS_LIMIT), min(hi, self._AXIS_LIMIT)
+            if not hi - lo > 0:
                 lo, hi = 0.0, 1.0
-            step = self._nice_step((hi - lo) / self._TICK_TARGET)
-            vmin = math.floor(lo / step + 1e-9) * step
-            vmax = math.ceil(hi / step - 1e-9) * step
-            digits = max(0, -int(math.floor(math.log10(step))) + 1)
-            n = int(round((vmax - vmin) / step))
-            ticks = [round(vmin + i * step, digits) or 0.0 for i in range(n + 1)]
-            axis = (round(vmin, digits) or 0.0, round(vmax, digits) or 0.0, ticks)
+            raw = (hi - lo) / self._TICK_TARGET
+            if raw < 1e-290:
+                # Subnormal-scale data: no room for nice steps, show the range.
+                axis = (lo, hi, sorted({lo, 0.0, hi}))
+            else:
+                step = self._nice_step(raw)
+                vmin = math.floor(lo / step + 1e-9) * step
+                vmax = math.ceil(hi / step - 1e-9) * step
+                digits = max(0, -int(math.floor(math.log10(step))) + 1)
+                n = int(round((vmax - vmin) / step))
+                ticks = [round(vmin + i * step, digits) or 0.0 for i in range(n + 1)]
+                axis = (round(vmin, digits) or 0.0, round(vmax, digits) or 0.0, ticks)
             self._axis_cache = axis
         return axis
 
@@ -1422,13 +1466,23 @@ class YChartBarBase(YChartBase):
             self._geometry_cache = geom
         return geom
 
-    def _bar_at(self, u: float, v: float):
+    def _bar_at(self, u: float, v: float, tol: float = 0.0):
         """Bar at category-axis position *u* (0..1) and data value *v*;
-        ``(-1, -1)`` if none."""
+        ``(-1, -1)`` if none.
+
+        *tol* widens every bar along the category axis (backends pass one
+        pixel), so bars thinner than a pixel stay clickable; among the bars
+        within reach the one whose center is nearest wins.
+        """
+        best, best_d = (-1, -1), None
         for c, s, u0, u1, v0, v1, _color in self._bar_geometry():
-            if u0 <= u < u1 and min(v0, v1) <= v <= max(v0, v1):
-                return c, s
-        return -1, -1
+            if u0 - tol <= u < u1 + tol and min(v0, v1) <= v <= max(v0, v1):
+                if tol <= 0:
+                    return c, s
+                d = abs(u - (u0 + u1) / 2.0)
+                if best_d is None or d < best_d:
+                    best, best_d = (c, s), d
+        return best
 
     def _category_at(self, u: float) -> int:
         """Category whose slot contains *u* (0..1), -1 if none."""
@@ -1443,6 +1497,8 @@ class YChartBarBase(YChartBase):
         if value == 0:
             return "0"
         a = abs(value)
+        if a >= 1e15:
+            return f"{value:.3g}"
         for limit, suffix in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
             if a >= limit:
                 return f"{value / limit:.3g}{suffix}"
@@ -1469,8 +1525,9 @@ class YChartBarBase(YChartBase):
             return False
         if not (0 <= c < len(self._categories) and 0 <= s < len(self._series)):
             return False
-        self._sel = (c, s)
-        self._apply_chart()
+        old, self._sel = self._sel, (c, s)
+        if old != (c, s):
+            self._apply_selection(old)
         self._post_activated()
         return True
 
