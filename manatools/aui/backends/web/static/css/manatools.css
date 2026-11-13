@@ -1000,6 +1000,12 @@ body {
     flex: 0 0 auto;
 }
 
+.mana-chart-error {
+    color: var(--mana-text-secondary);
+    font-style: italic;
+    padding: var(--mana-spacing-sm);
+}
+
 .mana-ychartbar.mana-disabled {
     opacity: 0.6;
 }
