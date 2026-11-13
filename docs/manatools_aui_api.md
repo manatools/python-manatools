@@ -827,8 +827,9 @@ w.selectedSlice() -> int                 # -1 = none
 w.setSelectedSlice(index: int)           # highlight only, no event; -1 clears
 ```
 
-Invalid input raises: `ValueError` for negative/non-finite values or a color
-that is not `#rrggbb`, `TypeError` for a `bool` value or non-int index,
+Invalid input raises: `ValueError` for negative/non-finite values, values
+beyond `YChartBase.MAX_VALUE` (±1e300, so sums and percentages stay finite)
+or a color that is not `#rrggbb`, `TypeError` for a `bool` value or non-int index,
 `IndexError` for an index out of range. Zero-value slices stay in the legend
 but are not drawn; a chart with no slices (or a zero total) shows "No data".
 Slices without a color cycle through the palette (`YChartBase.PALETTE`). Every setter redraws; on the web
@@ -917,12 +918,15 @@ w.selectedSeries()   -> int
 w.setSelectedBar(c: int, s: int)         # highlight only, no event; (-1, -1) clears
 ```
 
-Invalid input raises like `YChartPie`: `ValueError` (non-finite value,
-bad color, too many values or rows), `TypeError` (`bool` value, non-int
+Invalid input raises like `YChartPie`: `ValueError` (non-finite value or
+beyond ±1e300, bad color, too many values or rows), `TypeError` (`bool` value, non-int
 index, wrong enum), `IndexError` (index out of range). Zero values are kept
 but not drawn; a chart without categories or series shows "No data".
 Removing a series or category keeps the selection on the same bar (or
-clears it if that bar went away). Every setter redraws; on the web backend
+clears it if that bar went away). With more bars than pixels (thousands of
+categories) Qt/GTK draw bars thinner than a pixel merged per pixel line and
+a click selects the nearest bar within one pixel; value labels are left out
+on bars narrower than 3 px. Every setter redraws; on the web backend
 rapid changes are sent as one update.
 
 ```python
