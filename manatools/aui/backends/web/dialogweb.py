@@ -406,8 +406,12 @@ class YDialogWeb(YSingleChildContainerWidget):
         if server is not None:
             server.broadcast(message)
 
-    def _handle_ws_message(self, data: dict):
-        """Handle a message received via WebSocket."""
+    def _handle_ws_message(self, data: dict, reply=None):
+        """Handle a message received via WebSocket.
+
+        reply(message) answers only the browser page that sent data; without
+        it (HTTP fallback) answers are broadcast.
+        """
         if not isinstance(data, dict):
             logger.warning("Ignoring non-object WebSocket message")
             return
@@ -420,7 +424,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
         elif msg_type == "ready":
-            self._handle_browser_ready(self._context_token(data.get("ctx_token")))
+            self._handle_browser_ready(self._context_token(data.get("ctx_token")),
+                                       self._deferred_ids(data.get("deferred")), reply)
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
@@ -771,7 +776,17 @@ class YDialogWeb(YSingleChildContainerWidget):
         if hasattr(widget, 'notify') and widget.notify():
             self._post_event(YMenuEvent(item=None, id=url))
 
-    def _handle_browser_ready(self, context_token: str = ""):
+    @staticmethod
+    def _deferred_ids(value):
+        """Return the widget ids a page reports as loading skeletons, or None.
+
+        None means the page did not say: every pending table is pushed then.
+        """
+        if not isinstance(value, list):
+            return None
+        return [v for v in value[:256] if isinstance(v, str) and 0 < len(v) <= 128]
+
+    def _handle_browser_ready(self, context_token: str = "", deferred=None, reply=None):
         """Bring a freshly connected browser up to date.
 
         A popup opened before any browser was connected broadcasts its
@@ -782,6 +797,9 @@ class YDialogWeb(YSingleChildContainerWidget):
 
         Whichever dialog receives ``ready`` (the topmost), the deferred table
         rows belong to the root dialog: that is what the page rendered.
+        deferred lists the tables that page still shows as loading skeletons;
+        their rows go to that page alone (reply), so each browser tab gets
+        its rows however many connect at once.
 
         A context menu shown before is not replayed: it counts as dismissed.
         context_token names the page that connected, so the menu of another
@@ -794,7 +812,7 @@ class YDialogWeb(YSingleChildContainerWidget):
         self._replay_open_modals()
         root = YDialogWeb._root_dialog()
         if root is not None:
-            root._push_deferred_tables()
+            root._push_deferred_tables(deferred, reply)
         elif not any(d._is_open for d in list(YDialogWeb._open_dialogs)):
             self._broadcast({"type": "idle"})
 
@@ -821,19 +839,26 @@ class YDialogWeb(YSingleChildContainerWidget):
             except Exception:
                 logger.exception("Failed to replay modal for %s", popup.debugLabel())
 
-    def _push_deferred_tables(self):
-        """Push table row content to all connected clients.
+    def _push_deferred_tables(self, wanted=None, reply=None):
+        """Push table row content to the browser.
 
-        Called when the browser sends a ``ready`` message (WS open).  Only
-        tables that actually rendered a loading skeleton (``_deferred_pending``
-        is True) are included so we never blindly overwrite a table that was
+        Called when the browser sends a ``ready`` message (WS open).  wanted
+        is the list of widget ids the page shows as loading skeletons: their
+        rows are sent to that page (reply).  Without it, the tables that
+        rendered a skeleton (``_deferred_pending`` is True) are pushed to all
+        connected clients, so we never blindly overwrite a table that was
         already fully rendered.  Each widget is rendered inside a try/except so
         one broken widget cannot prevent the others from loading.
         """
+        if wanted is None:
+            candidates = [(wid, w) for wid, w in list(self._widget_registry.items())
+                          if getattr(w, '_deferred_pending', False)]
+        else:
+            candidates = [(wid, self._widget_registry.get(wid)) for wid in dict.fromkeys(wanted)]
+            candidates = [(wid, w) for wid, w in candidates
+                          if w is not None and hasattr(w, '_deferred_pending')]
         updates = []
-        for widget_id, widget in self._widget_registry.items():
-            if not getattr(widget, '_deferred_pending', False):
-                continue
+        for widget_id, widget in candidates:
             try:
                 html = widget._render_rows_html()
                 widget._deferred_pending = False
@@ -844,8 +869,13 @@ class YDialogWeb(YSingleChildContainerWidget):
                 })
             except Exception:
                 logger.exception("_push_deferred_tables: failed to render rows for %s", widget_id)
-        if updates:
-            self._broadcast({"type": "update", "updates": updates})
+        if not updates:
+            return
+        message = {"type": "update", "updates": updates}
+        if wanted is not None and reply is not None:
+            reply(message)
+        else:
+            self._broadcast(message)
 
     def _build_widget_registry(self):
         """Build a mapping of widget IDs to widget objects."""
