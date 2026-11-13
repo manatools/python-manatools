@@ -187,6 +187,21 @@ def main():
     while len(calls) <= n and time.monotonic() < deadline:
         iterate(0.1)
     check("window: redraw on change", len(calls) > n)
+
+    # -- many small changes: one deferred size update, not one per change ----
+    sizes = []
+    orig_size = area.update_size_request
+    area.update_size_request = lambda: (sizes.append(1), orig_size())
+    t0 = time.monotonic()
+    for i in range(2000):
+        c.addSlice(f"slice {i}", 1 + i % 5)
+    check("addSlice x2000: no synchronous re-measure", not sizes and time.monotonic() - t0 < 2.0,
+          (len(sizes), time.monotonic() - t0))
+    iterate(0.3)
+    check("addSlice x2000: one idle size update", len(sizes) == 1, len(sizes))
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
+    paint(c, cairo.Context(surf))
+    check("dense pie paints", surf.status() == cairo.STATUS_SUCCESS if hasattr(surf, "status") else True)
     win.destroy()
     iterate(0.1)
 
