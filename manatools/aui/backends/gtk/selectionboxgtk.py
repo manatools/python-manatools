@@ -20,7 +20,7 @@ import os
 from typing import Optional
 import logging
 from ...yui_common import *
-from .commongtk import _resolve_icon
+from .commongtk import _resolve_icon, _install_context_menu_triggers, _listbox_context_row
 
 
 class YSelectionBoxGtk(YSelectionWidget):
@@ -352,6 +352,11 @@ class YSelectionBoxGtk(YSelectionWidget):
         
         self._backend_widget = vbox
         self._listbox = listbox
+        _install_context_menu_triggers(
+            self, listbox,
+            lambda x, y: _listbox_context_row(listbox, listbox.get_row_at_y(int(y))),
+            lambda: _listbox_context_row(listbox, listbox.get_focus_child()),
+        )
         # connect selection signal: choose appropriate signal per selection mode
         # if multi-selection has been set before widget creation, ensure correct mode
         self.setMultiSelection( self._multi_selection )

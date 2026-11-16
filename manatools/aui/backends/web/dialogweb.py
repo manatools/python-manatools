@@ -12,7 +12,10 @@ the browser was given stays valid while dialogs come and go; each dialog owns
 its event queue and the event loop for user interaction.
 """
 
+import itertools
+import math
 import queue
+import re
 import threading
 import time
 import logging
@@ -32,6 +35,9 @@ from ...yui_common import (
     YMenuEvent,
     YEventReason,
     YUINoDialogException,
+    context_menu_items,
+    context_menu_item_path,
+    has_selectable_item,
 )
 from .commonweb import escape_html, escape_attr
 
@@ -39,6 +45,14 @@ if TYPE_CHECKING:
     from .server import WebServer
 
 logger = logging.getLogger("manatools.aui.web.YDialogWeb")
+
+# Icon names the /icon/<name> route accepts (same rule as server.py).
+_ICON_NAME_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
+
+_CONTEXT_MENU_SOURCES = ("pointer", "keyboard", "touch")
+
+# Page token a browser sends with its context menu requests.
+_CONTEXT_TOKEN_RE = re.compile(r'^[a-zA-Z0-9_\-]{1,64}$')
 
 # ---------------------------------------------------------------------------
 # Page builder
@@ -101,7 +115,22 @@ class YDialogWeb(YSingleChildContainerWidget):
     # Polling slice used by waitForEvent() so Ctrl-C stays deliverable.
     _WAIT_SLICE = 0.2
 
+    # Context menu ids are unique process-wide, so a pick for a menu of a
+    # dialog that has gone can never match a newer one.  next() on a count
+    # is atomic, whichever thread or dialog asks.
+    _context_menu_ids = itertools.count(1)
+
+    # Context menu requests closer than this to the last accepted one are
+    # dropped: nobody right-clicks that fast, a flooding page does.
+    _CONTEXT_MIN_INTERVAL = 0.05
+
     def __init__(self, dialog_type=YDialogType.YMainDialog, color_mode=YDialogColorMode.YDialogNormalColor):
+        # Context menu state is touched by server threads (browser messages)
+        # and the application thread (openContextMenu), always under the lock.
+        self._context_lock = threading.Lock()
+        self._context_menu_request = None  # pending ContextMenuActivated request
+        self._context_menu_state = None    # menu currently shown in the browser
+        self._context_request_at = 0.0     # time.monotonic() of the last accepted request
         super().__init__()
         self._dialog_type = dialog_type
         self._color_mode = color_mode
@@ -284,6 +313,10 @@ class YDialogWeb(YSingleChildContainerWidget):
         for timer in pending:
             timer.cancel()
 
+        with self._context_lock:
+            self._context_menu_request = None
+            self._context_menu_state = None
+
         was_open = self._is_open
         was_root = was_open and YDialogWeb._root_dialog() is self
         self._is_open = False
@@ -373,8 +406,15 @@ class YDialogWeb(YSingleChildContainerWidget):
         if server is not None:
             server.broadcast(message)
 
-    def _handle_ws_message(self, data: dict):
-        """Handle a message received via WebSocket."""
+    def _handle_ws_message(self, data: dict, reply=None):
+        """Handle a message received via WebSocket.
+
+        reply(message) answers only the browser page that sent data; without
+        it (HTTP fallback) answers are broadcast.
+        """
+        if not isinstance(data, dict):
+            logger.warning("Ignoring non-object WebSocket message")
+            return
         msg_type = data.get("type", "")
 
         if msg_type == "event":
@@ -384,11 +424,14 @@ class YDialogWeb(YSingleChildContainerWidget):
         elif msg_type == "link_activated":
             self._handle_link_activation(data)
         elif msg_type == "ready":
-            self._handle_browser_ready()
+            self._handle_browser_ready(self._context_token(data.get("ctx_token")),
+                                       self._deferred_ids(data.get("deferred")), reply)
         elif msg_type == "close":
             self._post_event(YCancelEvent())
         elif msg_type == "key":
             self._handle_key_event(data)
+        elif msg_type == "context_menu":
+            self._handle_context_menu_result(data)
         else:
             logger.warning("Unknown WebSocket message type: %s", msg_type)
 
@@ -397,6 +440,8 @@ class YDialogWeb(YSingleChildContainerWidget):
         widget_id = data.get("widget_id", "")
         reason_str = data.get("reason", "Activated")
         event_data = data.get("data", {})
+        if not isinstance(event_data, dict):
+            event_data = {}
 
         widget = self._lookup_widget(widget_id)
         if not widget:
@@ -414,11 +459,18 @@ class YDialogWeb(YSingleChildContainerWidget):
                 return
 
         reason_map = {
-            "Activated":        YEventReason.Activated,
-            "ValueChanged":     YEventReason.ValueChanged,
-            "SelectionChanged": YEventReason.SelectionChanged,
+            "Activated":            YEventReason.Activated,
+            "ValueChanged":         YEventReason.ValueChanged,
+            "SelectionChanged":     YEventReason.SelectionChanged,
+            "ContextMenuActivated": YEventReason.ContextMenuActivated,
         }
         reason = reason_map.get(reason_str, YEventReason.Activated)
+
+        # A context request carries a row reference, not a selection: it must
+        # not reach the generic value/selection handling below.
+        if reason == YEventReason.ContextMenuActivated:
+            self._handle_context_menu_request(widget, event_data)
+            return
 
         if "value" in event_data:
             if hasattr(widget, "setValue"):
@@ -491,6 +543,205 @@ class YDialogWeb(YSingleChildContainerWidget):
             event = YWidgetEvent(widget, reason)
         self._post_event(event)
 
+    # ------------------------------------------------------------------
+    # Context menus
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _coerce_int(value, low, high):
+        """Return value as an int clamped to [low, high], or None if it is not a number."""
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, str):
+            try:
+                value = float(value.strip())
+            except ValueError:
+                return None
+        if not isinstance(value, (int, float)):
+            return None
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                return None
+            value = int(round(value))
+        return max(low, min(high, value))
+
+    @staticmethod
+    def _context_token(value) -> str:
+        """Return the page token value if it is well formed, else ''."""
+        return value if isinstance(value, str) and _CONTEXT_TOKEN_RE.match(value) else ""
+
+    def _handle_context_menu_request(self, widget, event_data: dict):
+        """Turn a browser right-click (or Menu key) on widget into ContextMenuActivated.
+
+        Mirrors the Qt/curses backends: an unselected row becomes the only
+        selected row first, so the handler can rely on selectedItem(); inside a
+        selection it is kept.  The request is remembered until openContextMenu().
+        """
+        if not widget.notifyContextMenu():
+            logger.debug("context menu request ignored: notify off for %s", widget.debugLabel())
+            return
+        if not widget.isEnabled():
+            return
+        now = time.monotonic()
+        with self._context_lock:
+            if now - self._context_request_at < self._CONTEXT_MIN_INTERVAL:
+                logger.debug("context menu request dropped: too close to the previous one")
+                return
+            self._context_request_at = now
+
+        ref = None
+        item_id = event_data.get("itemId")
+        if isinstance(item_id, str) and 0 < len(item_id) <= 256:
+            ref = item_id
+        elif "rowIndex" in event_data:
+            row = event_data.get("rowIndex")
+            if not isinstance(row, bool) and isinstance(row, (int, float)):
+                ref = self._coerce_int(row, -1, 2 ** 31)
+        if ref is not None and hasattr(widget, "_context_menu_select"):
+            try:
+                widget._context_menu_select(ref)
+            except Exception:
+                logger.exception("context menu selection failed for %s", widget.debugLabel())
+
+        source = event_data.get("source")
+        request = {
+            "widget": widget,
+            "x": self._coerce_int(event_data.get("clientX"), 0, 1000000) or 0,
+            "y": self._coerce_int(event_data.get("clientY"), 0, 1000000) or 0,
+            "source": source if source in _CONTEXT_MENU_SOURCES else "pointer",
+            "seq": self._coerce_int(event_data.get("seq"), 0, 2 ** 53 - 1) or 0,
+            "token": self._context_token(event_data.get("token")),
+        }
+        with self._context_lock:
+            self._context_menu_request = request
+        self._post_event(YWidgetEvent(widget, YEventReason.ContextMenuActivated))
+
+    @staticmethod
+    def _context_menu_icon_url(icon_name) -> str:
+        """Return the /icon/ URL for a bare XDG icon name, or ''."""
+        if not icon_name or not isinstance(icon_name, str):
+            return ""
+        name = icon_name.rsplit(".", 1)[0] if "." in icon_name else icon_name
+        return f"/icon/{name}" if _ICON_NAME_RE.match(name) else ""
+
+    @classmethod
+    def _serialize_context_menu(cls, items, id_map, pickable, reachable=True) -> list:
+        """Snapshot the visible items as JSON-ready dicts.
+
+        Fills id_map (id -> YMenuItem) and pickable (ids of the enabled leaves
+        reachable through enabled submenus).  Labels are sent raw (mnemonic
+        included): the browser builds the menu with textContent, so nothing
+        here is ever interpreted as HTML.
+        """
+        result = []
+        for item in items:
+            if not item.visible():
+                continue
+            item_id = len(id_map) + 1
+            id_map[item_id] = item
+            separator = bool(item.isSeparator())
+            submenu = bool(item.isMenu()) and not separator
+            if separator:
+                enabled = False
+            elif submenu:
+                enabled = bool(item.enabled()) and has_selectable_item(item._children)
+            else:
+                enabled = bool(item.enabled())
+                if enabled and reachable:
+                    pickable.add(item_id)
+            children = (cls._serialize_context_menu(item._children, id_map, pickable, reachable and enabled)
+                        if submenu else [])
+            result.append({
+                "id": item_id,
+                "label": str(item.label() or ""),
+                "icon": "" if separator else cls._context_menu_icon_url(item.iconName()),
+                "enabled": enabled,
+                "separator": separator,
+                "submenu": submenu,
+                "items": children,
+            })
+        return result
+
+    def _open_context_menu(self, items) -> bool:
+        """Show a context menu in the browser for the pending request (non-blocking).
+
+        The menu is a snapshot of the current item state, so the app may change
+        shared YMenuItem objects freely between openings.  Opening a menu while
+        another is shown replaces it without a cancel event.
+        """
+        top_items = context_menu_items(items)
+        with self._context_lock:
+            request = self._context_menu_request
+            if request is None or not has_selectable_item(top_items):
+                return False
+            self._context_menu_request = None
+            id_map = {}
+            pickable = set()
+            payload_items = self._serialize_context_menu(top_items, id_map, pickable)
+            menu_id = next(YDialogWeb._context_menu_ids)
+            self._context_menu_state = {
+                "menu_id": menu_id,
+                "items": id_map,
+                "pickable": pickable,
+                "top_items": top_items,
+                "widget": request["widget"],
+                "token": request["token"],
+            }
+        self._broadcast({
+            "type": "show_context_menu",
+            "menu_id": menu_id,
+            "dialog_id": self.id(),
+            "seq": request["seq"],
+            "token": request["token"],
+            "x": request["x"],
+            "y": request["y"],
+            "source": request["source"],
+            "items": payload_items,
+        })
+        return True
+
+    def _handle_context_menu_result(self, data: dict):
+        """Handle the browser's answer to show_context_menu: a pick or a dismissal."""
+        menu_id = self._coerce_int(data.get("menu_id"), 0, 2 ** 53 - 1)
+        cancelled = data.get("cancelled") is True
+        item_id = None if cancelled else self._coerce_int(data.get("item_id"), 0, 2 ** 31)
+        with self._context_lock:
+            state = self._context_menu_state
+            if state is None or menu_id is None or state["menu_id"] != menu_id:
+                logger.debug("context_menu: stale or unknown menu id %r", data.get("menu_id"))
+                return
+            item = None
+            if not cancelled:
+                item = state["items"].get(item_id) if item_id in state["pickable"] else None
+                if item is None or not item.enabled():
+                    logger.debug("context_menu: invalid item %r", data.get("item_id"))
+                    return
+            self._context_menu_state = None
+        source = state["widget"]
+        if cancelled:
+            self._post_event(YWidgetEvent(source, YEventReason.ContextMenuCancelled))
+        else:
+            self._post_event(YMenuEvent(item=item, id=context_menu_item_path(item, state["top_items"]),
+                                        widget=source))
+
+    def _cancel_context_menu(self, token: str = ""):
+        """Drop the open menu, if any, posting ContextMenuCancelled for it.
+
+        With a page token only the menu and the pending request of that page
+        are dropped: another browser tab keeps its own.
+        """
+        with self._context_lock:
+            state = self._context_menu_state
+            if token and state is not None and state["token"] != token:
+                state = None
+            else:
+                self._context_menu_state = None
+            request = self._context_menu_request
+            if not token or (request is not None and request["token"] == token):
+                self._context_menu_request = None
+        if state is not None:
+            self._post_event(YWidgetEvent(state["widget"], YEventReason.ContextMenuCancelled))
+
     def _handle_key_event(self, data: dict):
         """Handle a keyboard event from the browser."""
         key = data.get("key", "")
@@ -535,7 +786,17 @@ class YDialogWeb(YSingleChildContainerWidget):
         if hasattr(widget, 'notify') and widget.notify():
             self._post_event(YMenuEvent(item=None, id=url))
 
-    def _handle_browser_ready(self):
+    @staticmethod
+    def _deferred_ids(value):
+        """Return the widget ids a page reports as loading skeletons, or None.
+
+        None means the page did not say: every pending table is pushed then.
+        """
+        if not isinstance(value, list):
+            return None
+        return [v for v in value[:256] if isinstance(v, str) and 0 < len(v) <= 128]
+
+    def _handle_browser_ready(self, context_token: str = "", deferred=None, reply=None):
         """Bring a freshly connected browser up to date.
 
         A popup opened before any browser was connected broadcasts its
@@ -546,11 +807,22 @@ class YDialogWeb(YSingleChildContainerWidget):
 
         Whichever dialog receives ``ready`` (the topmost), the deferred table
         rows belong to the root dialog: that is what the page rendered.
+        deferred lists the tables that page still shows as loading skeletons;
+        their rows go to that page alone (reply), so each browser tab gets
+        its rows however many connect at once.
+
+        A context menu shown before is not replayed: it counts as dismissed.
+        context_token names the page that connected, so the menu of another
+        browser tab stays open.
         """
+        with YDialogWeb._open_dialogs_lock:
+            dialogs = list(YDialogWeb._open_dialogs)
+        for dlg in dialogs:
+            dlg._cancel_context_menu(context_token)
         self._replay_open_modals()
         root = YDialogWeb._root_dialog()
         if root is not None:
-            root._push_deferred_tables()
+            root._push_deferred_tables(deferred, reply)
         elif not any(d._is_open for d in list(YDialogWeb._open_dialogs)):
             self._broadcast({"type": "idle"})
 
@@ -577,19 +849,26 @@ class YDialogWeb(YSingleChildContainerWidget):
             except Exception:
                 logger.exception("Failed to replay modal for %s", popup.debugLabel())
 
-    def _push_deferred_tables(self):
-        """Push table row content to all connected clients.
+    def _push_deferred_tables(self, wanted=None, reply=None):
+        """Push table row content to the browser.
 
-        Called when the browser sends a ``ready`` message (WS open).  Only
-        tables that actually rendered a loading skeleton (``_deferred_pending``
-        is True) are included so we never blindly overwrite a table that was
+        Called when the browser sends a ``ready`` message (WS open).  wanted
+        is the list of widget ids the page shows as loading skeletons: their
+        rows are sent to that page (reply).  Without it, the tables that
+        rendered a skeleton (``_deferred_pending`` is True) are pushed to all
+        connected clients, so we never blindly overwrite a table that was
         already fully rendered.  Each widget is rendered inside a try/except so
         one broken widget cannot prevent the others from loading.
         """
+        if wanted is None:
+            candidates = [(wid, w) for wid, w in list(self._widget_registry.items())
+                          if getattr(w, '_deferred_pending', False)]
+        else:
+            candidates = [(wid, self._widget_registry.get(wid)) for wid in dict.fromkeys(wanted)]
+            candidates = [(wid, w) for wid, w in candidates
+                          if w is not None and hasattr(w, '_deferred_pending')]
         updates = []
-        for widget_id, widget in self._widget_registry.items():
-            if not getattr(widget, '_deferred_pending', False):
-                continue
+        for widget_id, widget in candidates:
             try:
                 html = widget._render_rows_html()
                 widget._deferred_pending = False
@@ -600,8 +879,13 @@ class YDialogWeb(YSingleChildContainerWidget):
                 })
             except Exception:
                 logger.exception("_push_deferred_tables: failed to render rows for %s", widget_id)
-        if updates:
-            self._broadcast({"type": "update", "updates": updates})
+        if not updates:
+            return
+        message = {"type": "update", "updates": updates}
+        if wanted is not None and reply is not None:
+            reply(message)
+        else:
+            self._broadcast(message)
 
     def _build_widget_registry(self):
         """Build a mapping of widget IDs to widget objects."""

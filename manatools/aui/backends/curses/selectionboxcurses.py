@@ -79,6 +79,19 @@ class YSelectionBoxCurses(YSelectionWidget):
     def selectedItems(self):
         return list(self._selected_items)
 
+    def _context_menu_row(self):
+        """Context-menu adapter: the cursor row as (is_selected, select_only, (y, x))."""
+        if not (0 <= self._hover_index < len(self._items)):
+            return None
+        item = self._items[self._hover_index]
+
+        def select_only():
+            for other in list(self._selected_items):
+                self.selectItem(other, False)
+            self.selectItem(item, True)
+        y, x = getattr(self, '_rows_origin', (0, 0))
+        return (item in self._selected_items, select_only, (y + self._hover_index - self._scroll_offset, x))
+
     def selectItem(self, item, selected=True):
         """Programmatically select/deselect an item."""
         # find index
@@ -233,6 +246,7 @@ class YSelectionBoxCurses(YSelectionWidget):
                 except curses.error:
                     pass
                 line += 1
+            self._rows_origin = (line, x)
 
             visible = self._visible_row_count()
             available_rows = max(0, height - (1 if self._label else 0))

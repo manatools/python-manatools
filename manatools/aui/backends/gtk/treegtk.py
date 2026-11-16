@@ -19,7 +19,7 @@ import threading
 import os
 import logging
 from ...yui_common import *
-from .commongtk import _resolve_icon
+from .commongtk import _resolve_icon, _install_context_menu_triggers, _listbox_context_row
 
 
 class YTreeGtk(YSelectionWidget):
@@ -113,6 +113,11 @@ class YTreeGtk(YSelectionWidget):
 
         self._backend_widget = vbox
         self._listbox = listbox
+        _install_context_menu_triggers(
+            self, listbox,
+            lambda x, y: _listbox_context_row(listbox, listbox.get_row_at_y(int(y))),
+            lambda: _listbox_context_row(listbox, listbox.get_focus_child()),
+        )
         self._backend_widget.set_sensitive(self._enabled)
         if self._help_text:
             listbox.set_tooltip_text(self._help_text)

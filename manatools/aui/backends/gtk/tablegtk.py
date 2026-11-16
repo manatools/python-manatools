@@ -62,6 +62,7 @@ gi.require_version('Gdk', '4.0')
 from gi.repository import Gtk, GLib, Gdk, GObject, Gio, Pango
 import logging
 from ...yui_common import *
+from .commongtk import _install_context_menu_triggers, _widget_rect
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +277,11 @@ class YTableGtk(YSelectionWidget):
             )
         except Exception as exc:
             self._logger.debug("selection-changed connect failed: %s", exc)
+        _install_context_menu_triggers(
+            self, self._column_view,
+            lambda x, y: self._context_row_for(self._column_view.pick(x, y, Gtk.PickFlags.DEFAULT)),
+            self._context_focus_row,
+        )
 
         # ScrolledWindow wrapper.
         sw = Gtk.ScrolledWindow()
@@ -300,6 +306,47 @@ class YTableGtk(YSelectionWidget):
         # Populate if items were added before the widget was created.
         if getattr(self, '_items', None):
             self.rebuildTable()
+
+    def _context_row_for(self, widget):
+        """Context-menu adapter: locate the row of a widget picked inside the view."""
+        w = widget
+        while w is not None and w is not self._column_view:
+            if getattr(w, '_yctx_list_item', None) is not None:
+                return self._context_hit(w)
+            parent = w.get_parent()
+            if isinstance(parent, Gtk.ListView):
+                # w is a row widget (padding, separator, or the focused row):
+                # any of its cells carries the list item.
+                stack = [w]
+                while stack:
+                    x = stack.pop()
+                    if getattr(x, '_yctx_list_item', None) is not None:
+                        return self._context_hit(x)
+                    c = x.get_first_child()
+                    while c is not None:
+                        stack.append(c)
+                        c = c.get_next_sibling()
+                return None
+            w = parent
+        return None
+
+    def _context_hit(self, cell_child):
+        pos = cell_child._yctx_list_item.get_position()
+        if pos == Gtk.INVALID_LIST_POSITION:
+            return None
+        sel = self._selection_model
+        rect = _widget_rect(cell_child, self._column_view)
+        if rect is not None:
+            rect.x, rect.width = 0, max(1, self._column_view.get_width())
+        return (sel.is_selected(pos), lambda: sel.select_item(pos, True), rect)
+
+    def _context_focus_row(self):
+        """Context-menu adapter: locate the row holding the keyboard focus."""
+        root = self._column_view.get_root()
+        focus = root.get_focus() if root is not None else None
+        if focus is None or not focus.is_ancestor(self._column_view):
+            return None
+        return self._context_row_for(focus)
 
     def _build_columns(self):
         """Create one GtkColumnViewColumn per header column."""
@@ -417,6 +464,7 @@ class YTableGtk(YSelectionWidget):
             # Stash direct reference so bind() can find the CheckButton.
             wrapper._chk = chk
             wrapper._chk_handler_id = None
+            wrapper._yctx_list_item = list_item
             list_item.set_child(wrapper)
         else:
             lbl = Gtk.Label()
@@ -426,6 +474,7 @@ class YTableGtk(YSelectionWidget):
             lbl.set_margin_end(5)
             lbl.set_hexpand(True)
             lbl.set_ellipsize(Pango.EllipsizeMode.END)
+            lbl._yctx_list_item = list_item
             list_item.set_child(lbl)
 
     def _factory_bind(self, list_item: Gtk.ListItem, col: int):

@@ -654,7 +654,7 @@ class ManaToolsRequestHandler(http.server.BaseHTTPRequestHandler):
                 # dialogs receive events while they are active.
                 target = self._topmost_dialog()
                 if target:
-                    target._handle_ws_message(data)
+                    target._handle_ws_message(data, reply=lambda m: ws.send(json.dumps(m)))
                 elif data.get("type") == "ready":
                     # No dialog at all: the application is between dialogs.
                     ws.send(json.dumps({"type": "idle"}))

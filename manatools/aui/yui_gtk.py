@@ -16,6 +16,7 @@ import os
 import logging
 from .yui_common import *
 from .backends.gtk import *
+from .backends.gtk.commongtk import _open_context_menu
 
 
 class YUIGtk:
@@ -399,6 +400,18 @@ class YApplicationGtk:
         """Indicate that this is not a text-mode (GTK) application."""
         return False
     
+    def openContextMenu(self, items) -> bool:
+        """Show a context menu for the widget that posted ContextMenuActivated.
+
+        items is a root YMenuItem or a list of YMenuItem. Non-blocking: a pick
+        arrives as YMenuEvent, a dismissal as a YWidgetEvent with reason
+        ContextMenuCancelled. Returns False if no menu was shown.
+        """
+        dlg = YDialogGtk.currentDialog(doThrow=False)
+        if dlg is None:
+            return False
+        return _open_context_menu(dlg, items)
+
     def busyCursor(self):
         """Set busy cursor (GTK implementation)."""
         current_dialog = YDialogGtk.currentDialog()
