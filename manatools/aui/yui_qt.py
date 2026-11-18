@@ -523,6 +523,10 @@ class YWidgetFactoryQt:
         """Create a bar chart widget."""
         return YChartBarQt(parent, label)
 
+    def createChartGauge(self, parent, label: str = ""):
+        """Create a gauge (radial dial) widget."""
+        return YChartGaugeQt(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (Qt backend)."""
         return YMenuBarQt(parent)
