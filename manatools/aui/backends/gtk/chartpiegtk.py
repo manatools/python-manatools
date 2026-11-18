@@ -478,11 +478,11 @@ class YChartPieGtk(YChartPieBase):
                 area.update_size_request()
             except Exception:
                 self._logger.exception("Failed to update size request")
+            try:
+                area.update_property([Gtk.AccessibleProperty.LABEL], [self._label or "Pie chart"])
+            except Exception:
+                self._logger.debug("accessible label update failed", exc_info=True)
         return False
-        try:
-            area.update_property([Gtk.AccessibleProperty.LABEL], [self._label or "Pie chart"])
-        except Exception:
-            self._logger.debug("accessible label update failed", exc_info=True)
 
     # -- common widget API --------------------------------------------------
 
