@@ -108,16 +108,16 @@ class YChartGaugeWeb(YChartGaugeBase):
         if value:
             size = max(10.0, min(_VALUE_FONT, 2 * _R_TRACK_IN * 0.85 / (len(value) * _CHAR_W)))
         sub = self._subtitle
-        flat = self._dial_extent() * _R_TRACK_IN < 30.0
+        place = self._text_placement()
         value_y = sub_y = None
-        if self._show_needle:
+        if place == "below":
             y = 14.0
             if value:
                 value_y = y + size / 2
                 y += size + 2
             if sub:
                 sub_y = y + _SUBTITLE_FONT / 2
-        elif flat:
+        elif place == "above":
             y = -6.0
             if sub:
                 sub_y = y - _SUBTITLE_FONT / 2
