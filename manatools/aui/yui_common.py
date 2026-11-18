@@ -207,7 +207,7 @@ class YHtmlBasePolicy(Enum):
     DocumentBase = 1
 
 class YChartLegendPosition(Enum):
-    """Where YChartPie places its legend relative to the pie."""
+    """Where a chart places its legend relative to the plot."""
     Right = 0
     Bottom = 1
     Hidden = 2
@@ -764,7 +764,7 @@ class YHtmlViewBase(YWidget):
         return True
 
 class YChartBase(YWidget):
-    """Shared base of the chart widgets (YChartPie, YChartBar).
+    """Shared base of the chart widgets (YChartPie, YChartBar, YChartGauge).
 
     Holds what every chart has: a title, a legend position, the color
     palette, input validation, value formatting and the Activated event.
@@ -1549,6 +1549,386 @@ class YChartBarBase(YChartBase):
         old, self._sel = self._sel, (c, s)
         if old != (c, s):
             self._apply_selection(old)
+        self._post_activated()
+        return True
+
+class YChartBand:
+    """One colored range (threshold band) of a YChartGauge: start < end,
+    optional color (``"#rrggbb"``, None means "use the band palette") and a
+    label shown in the legend.
+
+    Read-only for applications: change bands through the YChartGauge
+    setters so the chart redraws.
+    """
+
+    def __init__(self, start, end, color=None, label=""):
+        start = YChartBase._check_number(start, True, "band start")
+        end = YChartBase._check_number(end, True, "band end")
+        if not start < end:
+            raise ValueError(f"band start must be < end, got {start!r}..{end!r}")
+        self._start = start
+        self._end = end
+        self._color = YChartBase._check_color(color)
+        self._label = "" if label is None else str(label)
+
+    def start(self) -> float:
+        return self._start
+
+    def end(self) -> float:
+        return self._end
+
+    def color(self):
+        """Custom color as ``"#rrggbb"``, or None when the band palette is used."""
+        return self._color
+
+    def label(self) -> str:
+        return self._label
+
+class YChartGaugeBase(YChartBase):
+    """Shared model of the YChartGauge widget.
+
+    A radial dial showing one value inside a range: a track, colored bands
+    (thresholds), a filled value arc, ticks, an optional target marker and
+    needle, and the value as text.  All the math (angles, ticks, colors,
+    fitting the dial into a box, hit test) lives here; a backend only paints
+    and reports clicks through ``_gauge_clicked()``.
+
+    Angles are in degrees, 0 at 12 o'clock, growing clockwise; the dial
+    spans ``-sweepAngle()/2 .. +sweepAngle()/2``.
+
+    Clicking the dial (or Enter/Space) posts a YWidgetEvent with reason
+    Activated (when notify() is on).  There is no selection.
+    """
+
+    MIN_SWEEP = 180.0
+    MAX_SWEEP = 300.0
+    DEFAULT_SWEEP = 240.0
+    MAX_DECIMALS = 6
+    # Bands without a custom color: green, orange, vermilion, then the palette.
+    BAND_PALETTE = ("#009e73", "#e69f00", "#d55e00", "#56b4e9",
+                    "#cc79a7", "#f0e442", "#999999")
+    DEFAULT_VALUE_COLOR = "#0072b2"
+    _TICK_TARGET = 5        # aim for about this many tick steps
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._min = 0.0
+        self._max = 100.0
+        self._value = 0.0
+        self._unit = ""
+        self._decimals = -1
+        self._show_value = True
+        self._subtitle = ""
+        self._sweep = self.DEFAULT_SWEEP
+        self._show_needle = False
+        self._show_ticks = True
+        self._value_color = None
+        self._target = None
+        self._bands = []
+        self._ticks_cache = None
+        self._band_arcs_cache = None
+        super().__init__(parent, label)
+
+    def widgetClass(self):
+        return "YChartGauge"
+
+    # -- range and value ----------------------------------------------------
+
+    def setRange(self, minimum, maximum):
+        """Set the dial range (default 0..100); *minimum* must be < *maximum*."""
+        lo = self._check_number(minimum, True, "minimum")
+        hi = self._check_number(maximum, True, "maximum")
+        if not lo < hi:
+            raise ValueError(f"minimum must be < maximum, got {lo!r}..{hi!r}")
+        self._min, self._max = lo, hi
+        self._chart_changed()
+
+    def minimum(self) -> float:
+        return self._min
+
+    def maximum(self) -> float:
+        return self._max
+
+    def setValue(self, value):
+        """Set the value; it is kept as given, the dial clamps it to the range."""
+        self._value = self._check_number(value, True)
+        self._chart_changed()
+
+    def value(self) -> float:
+        return self._value
+
+    # -- value text ---------------------------------------------------------
+
+    def setUnit(self, unit):
+        """Text appended verbatim to the value: "%" gives "72%", " GB" "3.4 GB"."""
+        self._unit = "" if unit is None else str(unit)
+        self._chart_changed()
+
+    def unit(self) -> str:
+        return self._unit
+
+    def setDecimals(self, decimals: int):
+        """Fixed number of decimals (0..6) for the value text; -1 = automatic."""
+        if isinstance(decimals, bool) or not isinstance(decimals, int):
+            raise TypeError("decimals must be an int")
+        if not -1 <= decimals <= self.MAX_DECIMALS:
+            raise ValueError(f"decimals must be -1..{self.MAX_DECIMALS}, got {decimals}")
+        self._decimals = decimals
+        self._chart_changed()
+
+    def decimals(self) -> int:
+        return self._decimals
+
+    def setShowValue(self, show: bool = True):
+        """Show (True, default) or hide the value text in the dial."""
+        self._show_value = bool(show)
+        self._chart_changed()
+
+    def showValue(self) -> bool:
+        return self._show_value
+
+    def setSubtitle(self, text):
+        """Small text under the value ("" = none)."""
+        self._subtitle = "" if text is None else str(text)
+        self._chart_changed()
+
+    def subtitle(self) -> str:
+        return self._subtitle
+
+    # -- look ---------------------------------------------------------------
+
+    def setSweepAngle(self, degrees):
+        """Angle covered by the dial, 180 (half circle) .. 300; default 240."""
+        deg = self._check_number(degrees, False, "sweep angle")
+        if not self.MIN_SWEEP <= deg <= self.MAX_SWEEP:
+            raise ValueError(f"sweep angle must be {self.MIN_SWEEP:g}..{self.MAX_SWEEP:g}, "
+                             f"got {deg!r}")
+        self._sweep = deg
+        self._chart_changed()
+
+    def sweepAngle(self) -> float:
+        return self._sweep
+
+    def setShowNeedle(self, show: bool = True):
+        """Draw a needle pointing at the value (default False)."""
+        self._show_needle = bool(show)
+        self._chart_changed()
+
+    def showNeedle(self) -> bool:
+        return self._show_needle
+
+    def setShowTicks(self, show: bool = True):
+        """Show (True, default) or hide the ticks and their labels."""
+        self._show_ticks = bool(show)
+        self._chart_changed()
+
+    def showTicks(self) -> bool:
+        return self._show_ticks
+
+    def setValueColor(self, color):
+        """Value arc color when the value is in no band; None = default blue."""
+        self._value_color = self._check_color(color)
+        self._chart_changed()
+
+    def valueColor(self) -> str:
+        return self._value_color or self.DEFAULT_VALUE_COLOR
+
+    # -- target -------------------------------------------------------------
+
+    def setTarget(self, target):
+        """Mark a goal value on the dial; None removes the marker.  A target
+        outside the range is kept but not drawn."""
+        self._target = None if target is None else self._check_number(target, True, "target")
+        self._chart_changed()
+
+    def target(self):
+        """The target value, or None."""
+        return self._target
+
+    # -- bands --------------------------------------------------------------
+
+    def _check_band(self, index) -> int:
+        return self._check_index_in(index, len(self._bands), "band index")
+
+    def addBand(self, start, end, color=None, label="") -> int:
+        """Append a band covering *start*..*end* and return its index.
+
+        Bands may extend past the range (they are clipped) and may overlap
+        (the later band wins)."""
+        self._bands.append(YChartBand(start, end, color, label))
+        self._chart_changed()
+        return len(self._bands) - 1
+
+    def setBands(self, bands):
+        """Replace all bands at once (one redraw).
+
+        *bands* holds YChartBand objects or ``(start, end[, color[, label]])``
+        tuples.  Everything is validated before the chart changes."""
+        new = []
+        for b in bands or ():
+            new.append(b if isinstance(b, YChartBand) else YChartBand(*b))
+        self._bands = new
+        self._chart_changed()
+
+    def band(self, index: int) -> YChartBand:
+        return self._bands[self._check_band(index)]
+
+    def bandCount(self) -> int:
+        return len(self._bands)
+
+    def bandColor(self, index: int) -> str:
+        """Effective color of band *index* (custom or from the band palette)."""
+        b = self._bands[self._check_band(index)]
+        return b._color or self.BAND_PALETTE[index % len(self.BAND_PALETTE)]
+
+    def removeBand(self, index: int):
+        del self._bands[self._check_band(index)]
+        self._chart_changed()
+
+    def deleteAllBands(self):
+        self._bands = []
+        self._chart_changed()
+
+    # -- shared math --------------------------------------------------------
+
+    def _invalidate_caches(self):
+        self._ticks_cache = None
+        self._band_arcs_cache = None
+
+    def _clamp(self, v: float) -> float:
+        return min(max(v, self._min), self._max)
+
+    def _angle_of(self, v: float) -> float:
+        """Angle of value *v*, clamped to the range."""
+        half = self._sweep / 2.0
+        frac = (self._clamp(v) - self._min) / (self._max - self._min)
+        return -half + self._sweep * frac
+
+    def _fill_origin(self) -> float:
+        """Where the value arc starts: 0 when the range spans 0, else minimum."""
+        return 0.0 if self._min < 0.0 < self._max else self._min
+
+    def _ticks(self) -> list:
+        """``[(value, angle, text)]``: both range ends plus every multiple of a
+        nice 1/2/5 step inside the range; an inner tick within half a step
+        of an end is dropped.  Cached; callers must not modify it."""
+        ticks = self._ticks_cache
+        if ticks is None:
+            lo, hi = self._min, self._max
+            values = [lo, hi]
+            raw = (hi - lo) / self._TICK_TARGET
+            if raw >= 1e-290:
+                step = self._nice_step(raw)
+                digits = max(0, -int(math.floor(math.log10(step))) + 1)
+                k = math.ceil(lo / step - 1e-9)
+                inner = []
+                while len(inner) < 50:
+                    v = round(k * step, digits) or 0.0
+                    if v >= hi - step / 2.0:
+                        break
+                    if v > lo + step / 2.0:
+                        inner.append(v)
+                    k += 1
+                values = [lo] + inner + [hi]
+            ticks = [(v, self._angle_of(v), self._format_tick(v)) for v in values]
+            self._ticks_cache = ticks
+        return ticks
+
+    def _band_arcs(self) -> list:
+        """``[(band index, a0, a1, color)]`` with each band clipped to the
+        range; bands outside it are skipped.  Cached; do not modify."""
+        arcs = self._band_arcs_cache
+        if arcs is None:
+            arcs = []
+            for i, b in enumerate(self._bands):
+                s, e = max(b._start, self._min), min(b._end, self._max)
+                if s < e:
+                    arcs.append((i, self._angle_of(s), self._angle_of(e), self.bandColor(i)))
+            self._band_arcs_cache = arcs
+        return arcs
+
+    def _band_at(self, v: float) -> int:
+        """Index of the last band containing *v* (clamped), or -1."""
+        v = self._clamp(v)
+        for i in range(len(self._bands) - 1, -1, -1):
+            b = self._bands[i]
+            if b._start <= v <= b._end:
+                return i
+        return -1
+
+    def _current_color(self) -> str:
+        """Color of the value arc: its band's color, else valueColor()."""
+        i = self._band_at(self._value)
+        return self.bandColor(i) if i >= 0 else self.valueColor()
+
+    def _value_arc(self):
+        """``(a0, a1, color)`` from the fill origin to the value, a0 <= a1."""
+        a = self._angle_of(self._fill_origin())
+        b = self._angle_of(self._value)
+        return (min(a, b), max(a, b), self._current_color())
+
+    def _target_angle(self):
+        """Angle of the target marker, or None (no target / outside range)."""
+        t = self._target
+        if t is None or not self._min <= t <= self._max:
+            return None
+        return self._angle_of(t)
+
+    def _format_gauge_value(self, v: float) -> str:
+        if self._decimals < 0 or abs(v) >= 1e15:
+            text = self._format_value(v)
+        else:
+            text = f"{v:.{self._decimals}f}"
+        return text + self._unit
+
+    def _value_text(self) -> str:
+        """The value with decimals and unit, e.g. "72%"."""
+        return self._format_gauge_value(self._value)
+
+    def _tooltip(self) -> str:
+        """Hover text: "title: value (band label)" plus the target line."""
+        text = self._value_text()
+        if self._label:
+            text = f"{self._label}: {text}"
+        i = self._band_at(self._value)
+        if i >= 0 and self._bands[i]._label:
+            text += f" ({self._bands[i]._label})"
+        if self._target is not None:
+            text += f"\nTarget: {self._format_gauge_value(self._target)}"
+        return text
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(band index, label, range_text, color)`` for the
+        bands that have a label."""
+        return [(i, b._label,
+                 f"{self._format_value(b._start)}..{self._format_value(b._end)}",
+                 self.bandColor(i))
+                for i, b in enumerate(self._bands) if b._label]
+
+    def _dial_extent(self) -> float:
+        """How far the dial reaches below its center, in radii (0 for a
+        half circle, 0.5 for 240 degrees)."""
+        return max(0.0, -math.cos(math.radians(self._sweep / 2.0)))
+
+    def _dial_fit(self, width: float, height: float):
+        """``(cx, cy, r)``: the largest dial fitting a *width* x *height* box
+        (center relative to the box's top-left corner).  The box holds the
+        arc and the center; margins for tick labels are the caller's."""
+        below = self._dial_extent()
+        r = max(0.0, min(width / 2.0, height / (1.0 + below)))
+        cx = width / 2.0
+        cy = (height - r * (1.0 + below)) / 2.0 + r
+        return cx, cy, r
+
+    def _dial_hit(self, dx: float, dy: float, r: float) -> bool:
+        """True when offset (*dx*, *dy*) from the center lies on the dial
+        (inside the circle and not below the arc's lowest point)."""
+        return dx * dx + dy * dy <= r * r and dy <= r * self._dial_extent() + 1.0
+
+    def _gauge_clicked(self) -> bool:
+        """Report a click / Enter on the dial as activated."""
+        if not self.isEnabled():
+            return False
         self._post_activated()
         return True
 
