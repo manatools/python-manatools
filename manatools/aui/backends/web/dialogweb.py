@@ -448,7 +448,7 @@ class YDialogWeb(YSingleChildContainerWidget):
             logger.warning("Widget not found: %s", widget_id)
             return
 
-        # Chart clicks (YChartPie slice, YChartBar bar): the widget validates
+        # Chart clicks (YChartPie slice, YChartBar bar, YChartGauge dial): the widget validates
         # the payload and posts its own event (honouring notify()), so stop here.
         if isinstance(event_data, dict):
             if "slice" in event_data and hasattr(widget, "_handle_slice_click"):
@@ -456,6 +456,9 @@ class YDialogWeb(YSingleChildContainerWidget):
                 return
             if "bar" in event_data and hasattr(widget, "_handle_bar_click"):
                 widget._handle_bar_click(event_data["bar"])
+                return
+            if "gauge" in event_data and hasattr(widget, "_handle_gauge_click"):
+                widget._handle_gauge_click(event_data["gauge"])
                 return
 
         reason_map = {
