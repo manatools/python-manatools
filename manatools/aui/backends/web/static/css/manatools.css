@@ -1016,6 +1016,132 @@ body {
 }
 
 /* ============================================
+   Chart Gauge (inline SVG, see chartgaugeweb.py)
+   ============================================ */
+
+.mana-ychartgauge {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 8rem;
+    gap: var(--mana-spacing-xs);
+}
+
+.mana-chartgauge-title {
+    font-weight: 600;
+}
+
+.mana-chartgauge-body {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--mana-spacing-md);
+    min-height: 0;
+}
+
+.mana-ychartgauge.mana-chartgauge-legend-bottom .mana-chartgauge-body {
+    flex-direction: column;
+}
+
+.mana-chartgauge-dial {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: center;
+    min-width: 8rem;
+    align-self: stretch;
+}
+
+.mana-chartgauge-svg {
+    width: 100%;
+    height: auto;
+    max-height: 24rem;
+    cursor: pointer;
+}
+
+.mana-chartgauge-svg:focus {
+    outline: 2px solid var(--mana-text-secondary);
+    outline-offset: 2px;
+}
+
+.mana-chartgauge-track {
+    fill: var(--mana-border-color);
+}
+
+.mana-chartgauge-tick {
+    stroke: var(--mana-text-secondary);
+    stroke-width: 1;
+}
+
+.mana-chartgauge-ticklabel {
+    fill: var(--mana-text-secondary);
+    font-size: 10px;
+}
+
+.mana-chartgauge-target {
+    stroke: var(--mana-text-primary);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.mana-chartgauge-needle,
+.mana-chartgauge-hub {
+    fill: var(--mana-text-primary);
+}
+
+.mana-chartgauge-valuetext {
+    fill: var(--mana-text-primary);
+    font-weight: 600;
+}
+
+.mana-chartgauge-subtitle {
+    fill: var(--mana-text-secondary);
+}
+
+.mana-chartgauge-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    max-height: 100%;
+    flex: 0 1 auto;
+}
+
+.mana-ychartgauge.mana-chartgauge-legend-bottom .mana-chartgauge-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--mana-spacing-md);
+}
+
+.mana-chartgauge-legend-row {
+    display: flex;
+    align-items: center;
+    gap: var(--mana-spacing-xs);
+    padding: 1px 4px;
+    white-space: nowrap;
+}
+
+.mana-chartgauge-legend-range {
+    color: var(--mana-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.mana-chartgauge-swatch {
+    width: 0.9em;
+    height: 0.9em;
+    flex: 0 0 auto;
+}
+
+.mana-ychartgauge.mana-disabled {
+    opacity: 0.6;
+}
+
+.mana-ychartgauge.mana-disabled .mana-chartgauge-svg {
+    pointer-events: none;
+    cursor: default;
+}
+
+/* ============================================
    Menu Bar
    ============================================ */
 .mana-ymenubar {
