@@ -18,6 +18,7 @@ from .richtextqt import YRichTextQt
 from .htmlviewqt import YHtmlViewQt
 from .chartpieqt import YChartPieQt
 from .chartbarqt import YChartBarQt
+from .chartgaugeqt import YChartGaugeQt
 from .menubarqt import YMenuBarQt
 from .replacepointqt import YReplacePointQt
 from .intfieldqt import YIntFieldQt
@@ -53,6 +54,7 @@ __all__ = [
     "YHtmlViewQt",
     "YChartPieQt",
     "YChartBarQt",
+    "YChartGaugeQt",
     "YMenuBarQt",
     "YReplacePointQt",
     "YIntFieldQt",
