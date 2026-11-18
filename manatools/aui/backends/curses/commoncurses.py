@@ -469,14 +469,16 @@ class _ChartGlyphs:
             self.block, self.swatch, self.zero = "#", "#", "|"
             self.patterns = ("#", "=", "+", ":")
             self.ellipsis, self.up, self.down = "~", "^", "v"
+            self.track, self.strip = "-", "="
         else:
             self.block, self.swatch, self.zero = "\u2588", "\u25a0", "\u2502"
             self.patterns = ("\u2588", "\u2593", "\u2592", "\u2591")
             self.ellipsis, self.up, self.down = "\u2026", "\u2191", "\u2193"
+            self.track, self.strip = "\u2591", "\u2580"     # light shade, upper half block
 
     def all(self) -> str:
         return (self.block + self.swatch + self.zero + "".join(self.patterns)
-                + self.ellipsis + self.up + self.down)
+                + self.ellipsis + self.up + self.down + self.track + self.strip)
 
 
 _CHART_UNICODE = _ChartGlyphs(False)
