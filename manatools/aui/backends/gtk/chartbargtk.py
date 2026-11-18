@@ -560,8 +560,8 @@ class YChartBarGtk(YChartBarBase):
                 area.update_size_request()
             except Exception:
                 self._logger.exception("Failed to update size request")
+            self._update_accessible()
         return False
-        self._update_accessible()
 
     # -- common widget API --------------------------------------------------
 
