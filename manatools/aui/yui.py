@@ -350,7 +350,7 @@ from .yui_common import (
     # Base classes
     YWidget, YSingleChildContainerWidget, YSelectionWidget,
     YSimpleInputField, YItem, YTreeItem, YTableHeader, YTableItem, YTableCell,
-    YChartSlice,
+    YChartSlice, YChartBand,
     # Events
     YEvent, YWidgetEvent, YKeyEvent, YMenuEvent, YTimeoutEvent, YCancelEvent,
     # Exceptions
@@ -369,7 +369,7 @@ __all__ = [
     'YChartLegendPosition', 'YChartBarOrientation',
     'YWidget', 'YSingleChildContainerWidget', 'YSelectionWidget', 
     'YSimpleInputField', 'YItem', 'YTreeItem', 'YTableHeader', 'YTableItem', 'YTableCell',
-    'YChartSlice',
+    'YChartSlice', 'YChartBand',
     'YEvent', 'YWidgetEvent', 'YKeyEvent', 'YMenuEvent', 'YTimeoutEvent', 'YCancelEvent',
     'YUIException', 'YUIWidgetNotFoundException', 'YUINoDialogException', 'YUIInvalidWidgetException',
     'YMenuItem',
