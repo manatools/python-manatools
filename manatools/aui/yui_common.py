@@ -1910,11 +1910,22 @@ class YChartGaugeBase(YChartBase):
         half circle, 0.5 for 240 degrees)."""
         return max(0.0, -math.cos(math.radians(self._sweep / 2.0)))
 
-    def _dial_fit(self, width: float, height: float):
+    def _text_placement(self) -> str:
+        """Where the value text block goes: "below" the hub when a needle is
+        drawn, "above" the baseline for flat dials (little room under the
+        center), else "center"."""
+        if self._show_needle:
+            return "below"
+        return "above" if self._dial_extent() < 0.43 else "center"
+
+    def _dial_fit(self, width: float, height: float, below: float = None):
         """``(cx, cy, r)``: the largest dial fitting a *width* x *height* box
         (center relative to the box's top-left corner).  The box holds the
-        arc and the center; margins for tick labels are the caller's."""
-        below = self._dial_extent()
+        arc and the center; margins for tick labels are the caller's.
+        *below* overrides how far (in radii) the content reaches below the
+        center, e.g. for text under the hub."""
+        if below is None or below < self._dial_extent():
+            below = self._dial_extent()
         r = max(0.0, min(width / 2.0, height / (1.0 + below)))
         cx = width / 2.0
         cy = (height - r * (1.0 + below)) / 2.0 + r
