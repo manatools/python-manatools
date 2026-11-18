@@ -388,6 +388,8 @@
         on('.mana-ychartpie [data-slice]', 'keydown', handleChartSliceKey);
         on('.mana-ychartbar [data-bar]', 'click', handleChartBarClick);
         on('.mana-ychartbar [data-bar]', 'keydown', handleChartBarKey);
+        on('.mana-ychartgauge [data-gauge]', 'click', handleChartGaugeClick);
+        on('.mana-ychartgauge [data-gauge]', 'keydown', handleChartGaugeKey);
 
         initMenuBehavior(root);
 
@@ -581,6 +583,18 @@
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         handleChartBarClick(event);
+    }
+
+    function handleChartGaugeClick(event) {
+        const chart = event.currentTarget.closest('.mana-ychartgauge');
+        if (!chart || chart.classList.contains('mana-disabled')) return;
+        sendEvent({ type: 'event', widget_id: getWidgetId(chart), reason: 'Activated', data: { gauge: true } });
+    }
+
+    function handleChartGaugeKey(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        handleChartGaugeClick(event);
     }
 
     function handleMenuItemClick(event) {
