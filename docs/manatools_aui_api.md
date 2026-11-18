@@ -42,6 +42,21 @@ finally:
     ui.shutdown()   # NCurses only; no-op on GUI backends
 ```
 
+### NCurses terminal capabilities
+
+The NCurses backend adapts to what the terminal's terminfo entry (`TERM`)
+reports: it runs on monochrome terminals such as `vt100` (no colors, no
+cursor-visibility control) as well as on 8-, 16-, 88- and 256-color
+terminals. Charts follow the color depth and switch to ASCII glyphs where
+Unicode blocks cannot be shown; `MUI_CURSES_ASCII=1` forces ASCII glyphs,
+`MUI_CURSES_ASCII=0` forces Unicode (see §8.14e).
+
+```bash
+tput colors                       # what curses will see (-1 or 0 = no colors)
+TERM=xterm-256color python3 app.py
+MUI_CURSES_ASCII=1 python3 app.py # e.g. on a real DEC terminal or a non-UTF-8 console
+```
+
 ---
 
 ## 2. Enums
@@ -151,6 +166,27 @@ How a `YHtmlView` treats relative URLs (see §8.14b).
 class YHtmlBasePolicy(Enum):
     NoBase       = 0   # <base href> ignored; relative links reported verbatim (default)
     DocumentBase = 1   # relative links resolved against the document's <base href>
+```
+
+### YChartLegendPosition
+
+Where a chart (`YChartPie`, `YChartBar`, `YChartGauge`) places its legend (see §8.14c, §8.14d, §8.14f).
+
+```python
+class YChartLegendPosition(Enum):
+    Right  = 0   # legend right of the plot (default)
+    Bottom = 1   # legend under the plot
+    Hidden = 2   # no legend
+```
+
+### YChartBarOrientation
+
+Direction `YChartBar` bars grow in (see §8.14d).
+
+```python
+class YChartBarOrientation(Enum):
+    Vertical   = 0   # bars grow up, categories along the x axis (default)
+    Horizontal = 1   # bars grow right, categories along the y axis
 ```
 
 ---
@@ -804,6 +840,397 @@ Each `cid:` image is capped at 8 MB, a document resolves at most 256 distinct
 `cid:` values, and all inlined copies together (every reference counts) at
 32 MB; images past a limit are dropped.
 
+### 8.14c ChartPie
+
+```python
+factory.createChartPie(parent, label: str = "") -> YWidget
+```
+
+Pie or donut chart with an optional title and a legend (label, value,
+percent per slice). The model and all the math live in `YChartPieBase`
+(`yui_common.py`); backends only paint it, so values, percentages, colors
+and events are the same everywhere. Stretchable in both directions.
+
+All charts (pie, bar, gauge) derive from `YChartBase`, which provides the title
+(`setLabel`/`label`), `setLegendPosition`/`legendPosition`, the palette
+(`YChartBase.PALETTE`, Okabe-Ito, colorblind-safe), `#rrggbb` color
+validation and the Activated event.
+
+Clicking a slice or a legend row (Enter/Space on the keyboard) selects it and
+posts a `YWidgetEvent` with reason `Activated` when `notify()` is on; read
+the slice with `selectedSlice()`. Arrow keys only move the selection.
+
+```python
+# title
+w.setLabel(label: str)
+w.label()        -> str
+# slices (values: finite numbers >= 0; colors: "#rrggbb" or None = palette)
+w.addSlice(label: str, value, color: str | None = None, data=None) -> int   # index
+w.setSlices(slices)                      # YChartSlice or (label, value[, color[, data]]) tuples;
+                                         # all validated first, one redraw, clears the selection
+w.setSliceValue(index: int, value)
+w.setSliceLabel(index: int, label: str)
+w.setSliceColor(index: int, color: str | None)
+w.removeSlice(index: int)
+w.deleteAllSlices()
+w.sliceCount()   -> int
+w.slice(index)   -> YChartSlice
+w.sliceColor(index) -> str               # color actually drawn (custom or palette)
+w.total()        -> float
+w.slicePercent(index) -> float           # 0..100, 0 when the total is 0
+# look
+w.setLegendPosition(pos: YChartLegendPosition)
+w.legendPosition() -> YChartLegendPosition
+w.setShowPercent(show: bool = True)      # percent column in the legend
+w.showPercent()  -> bool
+w.setDonutRatio(ratio: float)            # hole radius / outer radius, clamped 0..0.9; 0 = pie
+w.donutRatio()   -> float
+w.setCenterText(text: str)               # shown in the hole (donut mode only)
+w.centerText()   -> str
+# selection
+w.selectedSlice() -> int                 # -1 = none
+w.setSelectedSlice(index: int)           # highlight only, no event; -1 clears
+```
+
+Invalid input raises: `ValueError` for negative/non-finite values, values
+beyond `YChartBase.MAX_VALUE` (±1e300, so sums and percentages stay finite)
+or a color that is not `#rrggbb`, `TypeError` for a `bool` value or non-int index,
+`IndexError` for an index out of range. Zero-value slices stay in the legend
+but are not drawn; a chart with no slices (or a zero total) shows "No data".
+Slices without a color cycle through the palette (`YChartBase.PALETTE`). Every setter redraws; on the web
+backend rapid changes are sent as one update.
+
+```python
+chart = factory.createChartPie(vbox, "Disk usage (GB)")
+chart.setSlices([("System", 18.5), ("Home", 42), ("Free", 29.5, "#999999")])
+chart.setDonutRatio(0.55)
+chart.setCenterText(f"{chart.total():g}")
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
+    s = chart.slice(chart.selectedSlice())
+    status.setValue(f"{s.label()}: {s.value():g} ({chart.slicePercent(chart.selectedSlice()):.1f}%)")
+```
+
+| Backend | Rendering |
+|---|---|
+| Qt | `QWidget` painted with `QPainter` (no QtCharts); hover tooltips per slice, else the help text |
+| GTK | `Gtk.DrawingArea` with cairo + PangoCairo; slice separators cut out so the theme background shows |
+| NCurses | No disc: one row per slice with color block, label, value, percent and a proportional bar; `Hidden` keeps only the bars, `Right`/`Bottom` look the same; donut center text shown under the title; colors and glyphs per terminal: §8.14e |
+| Web | Server-generated inline SVG + HTML legend (no script, labels escaped); clicks sent as `{slice: <index>}` |
+
+Demo: `test/test_chartpie.py [web|qt|gtk|ncurses]`; headless checks:
+`test/test_chartpie_{web,qt,gtk,curses}_headless.py`.
+
+### 8.14d ChartBar
+
+```python
+factory.createChartBar(parent, label: str = "") -> YWidget
+```
+
+Bar chart over **categories x series**: each category is a group of bars,
+one per series; series carry the legend entries and colors (a single series
+is a plain bar chart). Bars are side by side (grouped, default) or piled up
+(`setStacked(True)`); values may be negative (bars below the zero line). A
+value axis with rounded 1/2/5 x 10^n steps (always including 0) carries
+compact tick labels (`1.5k`, `20M`) and optional gridlines. The model and
+all the math (axis, bar geometry, hit test) live in `YChartBarBase`;
+backends only paint it. Stretchable in both directions.
+
+Clicking a bar (Enter/Space on the keyboard) selects it and posts a
+`YWidgetEvent` with reason `Activated` when `notify()` is on; read it with
+`selectedCategory()` / `selectedSeries()`. In stacked mode every segment is
+its own bar. Arrow keys only move the selection.
+
+```python
+# title / legend (from YChartBase)
+w.setLabel(label: str)
+w.setLegendPosition(pos: YChartLegendPosition)   # legend lists the series
+# series (colors: "#rrggbb" or None = palette)
+w.addSeries(name: str, color: str | None = None) -> int     # new series is 0 everywhere
+w.setSeriesName(s: int, name: str)
+w.seriesName(s)   -> str
+w.setSeriesColor(s: int, color: str | None)
+w.seriesColor(s)  -> str                 # color actually drawn
+w.removeSeries(s: int)
+w.seriesCount()   -> int
+# categories
+w.addCategory(label: str, values=None) -> int  # values[s] per series, missing = 0
+w.setCategoryLabel(c: int, label: str)
+w.categoryLabel(c) -> str
+w.removeCategory(c: int)
+w.categoryCount()  -> int
+# values (finite numbers, negatives allowed)
+w.setValue(c: int, s: int, value)
+w.value(c, s)      -> float
+w.categoryTotal(c) -> float              # sum over the series
+w.setData(categories, series, rows=None) # bulk replace, one redraw, selection cleared;
+                                         # series: names or (name, color); rows[c][s],
+                                         # short or missing rows padded with 0
+w.deleteAllData()
+# look
+w.setOrientation(o: YChartBarOrientation)
+w.orientation()  -> YChartBarOrientation
+w.setStacked(stacked: bool = True)
+w.stacked()      -> bool
+w.setShowValues(show: bool = True)       # number at each bar end (default False)
+w.showValues()   -> bool
+w.setShowGrid(show: bool = True)         # gridlines (default True); axis always drawn
+w.showGrid()     -> bool
+# selection
+w.selectedCategory() -> int              # -1 = none
+w.selectedSeries()   -> int
+w.setSelectedBar(c: int, s: int)         # highlight only, no event; (-1, -1) clears
+```
+
+Invalid input raises like `YChartPie`: `ValueError` (non-finite value or
+beyond ±1e300, bad color, too many values or rows), `TypeError` (`bool` value, non-int
+index, wrong enum), `IndexError` (index out of range). Zero values are kept
+but not drawn; a chart without categories or series shows "No data".
+Removing a series or category keeps the selection on the same bar (or
+clears it if that bar went away). With more bars than pixels (thousands of
+categories) Qt/GTK draw bars thinner than a pixel merged per pixel line and
+a click selects the nearest bar within one pixel; value labels are left out
+on bars narrower than 3 px. Every setter redraws; on the web backend
+rapid changes are sent as one update.
+
+```python
+chart = factory.createChartBar(vbox, "Load (%)")
+chart.setData(["Jan", "Feb", "Mar"],
+              ["CPU", "RAM", ("Swap", "#cc0000")],
+              [[30, 20, 5], [45, 25, -8], [28, 40, 12]])
+chart.setShowValues(True)
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == chart:
+    c, s = chart.selectedCategory(), chart.selectedSeries()
+    status.setValue(f"{chart.categoryLabel(c)} / {chart.seriesName(s)}: {chart.value(c, s):g}")
+```
+
+| Backend | Rendering |
+|---|---|
+| Qt | `QWidget` painted with `QPainter` (no QtCharts); real font metrics for axis/labels; tooltip per bar, else the help text |
+| GTK | `Gtk.DrawingArea` with cairo + PangoCairo, same layout as Qt |
+| NCurses | Always horizontal block bars: grouped = one row per (category, series), stacked = one row per category with colored segments (fill patterns without colors); zero column `│` with negatives on its left; axis row with min / 0 / max; one-line series legend; value column shows stacked totals; colors and glyphs per terminal: §8.14e |
+| Web | Server-generated inline SVG (axis, grid, bars, value labels) + HTML legend; text widths are estimated, crowded category labels are thinned out; clicks sent as `{bar: [c, s]}` |
+
+Keyboard (Qt/GTK): the two arrows along the category axis move between
+categories, the other two between series. NCurses: Up/Down walk the rows,
+Left/Right the segments of a stacked row.
+
+Demo: `test/test_chartbar.py [web|qt|gtk|ncurses]`; headless checks:
+`test/test_chartbar_model_headless.py`, `test/test_chartbar_{web,qt,gtk,curses}_headless.py`.
+
+### 8.14e Charts on NCurses: colors, glyphs and monochrome terminals
+
+`YChartPie`, `YChartBar` and `YChartGauge` are drawn with colored block
+characters in a terminal. What they look like depends on two things the terminal reports:
+how many colors it has (`curses.COLORS`, the terminfo `colors` value shown
+by `tput colors`) and whether it can show the Unicode block glyphs.
+
+#### Color depth
+
+| Terminal colors | Examples | How chart colors are chosen |
+|---|---|---|
+| none | `vt100`, `vt220` | No color. Rows are identified by their labels (pie: slice label; grouped bars: category + series column), stacked bar segments by fill patterns, the selection by reverse video (focused) or bold |
+| 8 | `xterm`, `linux` console, `screen`, `rxvt` | Fixed distinct ANSI colors for the palette (table below); bright yellow is drawn as yellow + bold. Custom colors: nearest of the xterm 16 ANSI colors, bright ones as base color + bold |
+| 16 | `xterm-16color` | Same fixed palette colors using the bright half (8-15) instead of bold; custom colors: nearest xterm ANSI color |
+| 88 | `xterm-88color`, `rxvt-unicode` | 4x4x4 color cube (16-79); fixed distinct cube entries for the palette (the cube is too coarse for nearest-color: orange and vermillion would collide); custom colors: nearest cube entry |
+| 256 | `xterm-256color`, `screen-256color`, `rxvt-unicode-256color` | 6x6x6 color cube (16-231), nearest level per channel, for palette and custom colors |
+| 16777216 (direct) | `xterm-direct` | The exact RGB value of every color (numbers 0-7 stay ANSI, so near-black `#000000`-`#000007` becomes `#000008`) |
+
+Terminals between 16 and 88 colors are treated as 16-color terminals,
+between 256 and direct color as 256-color terminals. A true-color terminal
+only gets exact colors when `TERM` names a direct-color entry; with
+`TERM=xterm-256color` it is driven as a 256-color terminal. Black is never chosen as a
+foreground color (it would be invisible on dark backgrounds); greys map
+only to the grey entries (dark grey, light grey, white) so a near-black
+does not turn red. Backgrounds keep the terminal default
+(`use_default_colors()`), or black where the terminal has no default color.
+
+The default chart palette (`YChartBase.PALETTE`) on each depth:
+
+| # | Palette color | 8 colors | 16 colors | 88 colors | 256 colors | direct |
+|---|---|---|---|---|---|---|
+| 0 | orange `#e69f00` | yellow | 3 yellow | 68 | 178 | exact |
+| 1 | sky blue `#56b4e9` | cyan | 14 bright cyan | 43 | 74 | exact |
+| 2 | bluish green `#009e73` | green | 2 green | 21 | 35 | exact |
+| 3 | yellow `#f0e442` | yellow + bold | 11 bright yellow | 72 | 221 | exact |
+| 4 | blue `#0072b2` | blue | 4 blue | 22 | 25 | exact |
+| 5 | vermillion `#d55e00` | red | 1 red | 48 | 166 | exact |
+| 6 | reddish purple `#cc79a7` | magenta | 5 magenta | 53 | 175 | exact |
+| 7 | grey `#999999` | white | 7 white (light grey) | 37 | 102 | exact |
+
+Charts with more than 8 slices or series cycle through the palette, so
+entries 8 and up repeat the colors above (labels still tell them apart).
+
+Color pairs are shared by every chart, one per terminal color actually
+used, and taken from the top of the terminal's pair range downwards
+(`COLOR_PAIRS - 1`, capped at 32767), leaving the low pair ids to other
+widgets. On an 8-color terminal with 64 pairs the palette needs 7 pairs
+(57-63). Pair ids below 32 are never taken; colors that would need one are
+drawn without color, exactly like on a monochrome terminal (only charts
+with many distinct custom colors on a 64-pair terminal can get there).
+
+#### Glyphs
+
+| Element | Unicode | ASCII |
+|---|---|---|
+| bar / slice block | `█` | `#` |
+| legend swatch | `■` | `#` |
+| stacked segments without color (series 0, 1, 2, 3, ...) | `█ ▓ ▒ ░` | `# = + :` |
+| zero column (bar chart with negative values), gauge target marker | `│` | `\|` |
+| gauge track (meter part beyond the value) | `░` | `-` |
+| gauge band strip (with colors) | `▀` | `=` |
+| cut label, "more rows" marker | `…`, `↑N ↓N` | `~`, `^N vN` |
+| key hints in the footer | `↑↓=Move` | `Up/Down=Move` |
+
+ASCII glyphs are used when `MUI_CURSES_ASCII` is `1`/`yes`/`true`/`on`,
+when `TERM` is a DEC VT entry (`vt52`, `vt100`, `vt220`, ... — real DEC
+terminals have no Unicode), or when the window's output encoding cannot
+encode the Unicode glyphs. `MUI_CURSES_ASCII=0`/`no`/`false`/`off` forces
+Unicode, e.g. for `TERM=vt100` inside a modern UTF-8 terminal emulator.
+Python usually writes UTF-8 even under a C or Latin-1 locale, so a
+terminal emulator that is *not* UTF-8 is not detected automatically: set
+`MUI_CURSES_ASCII=1` there. The dialog frame uses curses line drawing
+(terminfo ACS) and works everywhere; texts of other widgets are unaffected.
+
+#### Monochrome terminals in practice
+
+- `YChartPie`: one row per slice with label, value, percent and bar, so
+  slices are readable without color; the selected row is reversed when the
+  chart has focus, bold otherwise.
+- `YChartBar`, grouped: one row per (category, series) with a series column
+  as soon as there are two series; colors are not needed.
+- `YChartBar`, stacked: one row per category; segments and the matching
+  legend entries use the fill patterns above. The selected segment is
+  reversed (focused) or bold.
+- `YChartGauge`: the value is printed as text, so colors are not needed;
+  without colors the band strip and the legend swatches use the shaded
+  patterns (band 0, 1, 2: `▓ ▒ ░`, ASCII `= + :`) so no band looks like
+  the solid value bar. The value row is reversed when the gauge has focus.
+- Attributes: bold, reverse and underline are available on `vt100`; dim is
+  not, so a disabled chart looks like an enabled one there (it still takes
+  no focus and ignores keys).
+- On 8-color terminals bright yellow relies on the terminal rendering bold
+  as bright; terminals that only thicken the font show palette entries 0
+  and 3 (orange, yellow) as the same yellow.
+
+```bash
+TERM=vt100 MUI_BACKEND=ncurses python3 test/test_chartbar.py            # monochrome, ASCII
+TERM=xterm MUI_BACKEND=ncurses python3 test/test_chartbar.py            # 8 colors
+TERM=rxvt-unicode MUI_BACKEND=ncurses python3 test/test_chartbar.py     # 88 colors
+TERM=xterm-256color MUI_BACKEND=ncurses python3 test/test_chartbar.py   # 256 colors
+```
+
+Headless checks of the mapping and glyph rules:
+`test/test_chart_curses_colors_headless.py`.
+
+### 8.14f ChartGauge
+
+```python
+factory.createChartGauge(parent, label: str = "") -> YWidget
+```
+
+A radial dial showing one value inside a range: a grey track, a filled
+value arc, optional colored **bands** (thresholds such as normal / high /
+critical) on a thin outer ring, ticks with labels on rounded 1/2/5 x 10^n
+steps, an optional **target** marker and needle, and the value as large
+text (with unit and fixed decimals) plus an optional subtitle. The dial
+covers `sweepAngle()` degrees (180 = half circle, default 240, up to 300),
+symmetric around 12 o'clock. The model and all the math (angles, ticks,
+band clipping, colors, fitting the dial in a box, hit test) live in
+`YChartGaugeBase`; backends only paint it. Stretchable in both directions
+(GUI and web).
+
+The value arc starts at `minimum()`, or at 0 when the range spans 0 (so a
+-50..50 gauge fills from the middle), and takes the color of the band
+containing the value (the last one when bands overlap), else
+`valueColor()`. A value outside the range is kept as given: the dial stops
+at the range end, the text shows the real value. The legend lists the bands
+that have a label; without labelled bands there is no legend.
+
+Clicking the dial (Enter/Space on the keyboard) posts a `YWidgetEvent` with
+reason `Activated` when `notify()` is on. There is no selection.
+
+```python
+# title / legend (from YChartBase)
+w.setLabel(label: str)
+w.setLegendPosition(pos: YChartLegendPosition)   # legend lists the labelled bands
+# range and value (finite numbers within ±1e300)
+w.setRange(minimum, maximum)             # minimum < maximum; default 0..100
+w.minimum() -> float
+w.maximum() -> float
+w.setValue(value)                        # kept as given, drawn clamped to the range
+w.value()   -> float
+# value text
+w.setUnit(text: str)                     # appended verbatim: "%" -> "72%", " GB" -> "3.4 GB"
+w.unit()    -> str
+w.setDecimals(n: int)                    # 0..6 fixed decimals; -1 = automatic (default)
+w.decimals() -> int
+w.setShowValue(show: bool = True)        # value text in the dial (default True)
+w.showValue() -> bool
+w.setSubtitle(text: str)                 # small line under the value ("" = none)
+w.subtitle() -> str
+# look
+w.setSweepAngle(degrees)                 # 180..300, default 240
+w.sweepAngle() -> float
+w.setShowNeedle(show: bool = True)       # needle pointing at the value (default False)
+w.showNeedle() -> bool
+w.setShowTicks(show: bool = True)        # ticks + labels (default True)
+w.showTicks() -> bool
+w.setValueColor(color: str | None)       # arc color outside every band; None = default blue
+w.valueColor() -> str                    # color actually used
+# target marker
+w.setTarget(value | None)                # None removes it; outside the range: kept, not drawn
+w.target()  -> float | None
+# bands (colors: "#rrggbb" or None = band palette: green, orange, vermillion, ...)
+w.addBand(start, end, color: str | None = None, label: str = "") -> int   # start < end
+w.setBands(bands)                        # YChartBand or (start, end[, color[, label]]) tuples;
+                                         # all validated first, one redraw
+w.band(index)  -> YChartBand
+w.bandCount()  -> int
+w.bandColor(index) -> str                # color actually drawn
+w.removeBand(index: int)
+w.deleteAllBands()
+```
+
+Bands may extend past the range (they are clipped) and may overlap (the
+later band wins). Ticks always label both range ends; an inner tick closer
+than half a step to an end is left out. Invalid input raises like the other
+charts: `ValueError` (non-finite or out-of-limit number, `minimum >= maximum`,
+band `start >= end`, sweep or decimals out of range, bad color),
+`TypeError` (`bool` number, non-int decimals or index), `IndexError` (band
+index out of range). Every setter redraws; on the web backend rapid changes
+are sent as one update.
+
+```python
+gauge = factory.createChartGauge(vbox, "CPU load")
+gauge.setBands([(0, 60, None, "Normal"), (60, 85, None, "High"), (85, 100, None, "Critical")])
+gauge.setUnit("%")
+gauge.setDecimals(0)
+gauge.setTarget(75)
+gauge.setValue(cpu_percent())
+...
+ev = dlg.waitForEvent()
+if ev.eventType() == yui.YEventType.WidgetEvent and ev.widget() == gauge:
+    status.setValue(f"{gauge.label()}: {gauge.value():g}{gauge.unit()}")
+```
+
+Text placement: the value block sits in the middle of the dial; with the
+needle it moves under the hub, and on flat dials (sweep below about 230
+degrees) it sits just above the baseline.
+
+| Backend | Rendering |
+|---|---|
+| Qt | `QWidget` painted with `QPainter` (no QtCharts); value text scaled to the dial; tooltip "title: value (band)" plus the target over the dial, else the help text |
+| GTK | `Gtk.DrawingArea` with cairo + PangoCairo, same layout as Qt |
+| NCurses | No dial: a horizontal meter — value + subtitle row, band strip, value bar with target marker `│`, tick labels, one-line legend; rows without content are left out, `sweepAngle()` and `showNeedle()` have no effect; fixed height (not stretchable vertically); colors and glyphs per terminal: §8.14e |
+| Web | Server-generated inline SVG (one focusable button) + HTML legend; text widths are estimated; clicks sent as `{gauge: true}` |
+
+Demo: `test/test_chartgauge.py [web|qt|gtk|ncurses]`; headless checks:
+`test/test_chartgauge_model_headless.py`, `test/test_chartgauge_{web,qt,gtk,curses}_headless.py`.
+
 ### 8.15 LogView
 
 ```python
@@ -1170,6 +1597,32 @@ row.iconName(index: int = 0) -> str
 row.checked(index: int = 0)  -> bool
 ```
 
+### 9.7 YChartSlice
+
+One slice of a `YChartPie` (§8.14c). Read-only: change slices through the
+chart setters so it redraws.
+
+```python
+YChartSlice(label: str = "", value=0, color: str | None = None, data=None)
+s.label() -> str
+s.value() -> float
+s.color() -> str | None     # custom "#rrggbb", None when the palette is used
+s.data()                    # application payload
+```
+
+### 9.8 YChartBand
+
+One colored range (threshold band) of a `YChartGauge` (§8.14f). Read-only:
+change bands through the gauge setters so it redraws.
+
+```python
+YChartBand(start, end, color: str | None = None, label: str = "")   # start < end
+b.start() -> float
+b.end()   -> float
+b.color() -> str | None     # custom "#rrggbb", None when the band palette is used
+b.label() -> str            # shown in the legend; "" = not listed
+```
+
 ---
 
 ## 10. Layout Reference
@@ -1279,6 +1732,9 @@ if app.isTextMode():
 | `createImage` | Full image rendering (GdkPixbuf; scales on size-allocate when stretchable) | Full image rendering (QLabel+QPixmap; scales on resizeEvent when stretchable) | Unicode box frame with `fallBackName` text |
 | `createRichText` | HTML via WebKit / Gtk.Label | QTextBrowser | Plain text fallback |
 | `createHtmlView` | WebKitGTK 6.0, else Pango label | QtWebEngine, else QTextBrowser | Flattened text with link navigation |
+| `createChartPie` | cairo on Gtk.DrawingArea | QPainter | Bar list (one row per slice) |
+| `createChartBar` | cairo on Gtk.DrawingArea | QPainter | Horizontal block bars (orientation ignored) |
+| `createChartGauge` | cairo on Gtk.DrawingArea | QPainter | Horizontal meter (sweep and needle ignored) |
 | Scrollbar auto-scroll | Supported | Supported | Limited |
 | `shutdown()` required | No | No | Yes |
 

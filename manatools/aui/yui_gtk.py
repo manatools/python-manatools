@@ -995,6 +995,21 @@ class YWidgetFactoryGtk:
         from .backends.gtk.htmlviewgtk import YHtmlViewGtk
         return YHtmlViewGtk(parent, html)
 
+    def createChartPie(self, parent, label: str = ""):
+        """Create a pie / donut chart widget (GTK backend)."""
+        from .backends.gtk.chartpiegtk import YChartPieGtk
+        return YChartPieGtk(parent, label)
+
+    def createChartBar(self, parent, label: str = ""):
+        """Create a bar chart widget (GTK backend)."""
+        from .backends.gtk.chartbargtk import YChartBarGtk
+        return YChartBarGtk(parent, label)
+
+    def createChartGauge(self, parent, label: str = ""):
+        """Create a gauge (radial dial) widget (GTK backend)."""
+        from .backends.gtk.chartgaugegtk import YChartGaugeGtk
+        return YChartGaugeGtk(parent, label)
+
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)

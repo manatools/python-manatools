@@ -4,7 +4,9 @@ Common base classes and definitions shared across all backends
 
 from enum import Enum
 import fnmatch
+import math
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -203,6 +205,17 @@ class YHtmlBasePolicy(Enum):
     """
     NoBase = 0
     DocumentBase = 1
+
+class YChartLegendPosition(Enum):
+    """Where a chart places its legend relative to the plot."""
+    Right = 0
+    Bottom = 1
+    Hidden = 2
+
+class YChartBarOrientation(Enum):
+    """Direction YChartBar bars grow in."""
+    Vertical = 0      # bars grow up, categories along the x axis
+    Horizontal = 1    # bars grow right, categories along the y axis
 
 # Exceptions
 class YUIException(Exception):
@@ -748,6 +761,1186 @@ class YHtmlViewBase(YWidget):
             dlg = self.findDialog()
             if dlg is not None:
                 dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+        return True
+
+class YChartBase(YWidget):
+    """Shared base of the chart widgets (YChartPie, YChartBar, YChartGauge).
+
+    Holds what every chart has: a title, a legend position, the color
+    palette, input validation, value formatting and the Activated event.
+    Every model change ends in ``_apply_chart()``, the single backend
+    redraw hook.  Charts are stretchable in both directions.
+    """
+
+    # Okabe-Ito colorblind-safe palette (black replaced by grey so it stays
+    # visible on dark themes).  Cycled for entries without a custom color.
+    PALETTE = (
+        "#e69f00", "#56b4e9", "#009e73", "#f0e442",
+        "#0072b2", "#d55e00", "#cc79a7", "#999999",
+    )
+
+    _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+    # Largest accepted magnitude: sums, scaling to 360 degrees or 100 percent
+    # and axis spans of such values stay finite.
+    MAX_VALUE = 1e300
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._label = "" if label is None else str(label)
+        self._legend_position = YChartLegendPosition.Right
+        self._version = 0           # bumped on every model change
+        super().__init__(parent)
+        self.setStretchable(YUIDimension.YD_HORIZ, True)
+        self.setStretchable(YUIDimension.YD_VERT, True)
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_number(value, allow_negative: bool = False, what: str = "value") -> float:
+        if isinstance(value, bool):
+            raise TypeError(f"{what} must be a number, not bool")
+        value = float(value)
+        if not math.isfinite(value) or abs(value) > YChartBase.MAX_VALUE:
+            raise ValueError(f"{what} must be finite and within "
+                             f"+/-{YChartBase.MAX_VALUE:g}, got {value!r}")
+        if value < 0 and not allow_negative:
+            raise ValueError(f"{what} must be >= 0, got {value!r}")
+        return value
+
+    @staticmethod
+    def _check_color(color):
+        """``"#rrggbb"`` normalized to lowercase, or None ("use the palette")."""
+        if color is None or color == "":
+            return None
+        if not isinstance(color, str) or not YChartBase._COLOR_RE.match(color):
+            raise ValueError(f"color must be '#rrggbb', got {color!r}")
+        return color.lower()
+
+    @staticmethod
+    def _check_index_in(index, count: int, what: str = "index") -> int:
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise TypeError(f"{what} must be an int")
+        if not 0 <= index < count:
+            raise IndexError(f"{what} {index} out of range")
+        return index
+
+    # -- title and legend ---------------------------------------------------
+
+    def setLabel(self, label: str):
+        self._label = "" if label is None else str(label)
+        self._apply_chart()
+
+    def label(self) -> str:
+        return self._label
+
+    def setLegendPosition(self, position: YChartLegendPosition):
+        if not isinstance(position, YChartLegendPosition):
+            raise TypeError("position must be a YChartLegendPosition")
+        self._legend_position = position
+        self._apply_chart()
+
+    def legendPosition(self) -> YChartLegendPosition:
+        return self._legend_position
+
+    # -- backend hooks ------------------------------------------------------
+
+    def _apply_chart(self):
+        """Redraw the backend widget from the current model."""
+        pass
+
+    def _apply_selection(self, old):
+        """Only the selection changed (from *old*); backends may update just
+        the highlight.  Default: full redraw."""
+        self._apply_chart()
+
+    # -- shared internals ---------------------------------------------------
+
+    def _invalidate_caches(self):
+        """Drop data-derived caches (subclasses extend)."""
+        pass
+
+    def _chart_changed(self):
+        """Called by every data mutator: new version, caches dropped, redraw."""
+        self._version += 1
+        self._invalidate_caches()
+        self._apply_chart()
+
+    def _palette_color(self, index: int) -> str:
+        return self.PALETTE[index % len(self.PALETTE)]
+
+    @staticmethod
+    def _format_value(value: float) -> str:
+        a = abs(value)
+        if a >= 1e15 or (0 < a < 0.01):
+            return f"{value:.6g}"
+        if value == int(value):
+            return str(int(value))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+
+    @staticmethod
+    def _nice_step(raw: float) -> float:
+        """1/2/5 x 10^n step nearest to *raw* (so the axis gets ~4-8 steps)."""
+        exp = math.floor(math.log10(raw))
+        base = 10.0 ** exp
+        f = raw / base
+        if f < 1.5:
+            return base
+        if f < 3.0:
+            return 2.0 * base
+        if f < 7.0:
+            return 5.0 * base
+        return 10.0 * base
+
+    @staticmethod
+    def _format_tick(value: float) -> str:
+        """Compact axis label: 0, 2.5, 1.5k, 20M, -3G."""
+        if value == 0:
+            return "0"
+        a = abs(value)
+        if a >= 1e15:
+            return f"{value:.3g}"
+        for limit, suffix in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
+            if a >= limit:
+                return f"{value / limit:.3g}{suffix}"
+        return f"{value:.6g}"
+
+    def _post_activated(self):
+        """Post YWidgetEvent(Activated) when notify() is on."""
+        if self.notify():
+            dlg = self.findDialog()
+            if dlg is not None:
+                dlg._post_event(YWidgetEvent(self, YEventReason.Activated))
+
+class YChartSlice:
+    """One slice of a YChartPie: label, non-negative value, optional color
+    (``"#rrggbb"``, None means "use the palette") and an application payload.
+
+    Read-only for applications: change slices through the YChartPie setters
+    so the chart redraws.
+    """
+
+    def __init__(self, label="", value=0, color=None, data=None):
+        self._label = "" if label is None else str(label)
+        self._value = YChartPieBase._check_value(value)
+        self._color = YChartPieBase._check_color(color)
+        self._data = data
+
+    def label(self) -> str:
+        return self._label
+
+    def value(self) -> float:
+        return self._value
+
+    def color(self):
+        """Custom color as ``"#rrggbb"``, or None when the palette is used."""
+        return self._color
+
+    def data(self):
+        return self._data
+
+class YChartPieBase(YChartBase):
+    """Shared model of the YChartPie widget.
+
+    Holds the slices and does all the math (percentages, angles, hit test,
+    legend text), so a backend only paints ``_geometry()`` / ``_legend_rows()``
+    and reports clicks through ``_slice_clicked()``.  Title, legend position,
+    palette and the redraw hook ``_apply_chart()`` come from YChartBase.
+
+    Angles are in degrees, 0 at 12 o'clock, growing clockwise.
+
+    Clicking a slice selects it (selectedSlice()) and posts a YWidgetEvent
+    with reason Activated (when notify() is on).
+    """
+
+    MAX_DONUT_RATIO = 0.9
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._slices = []
+        self._selected = -1
+        self._show_percent = True
+        self._donut_ratio = 0.0
+        self._center_text = ""
+        self._geometry_cache = None
+        self._total_cache = None
+        self._legend_cache = None
+        super().__init__(parent, label)
+
+    def widgetClass(self):
+        return "YChartPie"
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_value(value) -> float:
+        return YChartBase._check_number(value, False, "slice value")
+
+    def _check_index(self, index) -> int:
+        return self._check_index_in(index, len(self._slices), "slice index")
+
+    # -- slices -------------------------------------------------------------
+
+    def addSlice(self, label, value, color=None, data=None) -> int:
+        """Append a slice and return its index."""
+        self._slices.append(YChartSlice(label, value, color, data))
+        self._chart_changed()
+        return len(self._slices) - 1
+
+    def setSlices(self, slices):
+        """Replace all slices at once (one redraw).
+
+        *slices* holds YChartSlice objects or ``(label, value[, color[, data]])``
+        tuples.  Everything is validated before the chart changes.
+        """
+        new = []
+        for s in slices or ():
+            if isinstance(s, YChartSlice):
+                new.append(s)
+            else:
+                new.append(YChartSlice(*s))
+        self._slices = new
+        self._selected = -1
+        self._chart_changed()
+
+    def setSliceValue(self, index: int, value):
+        s = self._slices[self._check_index(index)]
+        s._value = self._check_value(value)
+        self._chart_changed()
+
+    def setSliceLabel(self, index: int, label):
+        s = self._slices[self._check_index(index)]
+        s._label = "" if label is None else str(label)
+        self._chart_changed()
+
+    def setSliceColor(self, index: int, color):
+        """Set a custom ``"#rrggbb"`` color, or None to go back to the palette."""
+        s = self._slices[self._check_index(index)]
+        s._color = self._check_color(color)
+        self._chart_changed()
+
+    def removeSlice(self, index: int):
+        del self._slices[self._check_index(index)]
+        if self._selected == index:
+            self._selected = -1
+        elif self._selected > index:
+            self._selected -= 1
+        self._chart_changed()
+
+    def deleteAllSlices(self):
+        self._slices = []
+        self._selected = -1
+        self._chart_changed()
+
+    def sliceCount(self) -> int:
+        return len(self._slices)
+
+    def slice(self, index: int) -> YChartSlice:
+        return self._slices[self._check_index(index)]
+
+    def sliceColor(self, index: int) -> str:
+        """Color the slice is drawn with: custom one, else from PALETTE."""
+        s = self._slices[self._check_index(index)]
+        return s._color or self._palette_color(index)
+
+    def total(self) -> float:
+        total = self._total_cache
+        if total is None:
+            total = self._total_cache = math.fsum(s._value for s in self._slices)
+        return total
+
+    def slicePercent(self, index: int) -> float:
+        """Share of the slice in the total, 0..100 (0 when the total is 0)."""
+        s = self._slices[self._check_index(index)]
+        total = self.total()
+        return s._value * 100.0 / total if total > 0 else 0.0
+
+    # -- look ---------------------------------------------------------------
+
+    def setShowPercent(self, show: bool = True):
+        """Show (True, default) or hide the percent column of the legend."""
+        self._show_percent = bool(show)
+        self._apply_chart()
+
+    def showPercent(self) -> bool:
+        return self._show_percent
+
+    def setDonutRatio(self, ratio: float):
+        """Inner hole radius as a fraction of the outer one; 0 = full pie.
+
+        Clamped to 0..MAX_DONUT_RATIO.
+        """
+        ratio = float(ratio)
+        if not math.isfinite(ratio):
+            raise ValueError("donut ratio must be finite")
+        self._donut_ratio = min(max(ratio, 0.0), self.MAX_DONUT_RATIO)
+        self._apply_chart()
+
+    def donutRatio(self) -> float:
+        return self._donut_ratio
+
+    def setCenterText(self, text: str):
+        """Text in the donut hole (not shown when donutRatio() is 0)."""
+        self._center_text = "" if text is None else str(text)
+        self._apply_chart()
+
+    def centerText(self) -> str:
+        return self._center_text
+
+    # -- selection ----------------------------------------------------------
+
+    def selectedSlice(self) -> int:
+        """Index of the selected (last clicked) slice, -1 if none."""
+        return self._selected
+
+    def setSelectedSlice(self, index: int):
+        """Highlight *index* (-1 clears) without posting an event."""
+        if index != -1:
+            self._check_index(index)
+        old, self._selected = self._selected, index
+        if old != index:
+            self._apply_selection(old)
+
+    # -- shared internals ---------------------------------------------------
+
+    def _invalidate_caches(self):
+        self._geometry_cache = None
+        self._total_cache = None
+        self._legend_cache = None
+
+    def _geometry(self) -> list:
+        """Drawable slices as ``(index, start_deg, sweep_deg, color)``.
+
+        Zero-value slices are left out; empty when the total is 0 (backends
+        then draw an empty ring and "No data").
+        """
+        geom = self._geometry_cache
+        if geom is None:
+            geom = []
+            total = self.total()
+            if total > 0 and math.isfinite(total):
+                start = 0.0
+                for i, s in enumerate(self._slices):
+                    if s._value <= 0:
+                        continue
+                    sweep = s._value * 360.0 / total
+                    geom.append((i, start, sweep, self.sliceColor(i)))
+                    start += sweep
+            self._geometry_cache = geom
+        return geom
+
+    def _slice_at(self, dx: float, dy: float, radius: float) -> int:
+        """Slice under a point at (*dx*, *dy*) from the center, screen
+        coordinates (y grows downward), on a pie of *radius*; -1 if none."""
+        if radius <= 0:
+            return -1
+        r = math.hypot(dx, dy)
+        if r > radius or r < radius * self._donut_ratio:
+            return -1
+        angle = math.degrees(math.atan2(dx, -dy)) % 360.0
+        for index, start, sweep, _color in self._geometry():
+            if start <= angle < start + sweep:
+                return index
+        geom = self._geometry()
+        # Rounding can leave angle a hair past the last slice end.
+        return geom[-1][0] if geom else -1
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(index, label, value_text, percent_text, color)``;
+        percent_text is "" when showPercent() is off.  Cached until the data
+        or showPercent() changes; callers must not modify it."""
+        cached = self._legend_cache
+        if cached is not None and cached[0] == self._show_percent:
+            return cached[1]
+        total = self.total()
+        rows = []
+        for i, s in enumerate(self._slices):
+            pct = ""
+            if self._show_percent:
+                pct = f"{(s._value * 100.0 / total) if total > 0 else 0.0:.1f}%"
+            rows.append((i, s._label, self._format_value(s._value), pct,
+                         self.sliceColor(i)))
+        self._legend_cache = (self._show_percent, rows)
+        return rows
+
+    def _slice_tooltip(self, index: int) -> str:
+        """Hover text for a slice: "label: value (pct%)"."""
+        s = self._slices[index]
+        return (f"{s._label}: {self._format_value(s._value)} "
+                f"({self.slicePercent(index):.1f}%)")
+
+    def _slice_clicked(self, index) -> bool:
+        """Select the index-th slice and report it as activated."""
+        try:
+            index = int(index)
+        except (TypeError, ValueError):
+            return False
+        if not 0 <= index < len(self._slices):
+            return False
+        old, self._selected = self._selected, index
+        if old != index:
+            self._apply_selection(old)
+        self._post_activated()
+        return True
+
+class YChartBarBase(YChartBase):
+    """Shared model of the YChartBar widget: categories x series.
+
+    Each category is one group of bars, one bar per series; series carry the
+    legend entries and colors.  Bars are side by side (grouped) or piled up
+    (setStacked(True)); values may be negative (bars below the zero line).
+
+    All the math lives here so backends only map units to pixels:
+
+    - ``_value_axis()`` -> (vmin, vmax, ticks): "nice" range including 0;
+    - ``_bar_geometry()`` -> (c, s, u0, u1, v0, v1, color) per non-zero bar,
+      where u0..u1 is the position along the category axis in 0..1 and
+      v0 -> v1 the data interval from the baseline to the bar end;
+    - ``_bar_at(u, v)`` -> (c, s) hit test in the same units.
+
+    Clicking a bar selects (category, series) and posts a YWidgetEvent with
+    reason Activated (when notify() is on).
+    """
+
+    GROUP_FILL = 0.8        # share of a category slot covered by its bars
+    _TICK_TARGET = 5        # wanted number of axis steps
+    _AXIS_LIMIT = 1e306     # axis span clamp: stacked sums stay drawable
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._series = []           # [[name, color or None]]
+        self._categories = []       # [label]
+        self._rows = []             # [category][series] -> float
+        self._orientation = YChartBarOrientation.Vertical
+        self._stacked = False
+        self._show_values = False
+        self._show_grid = True
+        self._sel = (-1, -1)
+        self._geometry_cache = None
+        self._axis_cache = None
+        super().__init__(parent, label)
+
+    def widgetClass(self):
+        return "YChartBar"
+
+    # -- validation ---------------------------------------------------------
+
+    @staticmethod
+    def _check_bar_value(value) -> float:
+        return YChartBase._check_number(value, True, "bar value")
+
+    def _check_series(self, s) -> int:
+        return self._check_index_in(s, len(self._series), "series index")
+
+    def _check_category(self, c) -> int:
+        return self._check_index_in(c, len(self._categories), "category index")
+
+    def _check_row(self, values, width: int) -> list:
+        values = [] if values is None else [self._check_bar_value(v) for v in values]
+        if len(values) > width:
+            raise ValueError(f"{len(values)} values for {width} series")
+        return values + [0.0] * (width - len(values))
+
+    @staticmethod
+    def _series_entry(item) -> list:
+        if isinstance(item, (tuple, list)):
+            if not 1 <= len(item) <= 2:
+                raise ValueError("series must be name or (name, color)")
+            name, color = item[0], (item[1] if len(item) > 1 else None)
+        else:
+            name, color = item, None
+        return ["" if name is None else str(name), YChartBase._check_color(color)]
+
+    # -- series -------------------------------------------------------------
+
+    def addSeries(self, name, color=None) -> int:
+        """Append a series (a bar in every category, value 0); return its index."""
+        self._series.append(self._series_entry((name, color)))
+        for row in self._rows:
+            row.append(0.0)
+        self._chart_changed()
+        return len(self._series) - 1
+
+    def setSeriesName(self, s: int, name):
+        self._series[self._check_series(s)][0] = "" if name is None else str(name)
+        self._chart_changed()
+
+    def seriesName(self, s: int) -> str:
+        return self._series[self._check_series(s)][0]
+
+    def setSeriesColor(self, s: int, color):
+        """Set a custom ``"#rrggbb"`` color, or None to go back to the palette."""
+        self._series[self._check_series(s)][1] = self._check_color(color)
+        self._chart_changed()
+
+    def seriesColor(self, s: int) -> str:
+        """Color the series is drawn with: custom one, else from PALETTE."""
+        return self._series[self._check_series(s)][1] or self._palette_color(s)
+
+    def removeSeries(self, s: int):
+        self._check_series(s)
+        del self._series[s]
+        for row in self._rows:
+            del row[s]
+        c, sel = self._sel
+        if sel == s:
+            self._sel = (-1, -1)
+        elif sel > s:
+            self._sel = (c, sel - 1)
+        self._chart_changed()
+
+    def seriesCount(self) -> int:
+        return len(self._series)
+
+    # -- categories ---------------------------------------------------------
+
+    def addCategory(self, label, values=None) -> int:
+        """Append a category; *values* holds one value per series (missing = 0).
+        Returns its index."""
+        row = self._check_row(values, len(self._series))
+        self._categories.append("" if label is None else str(label))
+        self._rows.append(row)
+        self._chart_changed()
+        return len(self._categories) - 1
+
+    def setCategoryLabel(self, c: int, label):
+        self._categories[self._check_category(c)] = "" if label is None else str(label)
+        self._chart_changed()
+
+    def categoryLabel(self, c: int) -> str:
+        return self._categories[self._check_category(c)]
+
+    def removeCategory(self, c: int):
+        self._check_category(c)
+        del self._categories[c]
+        del self._rows[c]
+        sel, s = self._sel
+        if sel == c:
+            self._sel = (-1, -1)
+        elif sel > c:
+            self._sel = (sel - 1, s)
+        self._chart_changed()
+
+    def categoryCount(self) -> int:
+        return len(self._categories)
+
+    # -- values -------------------------------------------------------------
+
+    def setValue(self, c: int, s: int, value):
+        self._check_category(c)
+        self._check_series(s)
+        self._rows[c][s] = self._check_bar_value(value)
+        self._chart_changed()
+
+    def value(self, c: int, s: int) -> float:
+        self._check_category(c)
+        self._check_series(s)
+        return self._rows[c][s]
+
+    def categoryTotal(self, c: int) -> float:
+        """Sum of the category values over all series."""
+        return sum(self._rows[self._check_category(c)])
+
+    def setData(self, categories, series, rows=None):
+        """Replace everything at once (one redraw, selection cleared).
+
+        *categories*: labels; *series*: names or ``(name, color)``;
+        *rows*: ``rows[c][s]`` values, short or missing rows padded with 0.
+        Everything is validated before the chart changes.
+        """
+        new_series = [self._series_entry(item) for item in (series or ())]
+        new_categories = ["" if c is None else str(c) for c in (categories or ())]
+        rows = list(rows or ())
+        if len(rows) > len(new_categories):
+            raise ValueError(f"{len(rows)} rows for {len(new_categories)} categories")
+        rows += [None] * (len(new_categories) - len(rows))
+        new_rows = [self._check_row(r, len(new_series)) for r in rows]
+        self._series, self._categories, self._rows = new_series, new_categories, new_rows
+        self._sel = (-1, -1)
+        self._chart_changed()
+
+    def deleteAllData(self):
+        """Remove every category and series."""
+        self.setData((), (), ())
+
+    # -- look ---------------------------------------------------------------
+
+    def setOrientation(self, orientation: YChartBarOrientation):
+        if not isinstance(orientation, YChartBarOrientation):
+            raise TypeError("orientation must be a YChartBarOrientation")
+        self._orientation = orientation
+        self._apply_chart()
+
+    def orientation(self) -> YChartBarOrientation:
+        return self._orientation
+
+    def setStacked(self, stacked: bool = True):
+        """Pile the series of a category (True) instead of side by side."""
+        self._stacked = bool(stacked)
+        self._chart_changed()
+
+    def stacked(self) -> bool:
+        return self._stacked
+
+    def setShowValues(self, show: bool = True):
+        """Draw each value at the end of its bar (default False)."""
+        self._show_values = bool(show)
+        self._apply_chart()
+
+    def showValues(self) -> bool:
+        return self._show_values
+
+    def setShowGrid(self, show: bool = True):
+        """Draw gridlines at the axis ticks (default True); the axis stays."""
+        self._show_grid = bool(show)
+        self._apply_chart()
+
+    def showGrid(self) -> bool:
+        return self._show_grid
+
+    # -- selection ----------------------------------------------------------
+
+    def selectedCategory(self) -> int:
+        """Category of the selected (last clicked) bar, -1 if none."""
+        return self._sel[0]
+
+    def selectedSeries(self) -> int:
+        """Series of the selected (last clicked) bar, -1 if none."""
+        return self._sel[1]
+
+    def setSelectedBar(self, c: int, s: int):
+        """Highlight bar (*c*, *s*) without posting an event; (-1, -1) clears."""
+        if (c, s) != (-1, -1):
+            self._check_category(c)
+            self._check_series(s)
+        old, self._sel = self._sel, (c, s)
+        if old != (c, s):
+            self._apply_selection(old)
+
+    # -- shared internals ---------------------------------------------------
+
+    def _invalidate_caches(self):
+        self._geometry_cache = None
+        self._axis_cache = None
+
+    def _data_range(self):
+        lo = hi = 0.0
+        for row in self._rows:
+            if self._stacked:
+                lo = min(lo, sum(v for v in row if v < 0))
+                hi = max(hi, sum(v for v in row if v > 0))
+            else:
+                for v in row:
+                    lo = min(lo, v)
+                    hi = max(hi, v)
+        return lo, hi
+
+    def _value_axis(self):
+        """``(vmin, vmax, ticks)``: data range with 0, rounded to nice steps.
+
+        Empty or all-zero data gives 0..1.
+        """
+        axis = self._axis_cache
+        if axis is None:
+            lo, hi = self._data_range()
+            lo, hi = max(lo, -self._AXIS_LIMIT), min(hi, self._AXIS_LIMIT)
+            if not hi - lo > 0:
+                lo, hi = 0.0, 1.0
+            raw = (hi - lo) / self._TICK_TARGET
+            if raw < 1e-290:
+                # Subnormal-scale data: no room for nice steps, show the range.
+                axis = (lo, hi, sorted({lo, 0.0, hi}))
+            else:
+                step = self._nice_step(raw)
+                vmin = math.floor(lo / step + 1e-9) * step
+                vmax = math.ceil(hi / step - 1e-9) * step
+                digits = max(0, -int(math.floor(math.log10(step))) + 1)
+                n = int(round((vmax - vmin) / step))
+                ticks = [round(vmin + i * step, digits) or 0.0 for i in range(n + 1)]
+                axis = (round(vmin, digits) or 0.0, round(vmax, digits) or 0.0, ticks)
+            self._axis_cache = axis
+        return axis
+
+    def _bar_geometry(self) -> list:
+        """Drawable bars as ``(c, s, u0, u1, v0, v1, color)``.
+
+        u0..u1: position along the category axis, 0..1 (category c owns the
+        slot c/n..(c+1)/n).  v0 -> v1: from the bar baseline to its end, in
+        data units (grouped: 0 -> value; stacked: running sums kept apart for
+        positive and negative values).  Zero values are left out.
+        """
+        geom = self._geometry_cache
+        if geom is None:
+            geom = []
+            n, k = len(self._categories), len(self._series)
+            if n and k:
+                slot = 1.0 / n
+                group = slot * self.GROUP_FILL
+                pad = (slot - group) / 2.0
+                colors = [self.seriesColor(s) for s in range(k)]
+                for c, row in enumerate(self._rows):
+                    left = c * slot + pad
+                    pos = neg = 0.0
+                    for s, v in enumerate(row):
+                        if v == 0:
+                            continue
+                        if self._stacked:
+                            u0, u1 = left, left + group
+                            if v > 0:
+                                v0, pos = pos, pos + v
+                                v1 = pos
+                            else:
+                                v0, neg = neg, neg + v
+                                v1 = neg
+                        else:
+                            w = group / k
+                            u0, u1 = left + s * w, left + (s + 1) * w
+                            v0, v1 = 0.0, v
+                        geom.append((c, s, u0, u1, v0, v1, colors[s]))
+            self._geometry_cache = geom
+        return geom
+
+    def _bar_at(self, u: float, v: float, tol: float = 0.0):
+        """Bar at category-axis position *u* (0..1) and data value *v*;
+        ``(-1, -1)`` if none.
+
+        *tol* widens every bar along the category axis (backends pass one
+        pixel), so bars thinner than a pixel stay clickable; among the bars
+        within reach the one whose center is nearest wins.
+        """
+        best, best_d = (-1, -1), None
+        for c, s, u0, u1, v0, v1, _color in self._bar_geometry():
+            if u0 - tol <= u < u1 + tol and min(v0, v1) <= v <= max(v0, v1):
+                if tol <= 0:
+                    return c, s
+                d = abs(u - (u0 + u1) / 2.0)
+                if best_d is None or d < best_d:
+                    best, best_d = (c, s), d
+        return best
+
+    def _category_at(self, u: float) -> int:
+        """Category whose slot contains *u* (0..1), -1 if none."""
+        n = len(self._categories)
+        if n == 0 or not 0 <= u < 1:
+            return -1
+        return min(n - 1, int(u * n))
+
+    def _value_text(self, c: int, s: int) -> str:
+        return self._format_value(self._rows[c][s])
+
+    def _bar_tooltip(self, c: int, s: int) -> str:
+        """Hover text: "category · series: value" (series omitted if unnamed)."""
+        name = self._series[s][0]
+        head = f"{self._categories[c]} \u00b7 {name}" if name else self._categories[c]
+        return f"{head}: {self._value_text(c, s)}"
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(series index, name, color)``."""
+        return [(s, entry[0], self.seriesColor(s)) for s, entry in enumerate(self._series)]
+
+    def _bar_clicked(self, c, s) -> bool:
+        """Select bar (*c*, *s*) and report it as activated."""
+        try:
+            c, s = int(c), int(s)
+        except (TypeError, ValueError):
+            return False
+        if not (0 <= c < len(self._categories) and 0 <= s < len(self._series)):
+            return False
+        old, self._sel = self._sel, (c, s)
+        if old != (c, s):
+            self._apply_selection(old)
+        self._post_activated()
+        return True
+
+class YChartBand:
+    """One colored range (threshold band) of a YChartGauge: start < end,
+    optional color (``"#rrggbb"``, None means "use the band palette") and a
+    label shown in the legend.
+
+    Read-only for applications: change bands through the YChartGauge
+    setters so the chart redraws.
+    """
+
+    def __init__(self, start, end, color=None, label=""):
+        start = YChartBase._check_number(start, True, "band start")
+        end = YChartBase._check_number(end, True, "band end")
+        if not start < end:
+            raise ValueError(f"band start must be < end, got {start!r}..{end!r}")
+        self._start = start
+        self._end = end
+        self._color = YChartBase._check_color(color)
+        self._label = "" if label is None else str(label)
+
+    def start(self) -> float:
+        return self._start
+
+    def end(self) -> float:
+        return self._end
+
+    def color(self):
+        """Custom color as ``"#rrggbb"``, or None when the band palette is used."""
+        return self._color
+
+    def label(self) -> str:
+        return self._label
+
+class YChartGaugeBase(YChartBase):
+    """Shared model of the YChartGauge widget.
+
+    A radial dial showing one value inside a range: a track, colored bands
+    (thresholds), a filled value arc, ticks, an optional target marker and
+    needle, and the value as text.  All the math (angles, ticks, colors,
+    fitting the dial into a box, hit test) lives here; a backend only paints
+    and reports clicks through ``_gauge_clicked()``.
+
+    Angles are in degrees, 0 at 12 o'clock, growing clockwise; the dial
+    spans ``-sweepAngle()/2 .. +sweepAngle()/2``.
+
+    Clicking the dial (or Enter/Space) posts a YWidgetEvent with reason
+    Activated (when notify() is on).  There is no selection.
+    """
+
+    MIN_SWEEP = 180.0
+    MAX_SWEEP = 300.0
+    DEFAULT_SWEEP = 240.0
+    MAX_DECIMALS = 6
+    # Bands without a custom color: green, orange, vermilion, then the palette.
+    BAND_PALETTE = ("#009e73", "#e69f00", "#d55e00", "#56b4e9",
+                    "#cc79a7", "#f0e442", "#999999")
+    DEFAULT_VALUE_COLOR = "#0072b2"
+    _TICK_TARGET = 5        # aim for about this many tick steps
+
+    def __init__(self, parent=None, label: str = ""):
+        # Attributes first: addChild() on the parent may render us immediately.
+        self._min = 0.0
+        self._max = 100.0
+        self._value = 0.0
+        self._unit = ""
+        self._decimals = -1
+        self._show_value = True
+        self._subtitle = ""
+        self._sweep = self.DEFAULT_SWEEP
+        self._show_needle = False
+        self._show_ticks = True
+        self._value_color = None
+        self._target = None
+        self._bands = []
+        self._ticks_cache = None
+        self._band_arcs_cache = None
+        super().__init__(parent, label)
+
+    def widgetClass(self):
+        return "YChartGauge"
+
+    # -- range and value ----------------------------------------------------
+
+    def setRange(self, minimum, maximum):
+        """Set the dial range (default 0..100); *minimum* must be < *maximum*."""
+        lo = self._check_number(minimum, True, "minimum")
+        hi = self._check_number(maximum, True, "maximum")
+        if not lo < hi:
+            raise ValueError(f"minimum must be < maximum, got {lo!r}..{hi!r}")
+        self._min, self._max = lo, hi
+        self._chart_changed()
+
+    def minimum(self) -> float:
+        return self._min
+
+    def maximum(self) -> float:
+        return self._max
+
+    def setValue(self, value):
+        """Set the value; it is kept as given, the dial clamps it to the range."""
+        self._value = self._check_number(value, True)
+        self._chart_changed()
+
+    def value(self) -> float:
+        return self._value
+
+    # -- value text ---------------------------------------------------------
+
+    def setUnit(self, unit):
+        """Text appended verbatim to the value: "%" gives "72%", " GB" "3.4 GB"."""
+        self._unit = "" if unit is None else str(unit)
+        self._chart_changed()
+
+    def unit(self) -> str:
+        return self._unit
+
+    def setDecimals(self, decimals: int):
+        """Fixed number of decimals (0..6) for the value text; -1 = automatic."""
+        if isinstance(decimals, bool) or not isinstance(decimals, int):
+            raise TypeError("decimals must be an int")
+        if not -1 <= decimals <= self.MAX_DECIMALS:
+            raise ValueError(f"decimals must be -1..{self.MAX_DECIMALS}, got {decimals}")
+        self._decimals = decimals
+        self._chart_changed()
+
+    def decimals(self) -> int:
+        return self._decimals
+
+    def setShowValue(self, show: bool = True):
+        """Show (True, default) or hide the value text in the dial."""
+        self._show_value = bool(show)
+        self._chart_changed()
+
+    def showValue(self) -> bool:
+        return self._show_value
+
+    def setSubtitle(self, text):
+        """Small text under the value ("" = none)."""
+        self._subtitle = "" if text is None else str(text)
+        self._chart_changed()
+
+    def subtitle(self) -> str:
+        return self._subtitle
+
+    # -- look ---------------------------------------------------------------
+
+    def setSweepAngle(self, degrees):
+        """Angle covered by the dial, 180 (half circle) .. 300; default 240."""
+        deg = self._check_number(degrees, False, "sweep angle")
+        if not self.MIN_SWEEP <= deg <= self.MAX_SWEEP:
+            raise ValueError(f"sweep angle must be {self.MIN_SWEEP:g}..{self.MAX_SWEEP:g}, "
+                             f"got {deg!r}")
+        self._sweep = deg
+        self._chart_changed()
+
+    def sweepAngle(self) -> float:
+        return self._sweep
+
+    def setShowNeedle(self, show: bool = True):
+        """Draw a needle pointing at the value (default False)."""
+        self._show_needle = bool(show)
+        self._chart_changed()
+
+    def showNeedle(self) -> bool:
+        return self._show_needle
+
+    def setShowTicks(self, show: bool = True):
+        """Show (True, default) or hide the ticks and their labels."""
+        self._show_ticks = bool(show)
+        self._chart_changed()
+
+    def showTicks(self) -> bool:
+        return self._show_ticks
+
+    def setValueColor(self, color):
+        """Value arc color when the value is in no band; None = default blue."""
+        self._value_color = self._check_color(color)
+        self._chart_changed()
+
+    def valueColor(self) -> str:
+        return self._value_color or self.DEFAULT_VALUE_COLOR
+
+    # -- target -------------------------------------------------------------
+
+    def setTarget(self, target):
+        """Mark a goal value on the dial; None removes the marker.  A target
+        outside the range is kept but not drawn."""
+        self._target = None if target is None else self._check_number(target, True, "target")
+        self._chart_changed()
+
+    def target(self):
+        """The target value, or None."""
+        return self._target
+
+    # -- bands --------------------------------------------------------------
+
+    def _check_band(self, index) -> int:
+        return self._check_index_in(index, len(self._bands), "band index")
+
+    def addBand(self, start, end, color=None, label="") -> int:
+        """Append a band covering *start*..*end* and return its index.
+
+        Bands may extend past the range (they are clipped) and may overlap
+        (the later band wins)."""
+        self._bands.append(YChartBand(start, end, color, label))
+        self._chart_changed()
+        return len(self._bands) - 1
+
+    def setBands(self, bands):
+        """Replace all bands at once (one redraw).
+
+        *bands* holds YChartBand objects or ``(start, end[, color[, label]])``
+        tuples.  Everything is validated before the chart changes."""
+        new = []
+        for b in bands or ():
+            new.append(b if isinstance(b, YChartBand) else YChartBand(*b))
+        self._bands = new
+        self._chart_changed()
+
+    def band(self, index: int) -> YChartBand:
+        return self._bands[self._check_band(index)]
+
+    def bandCount(self) -> int:
+        return len(self._bands)
+
+    def bandColor(self, index: int) -> str:
+        """Effective color of band *index* (custom or from the band palette)."""
+        b = self._bands[self._check_band(index)]
+        return b._color or self.BAND_PALETTE[index % len(self.BAND_PALETTE)]
+
+    def removeBand(self, index: int):
+        del self._bands[self._check_band(index)]
+        self._chart_changed()
+
+    def deleteAllBands(self):
+        self._bands = []
+        self._chart_changed()
+
+    # -- shared math --------------------------------------------------------
+
+    def _invalidate_caches(self):
+        self._ticks_cache = None
+        self._band_arcs_cache = None
+
+    def _clamp(self, v: float) -> float:
+        return min(max(v, self._min), self._max)
+
+    def _angle_of(self, v: float) -> float:
+        """Angle of value *v*, clamped to the range."""
+        half = self._sweep / 2.0
+        frac = (self._clamp(v) - self._min) / (self._max - self._min)
+        return -half + self._sweep * frac
+
+    def _fill_origin(self) -> float:
+        """Where the value arc starts: 0 when the range spans 0, else minimum."""
+        return 0.0 if self._min < 0.0 < self._max else self._min
+
+    def _ticks(self) -> list:
+        """``[(value, angle, text)]``: both range ends plus every multiple of a
+        nice 1/2/5 step inside the range; an inner tick within half a step
+        of an end is dropped.  Cached; callers must not modify it."""
+        ticks = self._ticks_cache
+        if ticks is None:
+            lo, hi = self._min, self._max
+            values = [lo, hi]
+            raw = (hi - lo) / self._TICK_TARGET
+            if raw >= 1e-290:
+                step = self._nice_step(raw)
+                digits = max(0, -int(math.floor(math.log10(step))) + 1)
+                k = math.ceil(lo / step - 1e-9)
+                inner = []
+                while len(inner) < 50:
+                    v = round(k * step, digits) or 0.0
+                    if v >= hi - step / 2.0:
+                        break
+                    if v > lo + step / 2.0:
+                        inner.append(v)
+                    k += 1
+                values = [lo] + inner + [hi]
+            ticks = [(v, self._angle_of(v), self._format_tick(v)) for v in values]
+            self._ticks_cache = ticks
+        return ticks
+
+    def _band_arcs(self) -> list:
+        """``[(band index, a0, a1, color)]`` with each band clipped to the
+        range; bands outside it are skipped.  Cached; do not modify."""
+        arcs = self._band_arcs_cache
+        if arcs is None:
+            arcs = []
+            for i, b in enumerate(self._bands):
+                s, e = max(b._start, self._min), min(b._end, self._max)
+                if s < e:
+                    arcs.append((i, self._angle_of(s), self._angle_of(e), self.bandColor(i)))
+            self._band_arcs_cache = arcs
+        return arcs
+
+    def _band_at(self, v: float) -> int:
+        """Index of the last band containing *v* (clamped), or -1."""
+        v = self._clamp(v)
+        for i in range(len(self._bands) - 1, -1, -1):
+            b = self._bands[i]
+            if b._start <= v <= b._end:
+                return i
+        return -1
+
+    def _current_color(self) -> str:
+        """Color of the value arc: its band's color, else valueColor()."""
+        i = self._band_at(self._value)
+        return self.bandColor(i) if i >= 0 else self.valueColor()
+
+    def _value_arc(self):
+        """``(a0, a1, color)`` from the fill origin to the value, a0 <= a1."""
+        a = self._angle_of(self._fill_origin())
+        b = self._angle_of(self._value)
+        return (min(a, b), max(a, b), self._current_color())
+
+    def _target_angle(self):
+        """Angle of the target marker, or None (no target / outside range)."""
+        t = self._target
+        if t is None or not self._min <= t <= self._max:
+            return None
+        return self._angle_of(t)
+
+    def _format_gauge_value(self, v: float) -> str:
+        if self._decimals < 0 or abs(v) >= 1e15:
+            text = self._format_value(v)
+        else:
+            text = f"{v:.{self._decimals}f}"
+        return text + self._unit
+
+    def _value_text(self) -> str:
+        """The value with decimals and unit, e.g. "72%"."""
+        return self._format_gauge_value(self._value)
+
+    def _tooltip(self) -> str:
+        """Hover text: "title: value (band label)" plus the target line."""
+        text = self._value_text()
+        if self._label:
+            text = f"{self._label}: {text}"
+        i = self._band_at(self._value)
+        if i >= 0 and self._bands[i]._label:
+            text += f" ({self._bands[i]._label})"
+        if self._target is not None:
+            text += f"\nTarget: {self._format_gauge_value(self._target)}"
+        return text
+
+    def _legend_rows(self) -> list:
+        """Legend rows as ``(band index, label, range_text, color)`` for the
+        bands that have a label."""
+        return [(i, b._label,
+                 f"{self._format_value(b._start)}..{self._format_value(b._end)}",
+                 self.bandColor(i))
+                for i, b in enumerate(self._bands) if b._label]
+
+    def _dial_extent(self) -> float:
+        """How far the dial reaches below its center, in radii (0 for a
+        half circle, 0.5 for 240 degrees)."""
+        return max(0.0, -math.cos(math.radians(self._sweep / 2.0)))
+
+    def _text_placement(self) -> str:
+        """Where the value text block goes: "below" the hub when a needle is
+        drawn, "above" the baseline for flat dials (little room under the
+        center), else "center"."""
+        if self._show_needle:
+            return "below"
+        return "above" if self._dial_extent() < 0.43 else "center"
+
+    def _dial_fit(self, width: float, height: float, below: float = None):
+        """``(cx, cy, r)``: the largest dial fitting a *width* x *height* box
+        (center relative to the box's top-left corner).  The box holds the
+        arc and the center; margins for tick labels are the caller's.
+        *below* overrides how far (in radii) the content reaches below the
+        center, e.g. for text under the hub."""
+        if below is None or below < self._dial_extent():
+            below = self._dial_extent()
+        r = max(0.0, min(width / 2.0, height / (1.0 + below)))
+        cx = width / 2.0
+        cy = (height - r * (1.0 + below)) / 2.0 + r
+        return cx, cy, r
+
+    def _dial_hit(self, dx: float, dy: float, r: float) -> bool:
+        """True when offset (*dx*, *dy*) from the center lies on the dial
+        (inside the circle and not below the arc's lowest point)."""
+        return dx * dx + dy * dy <= r * r and dy <= r * self._dial_extent() + 1.0
+
+    def _gauge_clicked(self) -> bool:
+        """Report a click / Enter on the dial as activated."""
+        if not self.isEnabled():
+            return False
+        self._post_activated()
         return True
 
 class YItem:
