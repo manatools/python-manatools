@@ -878,6 +878,33 @@ class YChartBase(YWidget):
             return str(int(value))
         return f"{value:.2f}".rstrip("0").rstrip(".")
 
+    @staticmethod
+    def _nice_step(raw: float) -> float:
+        """1/2/5 x 10^n step nearest to *raw* (so the axis gets ~4-8 steps)."""
+        exp = math.floor(math.log10(raw))
+        base = 10.0 ** exp
+        f = raw / base
+        if f < 1.5:
+            return base
+        if f < 3.0:
+            return 2.0 * base
+        if f < 7.0:
+            return 5.0 * base
+        return 10.0 * base
+
+    @staticmethod
+    def _format_tick(value: float) -> str:
+        """Compact axis label: 0, 2.5, 1.5k, 20M, -3G."""
+        if value == 0:
+            return "0"
+        a = abs(value)
+        if a >= 1e15:
+            return f"{value:.3g}"
+        for limit, suffix in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
+            if a >= limit:
+                return f"{value / limit:.3g}{suffix}"
+        return f"{value:.6g}"
+
     def _post_activated(self):
         """Post YWidgetEvent(Activated) when notify() is on."""
         if self.notify():
@@ -1396,20 +1423,6 @@ class YChartBarBase(YChartBase):
         self._geometry_cache = None
         self._axis_cache = None
 
-    @staticmethod
-    def _nice_step(raw: float) -> float:
-        """1/2/5 x 10^n step nearest to *raw* (so the axis gets ~4-8 steps)."""
-        exp = math.floor(math.log10(raw))
-        base = 10.0 ** exp
-        f = raw / base
-        if f < 1.5:
-            return base
-        if f < 3.0:
-            return 2.0 * base
-        if f < 7.0:
-            return 5.0 * base
-        return 10.0 * base
-
     def _data_range(self):
         lo = hi = 0.0
         for row in self._rows:
@@ -1511,19 +1524,6 @@ class YChartBarBase(YChartBase):
         if n == 0 or not 0 <= u < 1:
             return -1
         return min(n - 1, int(u * n))
-
-    @staticmethod
-    def _format_tick(value: float) -> str:
-        """Compact axis label: 0, 2.5, 1.5k, 20M, -3G."""
-        if value == 0:
-            return "0"
-        a = abs(value)
-        if a >= 1e15:
-            return f"{value:.3g}"
-        for limit, suffix in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
-            if a >= limit:
-                return f"{value / limit:.3g}{suffix}"
-        return f"{value:.6g}"
 
     def _value_text(self, c: int, s: int) -> str:
         return self._format_value(self._rows[c][s])
