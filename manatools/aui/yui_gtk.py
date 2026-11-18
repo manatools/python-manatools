@@ -1005,6 +1005,11 @@ class YWidgetFactoryGtk:
         from .backends.gtk.chartbargtk import YChartBarGtk
         return YChartBarGtk(parent, label)
 
+    def createChartGauge(self, parent, label: str = ""):
+        """Create a gauge (radial dial) widget (GTK backend)."""
+        from .backends.gtk.chartgaugegtk import YChartGaugeGtk
+        return YChartGaugeGtk(parent, label)
+
     def createCheckBoxFrame(self, parent, label: str = "", checked: bool = False):
         """Create a CheckBox Frame widget."""
         return YCheckBoxFrameGtk(parent, label, checked)
