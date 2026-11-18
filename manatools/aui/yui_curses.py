@@ -643,6 +643,10 @@ class YWidgetFactoryCurses:
         """Create a bar chart (always horizontal block bars in a terminal)."""
         return YChartBarCurses(parent, label)
 
+    def createChartGauge(self, parent, label: str = ""):
+        """Create a gauge (a horizontal meter in a terminal)."""
+        return YChartGaugeCurses(parent, label)
+
     def createMenuBar(self, parent):
         """Create a MenuBar widget (curses backend)."""
         return YMenuBarCurses(parent)
