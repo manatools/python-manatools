@@ -15,7 +15,8 @@ class YLogViewWeb(YWidget):
         super().__init__(parent)
         self._label = label
         self._visible_lines = visibleLines
-        self._stored_lines = storedLines if storedLines > 0 else visibleLines * 10
+        # 0 keeps every line, as on the other backends.
+        self._stored_lines = max(0, int(storedLines or 0))
         self._log_entries = []
         self._focus = focus if focus is not None else YLogViewFocus.HEAD
         self._reverse = bool(reverse)
@@ -49,9 +50,8 @@ class YLogViewWeb(YWidget):
         return self._stored_lines
 
     def setMaxLines(self, newMaxLines: int):
-        self._stored_lines = max(1, int(newMaxLines))
-        if len(self._log_entries) > self._stored_lines:
-            self._log_entries = self._log_entries[-self._stored_lines:]
+        self._stored_lines = max(0, int(newMaxLines or 0))
+        self._trim_if_needed()
         self._notify_update()
 
     def logText(self) -> str:
@@ -59,8 +59,7 @@ class YLogViewWeb(YWidget):
 
     def setLogText(self, text: str):
         self._log_entries = text.split('\n') if text else []
-        if len(self._log_entries) > self._stored_lines:
-            self._log_entries = self._log_entries[-self._stored_lines:]
+        self._trim_if_needed()
         self._notify_update()
 
     def lastLine(self) -> str:
@@ -86,14 +85,17 @@ class YLogViewWeb(YWidget):
         """Append lines to the log."""
         lines = text.split('\n')
         self._log_entries.extend(lines)
-        if len(self._log_entries) > self._stored_lines:
-            self._log_entries = self._log_entries[-self._stored_lines:]
+        self._trim_if_needed()
         self._notify_update()
 
     def clearText(self):
         """Clear all log entries."""
         self._log_entries.clear()
         self._notify_update()
+
+    def _trim_if_needed(self):
+        if 0 < self._stored_lines < len(self._log_entries):
+            self._log_entries = self._log_entries[-self._stored_lines:]
 
     def _notify_update(self):
         dialog = self.findDialog()
