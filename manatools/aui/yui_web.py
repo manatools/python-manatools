@@ -16,6 +16,7 @@ from .yui_common import (
     YCancelEvent,
     YWidgetEvent,
     YEventReason,
+    YLogViewFocus,
     documents_dir,
     list_entries,
     parse_filter_patterns,
@@ -617,9 +618,11 @@ class YWidgetFactoryWeb:
         from .backends.web import YTimeFieldWeb
         return YTimeFieldWeb(parent, label)
 
-    def createLogView(self, parent, label, visibleLines, storedLines=0):
+    def createLogView(self, parent, label, visibleLines, storedLines=0,
+                      focus=YLogViewFocus.HEAD, reverse=False):
         from .backends.web import YLogViewWeb
-        return YLogViewWeb(parent, label, visibleLines, storedLines)
+        return YLogViewWeb(parent, label, visibleLines, storedLines,
+                           focus=focus, reverse=reverse)
 
     def createPaned(self, parent, dimension: YUIDimension = YUIDimension.YD_HORIZ):
         from .backends.web import YPanedWeb
