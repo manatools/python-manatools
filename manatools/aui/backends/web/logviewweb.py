@@ -10,14 +10,15 @@ from .commonweb import widget_attrs, escape_html
 class YLogViewWeb(YWidget):
     """Log view widget for displaying log messages."""
 
-    def __init__(self, parent=None, label: str = "", visibleLines: int = 10, storedLines: int = 0):
+    def __init__(self, parent=None, label: str = "", visibleLines: int = 10, storedLines: int = 0,
+                 focus: YLogViewFocus = None, reverse: bool = False):
         super().__init__(parent)
         self._label = label
         self._visible_lines = visibleLines
         self._stored_lines = storedLines if storedLines > 0 else visibleLines * 10
         self._log_entries = []
-        self._focus = YLogViewFocus.HEAD
-        self._reverse = False
+        self._focus = focus if focus is not None else YLogViewFocus.HEAD
+        self._reverse = bool(reverse)
         # A log view is the canonical "expand to fill" widget: grow in both
         # dimensions like the qt/gtk/curses backends, so a button bar placed
         # after it stays pinned at the bottom instead of overlapping it.
@@ -114,6 +115,10 @@ class YLogViewWeb(YWidget):
         extra_attrs = {
             "style": f"flex:1; min-height:{height}em; overflow-y:auto;",
         }
+        # TAIL keeps the view at the bottom of the rendered text; the
+        # client scrolls every element carrying data-autoscroll.
+        if self._focus == YLogViewFocus.TAIL:
+            extra_attrs["data-autoscroll"] = True
         # widget_attrs puts id="{widget_id}" on the element � that id lives on
         # the inner div so _flush_update's #id selector lands here, not on the
         # outer container which holds the label.
@@ -122,7 +127,9 @@ class YLogViewWeb(YWidget):
             extra_attrs=extra_attrs
         )
 
-        log_html = '<br>'.join(escape_html(line) for line in self._log_entries)
+        # Storage is always chronological; reverse only flips the display.
+        entries = reversed(self._log_entries) if self._reverse else self._log_entries
+        log_html = '<br>'.join(escape_html(line) for line in entries)
         inner_html = (
             f'<div {attrs}>'
             f'<pre class="mana-logview-content">{log_html}</pre>'
